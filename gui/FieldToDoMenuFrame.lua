@@ -970,7 +970,7 @@ function FieldToDoMenuFrame:onClickAdoptFieldSuggestion()
         return
     end
 
-    if (action.autoComplete ~= true or not FieldWorkCatalog.isTrackable(action.actionType))
+    if not FieldWorkCatalog.isTrackable(action.actionType)
         and field.suggestionDetails ~= nil then
         for _, candidate in ipairs(field.suggestionDetails) do
             if candidate ~= nil
@@ -980,6 +980,10 @@ function FieldToDoMenuFrame:onClickAdoptFieldSuggestion()
                 break
             end
         end
+    end
+
+    if FieldWorkCatalog.isTrackable(action.actionType) and action.autoComplete ~= true then
+        action.autoComplete = true
     end
 
     local task, errorKey = manager:addTaskFromFieldAction(field, action, false)

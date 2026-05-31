@@ -172,7 +172,7 @@ function FieldDebugDump.dumpField(fieldId)
     local grassResidue = context ~= nil and context.grassResidueSummary or nil
     if grassResidue ~= nil then
         out(string.format(
-            "grassResidue: available=%s source=%s state=%s total=%s occupied=%s ratio=%.3f liters=%.3f maxSample=%.3f maxMaterial=%.4f swathHits=%s windrowHits=%s shred=%s crossPts=%s fillTypes=%d",
+            "grassResidue: available=%s source=%s state=%s total=%s occupied=%s ratio=%.3f liters=%.3f maxSample=%.3f maxMaterial=%.4f centerMat=%.4f swathHits=%s windrowHits=%s shred=%s crossLine=%s lineEv=%s crossPts=%s fillTypes=%d",
             s(grassResidue.residueAvailable),
             s(grassResidue.residueSource),
             s(grassResidue.residueState),
@@ -182,13 +182,28 @@ function FieldDebugDump.dumpField(fieldId)
             grassResidue.totalLiters or 0,
             grassResidue.maxSampleLiters or 0,
             grassResidue.maxSampleMaterial or 0,
+            grassResidue.centerMaterial or 0,
             s(grassResidue.swathHits),
             s(grassResidue.windrowTypeHits),
             s(grassResidue.signalShred),
+            s(grassResidue.crossLineTransitions),
+            s(FieldAdvisor.hasGrassWindrowLineEvidence(grassResidue)),
             s(grassResidue.crossScanPoints),
             #(FieldAdvisor.collectWindrowFillTypeIndices(
                 FieldAdvisor.resolveGrassFruitTypeIndex(fieldState, field, aggregation, worldX, worldZ)
             ))
+        ))
+    end
+    local baleSummary = context ~= nil and context.baleSummary or nil
+    if baleSummary ~= nil then
+        local mapBaleCount = nil
+        if FieldAdvisor.collectMapBaleObjects ~= nil then
+            mapBaleCount = #FieldAdvisor.collectMapBaleObjects()
+        end
+        out(string.format(
+            "baleCoverage: total=%s mapBales=%s",
+            s(baleSummary.total),
+            s(mapBaleCount)
         ))
     end
     if weedSummary ~= nil then

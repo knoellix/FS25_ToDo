@@ -854,9 +854,9 @@ function ToDoManager:updateAutoCompletion()
         local field = self.fieldScanner:getEngineFieldById(fieldId)
         local fieldCache = nil
 
-        if field ~= nil and field.getCenterOfFieldWorldPosition ~= nil then
-            local okPos, posX, posZ = pcall(field.getCenterOfFieldWorldPosition, field)
-            if okPos and posX ~= nil and posZ ~= nil and FieldTaskCompletion ~= nil then
+        if field ~= nil then
+            local posX, posZ = FieldAdvisor.getFieldCenterWorldPosition(field)
+            if posX ~= nil and posZ ~= nil and FieldTaskCompletion ~= nil then
                 fieldCache = FieldTaskCompletion.newFieldCompletionCache(field, posX, posZ)
                 local fieldState = FieldAdvisor.getEnrichedFieldState(field, fieldId, posX, posZ)
                 fieldCache.fieldState = fieldState

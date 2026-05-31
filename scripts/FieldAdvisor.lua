@@ -70,6 +70,18 @@ FieldAdvisor.GRASS_RESIDUE_ENGINE_MATERIAL_MIN = 0.008
 FieldAdvisor.GRASS_SWATH_OCCUPANCY_MAX = 0.30
 FieldAdvisor.GRASS_SWATH_OCCUPANCY_HARD_MAX = 0.15
 FieldAdvisor.GRASS_SWATH_DENSITY_MULTIPLIER = 3.5
+-- Edge piles / unreachable remnants: not swath lines (Schwaden = Linien, not Haufen).
+FieldAdvisor.GRASS_WINDROW_PILE_RATIO_MAX = 0.05
+FieldAdvisor.GRASS_WINDROW_LINE_MIN_SWATH_HITS = 2
+FieldAdvisor.GRASS_WINDROW_CROSS_LINE_MIN_TRANSITIONS = 2
+-- Engine-height fallback without fill levels: post-collect stubble reads higher than lying swath material.
+FieldAdvisor.GRASS_WINDROW_POST_COLLECT_MATERIAL_MIN = 120
+-- Cut stubble at field center is near zero; real lying swaths read much higher at center.
+FieldAdvisor.GRASS_WINDROW_CENTER_MATERIAL_MIN = 1.0
+-- After wagon collect: ignore unreachable border windrows (road / foreign land strips).
+FieldAdvisor.GRASS_COLLECT_REMNANT_RATIO_MAX = 0.15
+FieldAdvisor.GRASS_COLLECT_BASELINE_RATIO_MAX = 0.18
+FieldAdvisor.GRASS_COLLECT_BASELINE_DROP_MIN = 0.70
 -- FS25 weed foliage: states 0–5 alive/sprayed-visible, 6+ dead (see data/foliage/weed/weed.xml).
 FieldAdvisor.WEED_STATE_DEAD_MIN = 6
 FieldAdvisor.GRASS_RESIDUE_NONE = "none"
@@ -1666,8 +1678,9 @@ end
 
 ---@param level number
 ---@param rules table
+---@param needsLime boolean|nil when false, field is limed (ignore stale limeLevel)
 ---@return string
-function FieldAdvisor.formatLimeLabel(level, rules)
+function FieldAdvisor.formatLimeLabel(level, rules, needsLime)
     if not rules.limeRequired then
         local base = level <= 0
             and FieldAdvisor.text("ftdl_val_ok", "ok")
@@ -1675,7 +1688,7 @@ function FieldAdvisor.formatLimeLabel(level, rules)
         return string.format("%s %s", base, FieldAdvisor.text("ftdl_val_disabled", "(aus)"))
     end
 
-    if level <= 0 then
+    if needsLime == false or level <= 0 then
         return FieldAdvisor.text("ftdl_val_ok", "ok")
     end
 
@@ -2000,6 +2013,55 @@ function FieldAdvisor.setCoverageCache(fieldId, kind, value)
     }
 end
 
+---@param fieldId number|nil
+---@param kind string|nil
+function FieldAdvisor.clearCoverageCache(fieldId, kind)
+    if fieldId == nil or kind == nil then
+        return
+    end
+
+    local cacheKey = string.format("%s:%s", tostring(fieldId), tostring(kind))
+    FieldAdvisor._coverageCache[cacheKey] = nil
+end
+
+---@param x number|nil
+---@param z number|nil
+---@return number|nil
+function FieldAdvisor.resolveEngineFieldIdAtWorldPosition(x, z)
+    if g_fieldManager == nil or x == nil or z == nil then
+        return nil
+    end
+
+    local idMethods = { "getFieldIdAtWorldPosition", "getFieldIDAtWorldPosition" }
+    for _, methodName in ipairs(idMethods) do
+        local fn = g_fieldManager[methodName]
+        if type(fn) == "function" then
+            local ok, fieldId = pcall(fn, g_fieldManager, x, z)
+            fieldId = tonumber(fieldId)
+            if ok and fieldId ~= nil and fieldId > 0 then
+                return fieldId
+            end
+        end
+    end
+
+    local fieldMethods = { "getFieldAtWorldPosition", "getFieldAtPosition" }
+    for _, methodName in ipairs(fieldMethods) do
+        local fn = g_fieldManager[methodName]
+        if type(fn) == "function" then
+            local ok, engineField = pcall(fn, g_fieldManager, x, z)
+            if ok and engineField ~= nil and engineField.getId ~= nil then
+                local okId, fieldId = pcall(engineField.getId, engineField)
+                fieldId = tonumber(fieldId)
+                if okId and fieldId ~= nil and fieldId > 0 then
+                    return fieldId
+                end
+            end
+        end
+    end
+
+    return nil
+end
+
 ---@param points table|nil
 ---@param maxPoints number|nil
 ---@return table
@@ -2066,7 +2128,7 @@ function FieldAdvisor.measureFieldAxisHalfExtent(field, centerX, centerZ, dirX, 
     return math.max(6, maxDist)
 end
 
---- Cross + bar scan through field center to hit narrow swath lines (Proton-friendly).
+--- Cross + bar scan through field center to hit narrow swath lines.
 ---@param field table|nil
 ---@param centerX number
 ---@param centerZ number
@@ -2193,6 +2255,73 @@ function FieldAdvisor.reduceGrassResidueSamplePoints(points, maxPoints)
     end
 
     return reduced
+end
+
+--- Count high/low bands along a cross axis (swath rows = multiple transitions; uniform stubble = flat).
+---@param materials number[]
+---@param threshold number
+---@return number
+function FieldAdvisor.countAxisMaterialTransitions(materials, threshold)
+    if materials == nil or #materials < 2 then
+        return 0
+    end
+
+    local transitions = 0
+    for index = 2, #materials do
+        local prevAbove = materials[index - 1] >= threshold
+        local curAbove = materials[index] >= threshold
+        if prevAbove ~= curAbove then
+            transitions = transitions + 1
+        end
+    end
+
+    return transitions
+end
+
+--- Full E-W / N-S cross (not reduced grid): detect parallel swath lines vs flat cut stubble.
+---@param field table|nil
+---@param centerX number|nil
+---@param centerZ number|nil
+---@param crossSteps number|nil
+---@return number ewTransitions
+---@return number nsTransitions
+---@return number maxTransitions
+function FieldAdvisor.measureGrassCrossAxisLineTransitions(field, centerX, centerZ, crossSteps)
+    if field == nil or centerX == nil or centerZ == nil then
+        return 0, 0, 0
+    end
+
+    crossSteps = math.max(4, math.floor(tonumber(crossSteps) or FieldAdvisor.GRASS_RESIDUE_CROSS_STEPS))
+    local threshold = FieldAdvisor.GRASS_RESIDUE_ENGINE_MATERIAL_MIN
+    local ewMaterials = {}
+    local nsMaterials = {}
+
+    local extentX = FieldAdvisor.measureFieldAxisHalfExtent(field, centerX, centerZ, 1, 0)
+    local extentZ = FieldAdvisor.measureFieldAxisHalfExtent(field, centerX, centerZ, 0, 1)
+
+    for i = -crossSteps, crossSteps do
+        local t = i / crossSteps
+        local x = centerX + t * extentX
+        local z = centerZ
+        if FieldAdvisor.isPositionInsideFieldOrUnknown(field, x, z) then
+            ewMaterials[#ewMaterials + 1] = FieldAdvisor.measureHeightMaterialAtPoint(x, z)
+        end
+    end
+
+    for i = -crossSteps, crossSteps do
+        if i ~= 0 then
+            local t = i / crossSteps
+            local x = centerX
+            local z = centerZ + t * extentZ
+            if FieldAdvisor.isPositionInsideFieldOrUnknown(field, x, z) then
+                nsMaterials[#nsMaterials + 1] = FieldAdvisor.measureHeightMaterialAtPoint(x, z)
+            end
+        end
+    end
+
+    local ewTransitions = FieldAdvisor.countAxisMaterialTransitions(ewMaterials, threshold)
+    local nsTransitions = FieldAdvisor.countAxisMaterialTransitions(nsMaterials, threshold)
+    return ewTransitions, nsTransitions, math.max(ewTransitions, nsTransitions)
 end
 
 ---@param field table|nil
@@ -2399,26 +2528,24 @@ function FieldAdvisor.shouldTreatGrassResidueAsSwath(summary, aggregation, probe
         return false
     end
 
+    if FieldAdvisor.isGrassCollectEffectivelyDone(summary, nil) then
+        return false
+    end
+
     if FieldAdvisor.isGrassStandingCropPhase(meadowPhase, probeState, field, grassFruitHint) then
         return false
     end
 
     local state = summary.residueState
     if state == FieldAdvisor.GRASS_RESIDUE_SWATH or state == FieldAdvisor.GRASS_RESIDUE_BALED then
-        return true
+        return FieldAdvisor.hasGrassWindrowLineEvidence(summary)
     end
 
     if state ~= FieldAdvisor.GRASS_RESIDUE_LOOSE and state ~= FieldAdvisor.GRASS_RESIDUE_NONE then
         return false
     end
 
-    local shredLevel = FieldAdvisor.getStateNumber(probeState, "stubbleShredLevel")
-    if aggregation ~= nil then
-        shredLevel = math.max(shredLevel, tonumber(aggregation.maxStubbleShredLevel) or 0)
-    end
-    if shredLevel > 0
-        or (summary.windrowTypeHits or 0) >= 1
-        or (summary.swathHits or 0) >= 1 then
+    if FieldAdvisor.hasGrassWindrowLineEvidence(summary) then
         return true
     end
 
@@ -2433,31 +2560,18 @@ function FieldAdvisor.shouldTreatGrassResidueAsSwath(summary, aggregation, probe
             FieldAdvisor.GRASS_RESIDUE_CROSS_STEPS,
             grassFruitHint
         )
-        if hits >= 2 or crossLiters > 0.012 or crossMaterial >= FieldAdvisor.GRASS_RESIDUE_ENGINE_MATERIAL_MIN then
+        local occupiedRatio = tonumber(summary.occupiedRatio) or 0
+        -- Full-field cut grass (ratio ~1) is loose mow residue, not formed swath lines.
+        if occupiedRatio >= 0.55 then
+            return false
+        end
+        if hits >= 2 and crossLiters > 0.04
+            and occupiedRatio <= FieldAdvisor.GRASS_SWATH_OCCUPANCY_MAX then
             return true
         end
     end
 
-    local postMow = meadowPhase == "cut"
-        or FieldAdvisor.isGrassPostMowState(probeState, field, grassFruitHint)
-    if not postMow and grassFruitHint ~= nil then
-        local lastGrowth = FieldAdvisor.getLastGrowthState(probeState)
-        if lastGrowth > 0 then
-            local lastFlags = FieldAdvisor.evaluateFruitGrowth(grassFruitHint, lastGrowth)
-            postMow = lastFlags.isCut == true
-        end
-    end
-    if not postMow then
-        return false
-    end
-
-    local maxLiters = tonumber(summary.maxSampleLiters) or 0
-    local occupiedRatio = tonumber(summary.occupiedRatio) or 0
-    if summary.residueAvailable == true and maxLiters > 0.008 and occupiedRatio < 0.55 then
-        return true
-    end
-
-    return summary.residueAvailable == true and maxLiters > 0.015
+    return false
 end
 
 ---@param prioritizedFruitTypeIndex number|nil
@@ -2788,20 +2902,18 @@ function FieldAdvisor.fuseGrassResidueSignals(scan, baleSummary)
         crossScanPoints = scan.crossScanPoints or 0,
         fillTypeCount = scan.fillTypeCount or 0,
         signalShred = scan.signalShred or 0,
+        crossLineTransitions = scan.crossLineTransitions or 0,
+        crossLineTransitionsEw = scan.crossLineTransitionsEw or 0,
+        crossLineTransitionsNs = scan.crossLineTransitionsNs or 0,
+        centerMaterial = scan.centerMaterial or 0,
         residueState = FieldAdvisor.GRASS_RESIDUE_NONE,
         residueAvailable = scan.residueAvailable == true,
         residueSource = scan.residueSource or "none",
     }
 
-    if baleSummary ~= nil and tonumber(baleSummary.total or 0) > 0 then
-        summary.residueAvailable = true
-        summary.residueState = FieldAdvisor.GRASS_RESIDUE_BALED
-        summary.residueSource = "bales"
-        return summary
-    end
-
     if not summary.residueAvailable or summary.total <= 0 then
-        return summary
+        summary.fieldBaleCount = FieldAdvisor.getFieldBaleCount(baleSummary)
+        return FieldAdvisor.applyFieldBaleResidueOverlay(summary, baleSummary)
     end
 
     summary.occupiedRatio = summary.occupied / summary.total
@@ -2816,57 +2928,371 @@ function FieldAdvisor.fuseGrassResidueSignals(scan, baleSummary)
 
     local hasMaterial = summary.maxSampleLiters >= swathThreshold
         or summary.maxSampleMaterial >= materialMin
-    local sparseLine = summary.windrowTypeHits >= 1
-        or summary.swathHits >= 2
-        or (hasMaterial and summary.occupiedRatio <= FieldAdvisor.GRASS_SWATH_OCCUPANCY_MAX)
-    local densePile = summary.occupiedRatio >= 0.28
-        and summary.avgOccupiedLiters >= (minValid * FieldAdvisor.GRASS_SWATH_DENSITY_MULTIPLIER)
+
+    if FieldAdvisor.isGrassWindrowPileRemnant(summary) then
+        summary.residueState = FieldAdvisor.GRASS_RESIDUE_NONE
+        summary.residueAvailable = false
+        return FieldAdvisor.applyFieldBaleResidueOverlay(summary, baleSummary)
+    end
+
+    if FieldAdvisor.hasGrassWindrowLineEvidence(summary) then
+        summary.residueState = FieldAdvisor.GRASS_RESIDUE_SWATH
+        return FieldAdvisor.applyFieldBaleResidueOverlay(summary, baleSummary)
+    end
 
     if maxShred > 0 and not hasMaterial then
-        summary.residueState = FieldAdvisor.GRASS_RESIDUE_SWATH
-        summary.residueSource = summary.residueSource .. "+shred"
-        return summary
+        summary.residueState = FieldAdvisor.GRASS_RESIDUE_NONE
+        return FieldAdvisor.applyFieldBaleResidueOverlay(summary, baleSummary)
     end
 
     if not hasMaterial then
         summary.residueState = FieldAdvisor.GRASS_RESIDUE_NONE
-        return summary
+        return FieldAdvisor.applyFieldBaleResidueOverlay(summary, baleSummary)
     end
 
-    if summary.windrowTypeHits >= 1 or maxShred > 0 then
-        summary.residueState = FieldAdvisor.GRASS_RESIDUE_SWATH
-        return summary
-    end
+    local densePile = summary.occupiedRatio >= 0.28
+        and summary.avgOccupiedLiters >= (minValid * FieldAdvisor.GRASS_SWATH_DENSITY_MULTIPLIER)
 
-    if sparseLine and not densePile then
-        summary.residueState = FieldAdvisor.GRASS_RESIDUE_SWATH
-        return summary
-    end
-
-    -- Lying swath lines can still register as dense coverage; prefer SWATH over LOOSE.
-    if summary.swathHits >= 1 then
-        summary.residueState = FieldAdvisor.GRASS_RESIDUE_SWATH
-        return summary
-    end
-
-    if densePile or summary.occupiedRatio >= 0.35 then
-        if summary.windrowTypeHits >= 1 or maxShred > 0 or summary.swathHits >= 1 then
-            summary.residueState = FieldAdvisor.GRASS_RESIDUE_SWATH
-        elseif summary.occupiedRatio >= 0.55 and summary.swathHits <= 0 and summary.windrowTypeHits <= 0 then
-            summary.residueState = FieldAdvisor.GRASS_RESIDUE_LOOSE
+    if densePile or summary.occupiedRatio >= 0.55 then
+        if FieldAdvisor.isUniformCutFieldIdleResidue(summary) then
+            summary.residueState = FieldAdvisor.GRASS_RESIDUE_NONE
+            summary.residueAvailable = false
         else
-            summary.residueState = FieldAdvisor.GRASS_RESIDUE_SWATH
+            summary.residueState = FieldAdvisor.GRASS_RESIDUE_LOOSE
         end
-        return summary
+        return FieldAdvisor.applyFieldBaleResidueOverlay(summary, baleSummary)
     end
 
-    if summary.maxSampleMaterial >= materialMin or hasMaterial then
-        summary.residueState = FieldAdvisor.GRASS_RESIDUE_SWATH
-        return summary
+    if hasMaterial and summary.occupiedRatio <= FieldAdvisor.GRASS_SWATH_OCCUPANCY_MAX then
+        summary.residueState = FieldAdvisor.GRASS_RESIDUE_LOOSE
+        return FieldAdvisor.applyFieldBaleResidueOverlay(summary, baleSummary)
     end
 
     summary.residueState = FieldAdvisor.GRASS_RESIDUE_NONE
+    return FieldAdvisor.applyFieldBaleResidueOverlay(summary, baleSummary)
+end
+
+--- Uniform full-field engine-height read after cut/bale — stubble noise, not loose grass to swath.
+--- Fresh mow keeps centerMaterial low; post-logistics idle reads high on every cross point.
+---@param summary table|nil
+---@return boolean
+function FieldAdvisor.isUniformCutFieldIdleResidue(summary)
+    if summary == nil or summary.residueAvailable ~= true then
+        return false
+    end
+
+    if summary.residueSource == "height_util" then
+        return false
+    end
+
+    local swathHits = tonumber(summary.swathHits) or 0
+    local windrowHits = tonumber(summary.windrowTypeHits) or 0
+    if swathHits > 0 or windrowHits > 0 then
+        return false
+    end
+
+    if FieldAdvisor.hasGrassWindrowLineEvidence(summary) then
+        return false
+    end
+
+    local occupiedRatio = tonumber(summary.occupiedRatio) or 0
+    if occupiedRatio < 0.55 then
+        return false
+    end
+
+    local centerMaterial = tonumber(summary.centerMaterial) or 0
+    if centerMaterial < FieldAdvisor.GRASS_WINDROW_CENTER_MATERIAL_MIN then
+        return false
+    end
+
+    return true
+end
+
+--- Still windrow material on field (partial baling: swaths + some bales).
+---@param summary table|nil
+---@return boolean
+function FieldAdvisor.hasGrassSwathMaterialRemaining(summary)
+    if summary == nil then
+        return false
+    end
+
+    local swathHits = tonumber(summary.swathHits) or 0
+    local windrowTypeHits = tonumber(summary.windrowTypeHits) or 0
+    local occupiedRatio = tonumber(summary.occupiedRatio) or 0
+    local fieldBaleCount = tonumber(summary.fieldBaleCount) or 0
+    local state = summary.residueState or FieldAdvisor.GRASS_RESIDUE_NONE
+
+    -- Uniform full-field height read after baling: no pressable swaths left.
+    if swathHits == 0 and windrowTypeHits == 0 and occupiedRatio >= 0.55 then
+        if fieldBaleCount > 0 or state == FieldAdvisor.GRASS_RESIDUE_BALED then
+            return false
+        end
+        return state == FieldAdvisor.GRASS_RESIDUE_LOOSE
+    end
+
+    if FieldAdvisor.hasGrassWindrowLineEvidence(summary) then
+        return true
+    end
+
+    if state == FieldAdvisor.GRASS_RESIDUE_LOOSE then
+        return true
+    end
+
+    local maxMaterial = tonumber(summary.maxSampleMaterial) or 0
+    local maxLiters = tonumber(summary.maxSampleLiters) or 0
+
+    if state == FieldAdvisor.GRASS_RESIDUE_SWATH then
+        if swathHits > 0 or windrowTypeHits > 0 then
+            return maxMaterial >= FieldAdvisor.GRASS_RESIDUE_ENGINE_MATERIAL_MIN
+                or maxLiters > 0.025
+        end
+        return occupiedRatio < 0.55
+            and (maxMaterial >= FieldAdvisor.GRASS_RESIDUE_ENGINE_MATERIAL_MIN or maxLiters > 0.025)
+    end
+
+    return false
+end
+
+--- Ballen/Silageballen erledigt: Schwaden weg, nicht schon beim ersten Ballen.
+---@param summary table|nil
+---@param baleSummary table|nil
+---@param baseline table|nil
+---@return boolean
+function FieldAdvisor.isGrassBalingWorkComplete(summary, baleSummary, baseline)
+    if FieldAdvisor.hasGrassSwathMaterialRemaining(summary) then
+        return false
+    end
+
+    local baleCount = FieldAdvisor.getFieldBaleCount(baleSummary)
+    local baselineBales = baseline ~= nil and tonumber(baseline.baleCount) or 0
+
+    if baleCount > baselineBales then
+        return true
+    end
+
+    if summary ~= nil and summary.residueState == FieldAdvisor.GRASS_RESIDUE_BALED then
+        return true
+    end
+
+    if baseline ~= nil and baseline.grassResidueState == FieldAdvisor.GRASS_RESIDUE_SWATH then
+        return FieldAdvisor.isGrassCollectEffectivelyDone(summary, baseline)
+    end
+
+    return false
+end
+
+--- Merge field-local bale count into residue summary without skipping swath scan.
+---@param summary table
+---@param baleSummary table|nil
+---@return table
+function FieldAdvisor.applyFieldBaleResidueOverlay(summary, baleSummary)
+    local fieldBaleCount = FieldAdvisor.getFieldBaleCount(baleSummary)
+    summary.fieldBaleCount = fieldBaleCount
+
+    if fieldBaleCount <= 0 then
+        return summary
+    end
+
+    summary.residueAvailable = true
+    if FieldAdvisor.hasGrassSwathMaterialRemaining(summary) then
+        if summary.residueState == FieldAdvisor.GRASS_RESIDUE_NONE
+            or summary.residueState == FieldAdvisor.GRASS_RESIDUE_BALED then
+            summary.residueState = FieldAdvisor.GRASS_RESIDUE_SWATH
+        end
+    else
+        summary.residueState = FieldAdvisor.GRASS_RESIDUE_BALED
+        summary.residueSource = "bales"
+    end
+
     return summary
+end
+
+--- Tiny heaps at field border (< few cross points): not collectable swath lines.
+---@param summary table|nil
+---@return boolean
+function FieldAdvisor.isGrassWindrowPileRemnant(summary)
+    if summary == nil or summary.residueAvailable ~= true then
+        return false
+    end
+
+    local occupiedRatio = tonumber(summary.occupiedRatio) or 0
+    local occupied = tonumber(summary.occupied) or 0
+    local total = tonumber(summary.total) or 0
+    local lineHits = (summary.swathHits or 0) + (summary.windrowTypeHits or 0)
+
+    if occupiedRatio > 0 and occupiedRatio <= FieldAdvisor.GRASS_WINDROW_PILE_RATIO_MAX then
+        return true
+    end
+
+    if total > 0 and occupied <= 2 and lineHits <= 2 then
+        return true
+    end
+
+    if lineHits <= 1 and occupiedRatio <= 0.08 then
+        return true
+    end
+
+    return false
+end
+
+--- Schwaden = windrow lines on the cross (multiple aligned hits), not isolated piles.
+---@param summary table|nil
+---@return boolean
+function FieldAdvisor.hasGrassWindrowLineEvidence(summary)
+    if summary == nil or summary.residueAvailable ~= true then
+        return false
+    end
+
+    if FieldAdvisor.isGrassWindrowPileRemnant(summary) then
+        return false
+    end
+
+    local occupiedRatio = tonumber(summary.occupiedRatio) or 0
+    local swathHits = tonumber(summary.swathHits) or 0
+    local windrowTypeHits = tonumber(summary.windrowTypeHits) or 0
+    local maxMaterial = tonumber(summary.maxSampleMaterial) or 0
+
+    if windrowTypeHits >= 2 then
+        return true
+    end
+
+    if windrowTypeHits >= 1 and swathHits >= FieldAdvisor.GRASS_WINDROW_LINE_MIN_SWATH_HITS then
+        return true
+    end
+
+    if swathHits >= FieldAdvisor.GRASS_WINDROW_LINE_MIN_SWATH_HITS
+        and occupiedRatio > FieldAdvisor.GRASS_WINDROW_PILE_RATIO_MAX
+        and occupiedRatio <= FieldAdvisor.GRASS_SWATH_OCCUPANCY_MAX then
+        return true
+    end
+
+    if swathHits >= 3 and occupiedRatio <= 0.35 then
+        return true
+    end
+
+    if (summary.crossLineTransitions or 0) >= FieldAdvisor.GRASS_WINDROW_CROSS_LINE_MIN_TRANSITIONS then
+        return true
+    end
+
+    -- Engine-height fallback: narrow swath lines only — not uniform full-field cut grass (ratio ~1).
+    if summary.residueSource ~= "height_util"
+        and occupiedRatio >= 0.35
+        and occupiedRatio <= FieldAdvisor.GRASS_SWATH_OCCUPANCY_MAX
+        and maxMaterial >= FieldAdvisor.GRASS_RESIDUE_ENGINE_MATERIAL_MIN
+        and maxMaterial < FieldAdvisor.GRASS_WINDROW_POST_COLLECT_MATERIAL_MIN
+        and (summary.windrowTypeHits or 0) == 0
+        and swathHits == 0 then
+        local centerMaterial = tonumber(summary.centerMaterial) or 0
+        if (summary.crossLineTransitions or 0) >= FieldAdvisor.GRASS_WINDROW_CROSS_LINE_MIN_TRANSITIONS
+            or centerMaterial >= FieldAdvisor.GRASS_WINDROW_CENTER_MATERIAL_MIN then
+            return true
+        end
+    end
+
+    return false
+end
+
+--- Schwaden erledigt = echte Windrow-Linien (nicht nur state=swath / lose Mähgut-Fläche).
+---@param summary table|nil
+---@return boolean
+function FieldAdvisor.isGrassSwathWorkComplete(summary)
+    if summary == nil or summary.residueAvailable ~= true then
+        return false
+    end
+
+    local state = summary.residueState or FieldAdvisor.GRASS_RESIDUE_NONE
+    if state == FieldAdvisor.GRASS_RESIDUE_BALED
+        and not FieldAdvisor.hasGrassSwathMaterialRemaining(summary) then
+        return true
+    end
+
+    return FieldAdvisor.hasGrassWindrowLineEvidence(summary)
+end
+
+--- Heu/Ladewagen: main field collected; tiny edge windrows (road, foreign land) count as done.
+---@param summary table|nil
+---@param baseline table|nil task completionBaseline
+---@return boolean
+function FieldAdvisor.isGrassCollectEffectivelyDone(summary, baseline)
+    if summary == nil then
+        return true
+    end
+
+    if summary.residueAvailable ~= true then
+        return true
+    end
+
+    local state = summary.residueState or FieldAdvisor.GRASS_RESIDUE_NONE
+    if state == FieldAdvisor.GRASS_RESIDUE_NONE then
+        return true
+    end
+
+    if state == FieldAdvisor.GRASS_RESIDUE_BALED then
+        return FieldAdvisor.getFieldBaleCount(summary) <= 0
+    end
+
+    local maxMaterial = tonumber(summary.maxSampleMaterial) or 0
+    local centerMaterial = tonumber(summary.centerMaterial) or 0
+
+    if not FieldAdvisor.hasGrassWindrowLineEvidence(summary) then
+        if FieldAdvisor.isUniformCutFieldIdleResidue(summary) then
+            return true
+        end
+
+        -- Mähen → Schwaden legen: loose cut grass is not "collect done".
+        if state == FieldAdvisor.GRASS_RESIDUE_LOOSE then
+            if maxMaterial >= FieldAdvisor.GRASS_WINDROW_POST_COLLECT_MATERIAL_MIN then
+                return true
+            end
+            return false
+        end
+
+        if maxMaterial >= FieldAdvisor.GRASS_WINDROW_POST_COLLECT_MATERIAL_MIN then
+            return true
+        end
+
+        -- False SWATH from uniform stubble height: still need Schwaden legen.
+        if state == FieldAdvisor.GRASS_RESIDUE_SWATH
+            and centerMaterial < FieldAdvisor.GRASS_WINDROW_CENTER_MATERIAL_MIN then
+            return false
+        end
+
+        return true
+    end
+
+    local windrowHits = (summary.swathHits or 0) + (summary.windrowTypeHits or 0)
+    local maxLiters = tonumber(summary.maxSampleLiters) or 0
+    if windrowHits == 0 and maxLiters <= 0.025
+        and maxMaterial <= FieldAdvisor.GRASS_RESIDUE_ENGINE_MATERIAL_MIN * 2 then
+        return true
+    end
+
+    local occupiedRatio = tonumber(summary.occupiedRatio) or 0
+    if occupiedRatio <= FieldAdvisor.GRASS_COLLECT_REMNANT_RATIO_MAX then
+        if state == FieldAdvisor.GRASS_RESIDUE_LOOSE then
+            local maxLiters = tonumber(summary.maxSampleLiters) or 0
+            return maxLiters <= 0.08
+        end
+        return true
+    end
+
+    if baseline ~= nil then
+        local baselineState = baseline.grassResidueState
+        local baselineRatio = tonumber(baseline.grassResidueOccupiedRatio) or 0
+        if baselineState == FieldAdvisor.GRASS_RESIDUE_SWATH and baselineRatio >= 0.35 then
+            if occupiedRatio <= FieldAdvisor.GRASS_COLLECT_BASELINE_RATIO_MAX then
+                return true
+            end
+            if baselineRatio - occupiedRatio >= FieldAdvisor.GRASS_COLLECT_BASELINE_DROP_MIN then
+                return true
+            end
+            if baselineRatio > 0.05 and occupiedRatio / baselineRatio <= 0.18 then
+                return true
+            end
+        end
+    end
+
+    return false
 end
 
 --- Upgrade loose/none residue when cross-scan or shred signals indicate lying swaths.
@@ -2913,9 +3339,6 @@ function FieldAdvisor.refineGrassResidueSummary(summary, aggregation, probeState
         if swathHits >= 1 or windrowHits >= 1 then
             return true
         end
-        if shredLevel > 0 then
-            return true
-        end
         if maxLiters > 0.025 and occupiedRatio <= FieldAdvisor.GRASS_SWATH_OCCUPANCY_MAX then
             return true
         end
@@ -2944,12 +3367,7 @@ function FieldAdvisor.refineGrassResidueSummary(summary, aggregation, probeState
             )
             summary.maxSampleLiters = math.max(maxLiters, crossLiters)
             summary.maxSampleMaterial = math.max(maxMaterial, crossMaterial)
-            if hits >= 2 or crossLiters > 0.012 or crossMaterial >= FieldAdvisor.GRASS_RESIDUE_ENGINE_MATERIAL_MIN then
-                summary.residueState = FieldAdvisor.GRASS_RESIDUE_SWATH
-                summary.residueAvailable = true
-                return summary
-            end
-            if maxLiters > 0.015 and occupiedRatio < 0.55 then
+            if FieldAdvisor.hasGrassWindrowLineEvidence(summary) then
                 summary.residueState = FieldAdvisor.GRASS_RESIDUE_SWATH
                 summary.residueAvailable = true
                 return summary
@@ -3000,11 +3418,15 @@ function FieldAdvisor.refineGrassResidueSummary(summary, aggregation, probeState
     if summary.total == nil or summary.total <= 0 then
         summary.total = 1
     end
+    summary.occupiedRatio = summary.occupiedRatio or 0
 
-    if crossLiters > 0.04 or shredLevel > 0 or crossMaterial >= 0.012 then
+    if FieldAdvisor.hasGrassWindrowLineEvidence(summary) then
         summary.residueState = FieldAdvisor.GRASS_RESIDUE_SWATH
-    else
+    elseif crossLiters > 0.04 and crossMaterial >= FieldAdvisor.GRASS_RESIDUE_ENGINE_MATERIAL_MIN then
         summary.residueState = FieldAdvisor.GRASS_RESIDUE_LOOSE
+    else
+        summary.residueState = FieldAdvisor.GRASS_RESIDUE_NONE
+        summary.residueAvailable = false
     end
 
     return summary
@@ -3073,6 +3495,10 @@ function FieldAdvisor.detectGrassResidue(field, worldX, worldZ, maxPoints, prior
     end
 
     local points = FieldAdvisor.collectGrassResidueSamplePoints(field, worldX, worldZ, crossSteps)
+    local crossEw, crossNs, crossMax = FieldAdvisor.measureGrassCrossAxisLineTransitions(
+        field, worldX, worldZ, crossSteps
+    )
+    local centerMaterial = FieldAdvisor.measureHeightMaterialAtPoint(worldX, worldZ)
     points = FieldAdvisor.reduceGrassResidueSamplePoints(
         points,
         tonumber(maxPoints) or FieldAdvisor.GRASS_RESIDUE_MAX_SAMPLE_POINTS
@@ -3123,6 +3549,10 @@ function FieldAdvisor.detectGrassResidue(field, worldX, worldZ, maxPoints, prior
         swathHitThreshold = swathHitThreshold,
         occupancyThreshold = occupancyThreshold,
         signalShred = signalShred,
+        crossLineTransitions = crossMax,
+        crossLineTransitionsEw = crossEw,
+        crossLineTransitionsNs = crossNs,
+        centerMaterial = centerMaterial,
     }
 
     for index, point in ipairs(points) do
@@ -3131,6 +3561,21 @@ function FieldAdvisor.detectGrassResidue(field, worldX, worldZ, maxPoints, prior
             local sampleHalfSize = (index == 1) and centerHalfSize or halfSize
             local sampleLiters = FieldAdvisor.measureWindrowLitersAtPoint(point, fillTypes, sampleHalfSize)
             local fillTypeAtPoint, material = FieldAdvisor.measureHeightFillTypeAtPoint(point.x, point.z)
+            local actualLiters = 0
+            for _, fillTypeIndex in ipairs(fillTypes) do
+                actualLiters = math.max(
+                    actualLiters,
+                    FieldAdvisor.measureFillLevelAtArea(
+                        fillTypeIndex,
+                        point.x - sampleHalfSize,
+                        point.z - sampleHalfSize,
+                        point.x + sampleHalfSize,
+                        point.z - sampleHalfSize,
+                        point.x - sampleHalfSize,
+                        point.z + sampleHalfSize
+                    )
+                )
+            end
 
             scan.maxSampleLiters = math.max(scan.maxSampleLiters, sampleLiters)
             scan.maxSampleMaterial = math.max(scan.maxSampleMaterial, material)
@@ -3143,8 +3588,13 @@ function FieldAdvisor.detectGrassResidue(field, worldX, worldZ, maxPoints, prior
 
             if sampleLiters >= occupancyThreshold then
                 scan.occupied = scan.occupied + 1
-            elseif sampleLiters >= swathHitThreshold
-                or material >= FieldAdvisor.GRASS_RESIDUE_ENGINE_MATERIAL_MIN then
+            end
+
+            -- Line hits: real windrow fill only (not cut-grass height material on every cross point).
+            if actualLiters >= swathHitThreshold then
+                scan.swathHits = scan.swathHits + 1
+            elseif FieldAdvisor.isKnownWindrowFillType(fillTypeAtPoint, windrowSet)
+                and actualLiters >= swathHitThreshold * 0.5 then
                 scan.swathHits = scan.swathHits + 1
             end
         end
@@ -3254,6 +3704,94 @@ function FieldAdvisor.sampleGrassResidueCoverage(field, fieldId, worldX, worldZ,
     return summary
 end
 
+---@param node any
+---@return number|nil, number|nil
+function FieldAdvisor.getNodeWorldXZ(node)
+    if node == nil or node == 0 or getWorldTranslation == nil then
+        return nil, nil
+    end
+
+    local ok, x, _, z = pcall(getWorldTranslation, node)
+    if ok and x ~= nil and z ~= nil then
+        return x, z
+    end
+
+    return nil, nil
+end
+
+---@param bale any
+---@return boolean
+function FieldAdvisor.isSpawnedBaleObject(bale)
+    if bale == nil then
+        return false
+    end
+
+    local nodeId = tonumber(bale.nodeId)
+    if nodeId ~= nil and nodeId ~= 0 then
+        if entityExists ~= nil then
+            local ok, exists = pcall(entityExists, nodeId)
+            if ok and exists == true then
+                return true
+            end
+        else
+            return true
+        end
+    end
+
+    if bale.isa ~= nil and Bale ~= nil then
+        local ok, isBale = pcall(bale.isa, bale, Bale)
+        if ok and isBale == true then
+            return nodeId ~= nil and nodeId ~= 0
+        end
+    end
+
+    return false
+end
+
+--- World bales from slot system (g_baleManager.bales is only the type catalog).
+---@return table[]
+function FieldAdvisor.collectMapBaleObjects()
+    local result = {}
+    local seen = {}
+
+    local function addBale(bale)
+        if not FieldAdvisor.isSpawnedBaleObject(bale) then
+            return
+        end
+
+        local key = tonumber(bale.id) or tonumber(bale.nodeId) or bale
+        if seen[key] == true then
+            return
+        end
+        seen[key] = true
+        result[#result + 1] = bale
+    end
+
+    if g_currentMission == nil or g_currentMission.slotSystem == nil then
+        return result
+    end
+
+    local limits = g_currentMission.slotSystem.objectLimits
+    if limits == nil then
+        return result
+    end
+
+    local baleLimit = SlotSystem ~= nil and SlotSystem.LIMITED_OBJECT_BALE or nil
+    if baleLimit == nil then
+        return result
+    end
+
+    local slot = limits[baleLimit]
+    local objects = slot ~= nil and slot.objects or nil
+    if objects ~= nil then
+        for _, bale in pairs(objects) do
+            addBale(bale)
+        end
+    end
+
+    return result
+end
+
 ---@param bale any
 ---@return number|nil, number|nil
 function FieldAdvisor.getBaleWorldPosition(bale)
@@ -3261,13 +3799,47 @@ function FieldAdvisor.getBaleWorldPosition(bale)
         return nil, nil
     end
 
-    local candidates = { bale.nodeId, bale.node, bale.rootNode }
-    for _, node in ipairs(candidates) do
-        if node ~= nil and node ~= 0 and getWorldTranslation ~= nil then
-            local ok, x, y, z = pcall(getWorldTranslation, node)
-            if ok and x ~= nil and z ~= nil then
-                return x, z
-            end
+    local nodeId = tonumber(bale.nodeId)
+    if nodeId ~= nil and nodeId ~= 0 and getWorldTranslation ~= nil then
+        local ok, x, _, z = pcall(getWorldTranslation, nodeId)
+        if ok and x ~= nil and z ~= nil then
+            return x, z
+        end
+    end
+
+    if nodeId ~= nil and nodeId ~= 0 then
+        local x, z = FieldAdvisor.getNodeWorldXZ(nodeId)
+        if x ~= nil then
+            return x, z
+        end
+    end
+
+    if bale.getInteractionPosition ~= nil then
+        local ok, x, _, z = pcall(bale.getInteractionPosition, bale)
+        if ok and x ~= nil and z ~= nil then
+            return x, z
+        end
+    end
+
+    local nodeCandidates = {
+        bale.node,
+        bale.rootNode,
+        bale.nodeObject,
+        bale.meshNode,
+        bale.baleNode,
+    }
+
+    if bale.getNodeId ~= nil then
+        local ok, node = pcall(bale.getNodeId, bale)
+        if ok then
+            nodeCandidates[#nodeCandidates + 1] = node
+        end
+    end
+
+    for _, node in ipairs(nodeCandidates) do
+        local x, z = FieldAdvisor.getNodeWorldXZ(node)
+        if x ~= nil then
+            return x, z
         end
     end
 
@@ -3288,42 +3860,142 @@ function FieldAdvisor.getBaleWorldPosition(bale)
     return nil, nil
 end
 
+--- Tight field bounds for bale assignment (never uses unknown=inside extent walks).
+---@param field table|nil
+---@param centerX number|nil
+---@param centerZ number|nil
+---@return number halfX, number halfZ
+function FieldAdvisor.getFieldBaleAssignmentHalfExtents(field, centerX, centerZ)
+    if field == nil or centerX == nil or centerZ == nil then
+        return 0, 0
+    end
+
+    local extentX = 0
+    local extentZ = 0
+    local step = 3
+    for dist = step, 160, step do
+        if FieldAdvisor.isPositionInsideField(field, centerX + dist, centerZ) then
+            extentX = dist
+        else
+            break
+        end
+    end
+    for dist = step, 160, step do
+        if FieldAdvisor.isPositionInsideField(field, centerX - dist, centerZ) then
+            extentX = math.max(extentX, dist)
+        else
+            break
+        end
+    end
+    for dist = step, 160, step do
+        if FieldAdvisor.isPositionInsideField(field, centerX, centerZ + dist) then
+            extentZ = dist
+        else
+            break
+        end
+    end
+    for dist = step, 160, step do
+        if FieldAdvisor.isPositionInsideField(field, centerX, centerZ - dist) then
+            extentZ = math.max(extentZ, dist)
+        else
+            break
+        end
+    end
+
+    if extentX > 0 and extentZ > 0 then
+        return extentX + 1, extentZ + 1
+    end
+
+    extentX = FieldAdvisor.measureFieldAxisHalfExtent(field, centerX, centerZ, 1, 0)
+    extentZ = FieldAdvisor.measureFieldAxisHalfExtent(field, centerX, centerZ, 0, 1)
+    if extentX > 0 and extentZ > 0 then
+        return extentX + 2, extentZ + 2
+    end
+
+    local areaHa = tonumber(field.areaHa) or 0
+    if areaHa <= 0 then
+        return 0, 0
+    end
+
+    local sideM = math.sqrt(areaHa * 10000)
+    local half = sideM * 0.48
+    return half, half
+end
+
+--- Field-local bale test: engine field id, strict polygon, then tight area bounds only.
+---@param field table|nil
+---@param x number|nil
+---@param z number|nil
+---@param centerX number|nil
+---@param centerZ number|nil
+---@return boolean
+function FieldAdvisor.isBalePositionInsideField(field, x, z, centerX, centerZ)
+    if field == nil or x == nil or z == nil then
+        return false
+    end
+
+    local targetFieldId = field.getId ~= nil and tonumber(field:getId()) or nil
+    local baleFieldId = FieldAdvisor.resolveEngineFieldIdAtWorldPosition(x, z)
+    if baleFieldId ~= nil and targetFieldId ~= nil then
+        return baleFieldId == targetFieldId
+    end
+
+    local inside = FieldAdvisor.testPositionInsideField(field, x, z)
+    if inside == true then
+        return true
+    end
+
+    if centerX == nil or centerZ == nil then
+        centerX, centerZ = FieldAdvisor.getFieldCenterWorldPosition(field)
+    end
+    if centerX == nil or centerZ == nil then
+        return false
+    end
+
+    local halfX, halfZ = FieldAdvisor.getFieldBaleAssignmentHalfExtents(field, centerX, centerZ)
+    if halfX <= 0 or halfZ <= 0 then
+        return false
+    end
+
+    return math.abs(x - centerX) <= halfX
+        and math.abs(z - centerZ) <= halfZ
+end
+
+---@param baleSummary table|nil
+---@return number
+function FieldAdvisor.getFieldBaleCount(baleSummary)
+    if baleSummary == nil then
+        return 0
+    end
+
+    if baleSummary.total ~= nil then
+        return tonumber(baleSummary.total) or 0
+    end
+
+    return tonumber(baleSummary.fieldBaleCount) or 0
+end
+
 ---@param field table|nil
 ---@param cacheTtlMs number|nil
 ---@return table summary
 function FieldAdvisor.sampleBaleCoverage(field, cacheTtlMs)
     local fieldId = field ~= nil and field.getId ~= nil and field:getId() or nil
-    local ttl = tonumber(cacheTtlMs) or FieldAdvisor.BALE_CACHE_TTL_ACTIVE_MS
-    local cached = FieldAdvisor.getCoverageCache(fieldId, "bales", ttl)
-    if cached ~= nil then
-        return cached
-    end
 
     local summary = {
         total = 0,
     }
 
-    if field == nil or g_baleManager == nil then
+    if field == nil then
         return summary
     end
 
-    local bales = nil
-    if g_baleManager.getBales ~= nil then
-        local ok, value = pcall(g_baleManager.getBales, g_baleManager)
-        if ok then
-            bales = value
-        end
-    end
-    if bales == nil then
-        bales = g_baleManager.bales
-    end
-    if bales == nil then
-        return summary
-    end
+    local centerX, centerZ = FieldAdvisor.getFieldCenterWorldPosition(field)
+    local bales = FieldAdvisor.collectMapBaleObjects()
 
-    for _, bale in pairs(bales) do
+    for _, bale in ipairs(bales) do
         local x, z = FieldAdvisor.getBaleWorldPosition(bale)
-        if x ~= nil and z ~= nil and FieldAdvisor.isPositionInsideField(field, x, z) then
+        if x ~= nil and z ~= nil
+            and FieldAdvisor.isBalePositionInsideField(field, x, z, centerX, centerZ) then
             summary.total = summary.total + 1
         end
     end
@@ -3491,7 +4163,7 @@ function FieldAdvisor.getCalendarMonthForSeasonPeriod(period)
     return mapping[period] or math.max(1, math.min(12, period))
 end
 
---- Safe field center lookup (Proton/engine API guarded).
+--- Safe field center lookup (engine API guarded).
 ---@param field table|nil
 ---@return number|nil
 ---@return number|nil
@@ -3804,6 +4476,19 @@ function FieldAdvisor.fieldNeedsPlowingWork(fieldState, rules)
 
     return FieldAdvisor.getStateBool(fieldState, "needsPlowing")
         or FieldAdvisor.getStateNumber(fieldState, "plowLevel") > 0
+end
+
+---@param fieldState table|nil
+---@param rules table|nil
+---@return boolean
+function FieldAdvisor.fieldNeedsLimeWork(fieldState, rules)
+    rules = rules or FieldGameRules.get()
+    if not rules.limeRequired or fieldState == nil then
+        return false
+    end
+
+    -- needsLime is authoritative once liming is done; limeLevel can stay stale (K1–K3 display).
+    return FieldAdvisor.getStateBool(fieldState, "needsLime") == true
 end
 
 ---@param fieldState table|nil
@@ -5289,9 +5974,10 @@ function FieldAdvisor.buildFieldContext(field, fieldState, worldX, worldZ, aggre
     local baleTtl = isActiveResiduePhase
         and FieldAdvisor.BALE_CACHE_TTL_ACTIVE_MS
         or FieldAdvisor.BALE_CACHE_TTL_IDLE_MS
-    local baleSummary = shouldTrackGrassResidue
+    local shouldSampleBales = isGrassCropField or shouldTrackGrassResidue or hasTrackedBales
+    local baleSummary = shouldSampleBales
         and FieldAdvisor.sampleBaleCoverage(field, baleTtl)
-        or (isGrassCropField and cachedBales or nil)
+        or nil
 
     local grassResidueSummary = nil
     if shouldTrackGrassResidue then
@@ -5306,7 +5992,10 @@ function FieldAdvisor.buildFieldContext(field, fieldState, worldX, worldZ, aggre
         )
         if grassResidueSummary ~= nil then
             local meadowPhase = FieldAdvisor.getGrassMeadowPhase(probeState, field, aggregation)
-            if FieldAdvisor.shouldTreatGrassResidueAsSwath(
+            if FieldAdvisor.isGrassCollectEffectivelyDone(grassResidueSummary, nil) then
+                grassResidueSummary.residueState = FieldAdvisor.GRASS_RESIDUE_NONE
+                grassResidueSummary.residueAvailable = false
+            elseif FieldAdvisor.shouldTreatGrassResidueAsSwath(
                 grassResidueSummary, aggregation, probeState, field, worldX, worldZ,
                 grassFruitHint, meadowPhase) then
                 grassResidueSummary.residueState = FieldAdvisor.GRASS_RESIDUE_SWATH
@@ -5318,6 +6007,36 @@ function FieldAdvisor.buildFieldContext(field, fieldState, worldX, worldZ, aggre
         end
     elseif isGrassCropField then
         grassResidueSummary = cachedGrassResidue
+    end
+
+    if isGrassCropField and baleSummary ~= nil and FieldAdvisor.getFieldBaleCount(baleSummary) > 0 then
+        if grassResidueSummary == nil then
+            grassResidueSummary = {
+                residueState = FieldAdvisor.GRASS_RESIDUE_NONE,
+                residueAvailable = false,
+                total = 0,
+                occupied = 0,
+                occupiedRatio = 0,
+            }
+        end
+        grassResidueSummary = FieldAdvisor.applyFieldBaleResidueOverlay(grassResidueSummary, baleSummary)
+        if fieldId ~= nil then
+            FieldAdvisor.setCoverageCache(fieldId, "grassResidue", grassResidueSummary)
+        end
+    end
+
+    if grassResidueSummary ~= nil and baleSummary ~= nil then
+        grassResidueSummary.fieldBaleCount = FieldAdvisor.getFieldBaleCount(baleSummary)
+        if grassResidueSummary.residueState == FieldAdvisor.GRASS_RESIDUE_BALED then
+            if grassResidueSummary.fieldBaleCount <= 0 then
+                grassResidueSummary.residueState = FieldAdvisor.GRASS_RESIDUE_NONE
+                grassResidueSummary.residueAvailable = false
+                grassResidueSummary.residueSource = "none"
+            elseif FieldAdvisor.hasGrassSwathMaterialRemaining(grassResidueSummary) then
+                grassResidueSummary.residueState = FieldAdvisor.GRASS_RESIDUE_SWATH
+                grassResidueSummary.residueAvailable = true
+            end
+        end
     end
 
     return {
@@ -5589,7 +6308,8 @@ end
 ---@param field table
 ---@param aggregation table|nil
 ---@param grassResidueSummary table|nil
-function FieldAdvisor.addGrassWorkActions(actions, fieldState, field, aggregation, grassResidueSummary)
+---@param baleSummary table|nil
+function FieldAdvisor.addGrassWorkActions(actions, fieldState, field, aggregation, grassResidueSummary, baleSummary)
     local probeState = fieldState
     if aggregation ~= nil and aggregation.centerState ~= nil then
         probeState = aggregation.centerState
@@ -5599,6 +6319,13 @@ function FieldAdvisor.addGrassWorkActions(actions, fieldState, field, aggregatio
     local grassFruitHint = FieldAdvisor.resolveGrassFruitTypeIndex(probeState, field, aggregation, worldX, worldZ)
 
     local meadowPhase = FieldAdvisor.getGrassMeadowPhase(probeState, field, aggregation)
+    local fieldBaleCountEarly = FieldAdvisor.getFieldBaleCount(baleSummary)
+    if fieldBaleCountEarly > 0 and grassResidueSummary ~= nil
+        and grassResidueSummary.residueState == FieldAdvisor.GRASS_RESIDUE_BALED
+        and not FieldAdvisor.hasGrassSwathMaterialRemaining(grassResidueSummary) then
+        meadowPhase = "cut"
+    end
+
     if meadowPhase == "harvestable"
         and FieldAdvisor.isGrassStandingCropPhase(meadowPhase, probeState, field, grassFruitHint)
         and not FieldAdvisor.isGrassPostMowState(probeState, field, grassFruitHint)
@@ -5618,6 +6345,30 @@ function FieldAdvisor.addGrassWorkActions(actions, fieldState, field, aggregatio
 
     local residueState = grassResidueSummary ~= nil and grassResidueSummary.residueState
         or FieldAdvisor.GRASS_RESIDUE_NONE
+    local fieldBaleCount = FieldAdvisor.getFieldBaleCount(baleSummary)
+
+    if residueState == FieldAdvisor.GRASS_RESIDUE_BALED and fieldBaleCount <= 0 then
+        residueState = FieldAdvisor.GRASS_RESIDUE_NONE
+        if grassResidueSummary ~= nil then
+            grassResidueSummary.residueState = FieldAdvisor.GRASS_RESIDUE_NONE
+            grassResidueSummary.residueAvailable = false
+            grassResidueSummary.residueSource = "none"
+        end
+    elseif residueState == FieldAdvisor.GRASS_RESIDUE_BALED
+        and FieldAdvisor.hasGrassSwathMaterialRemaining(grassResidueSummary) then
+        residueState = FieldAdvisor.GRASS_RESIDUE_SWATH
+        if grassResidueSummary ~= nil then
+            grassResidueSummary.residueState = FieldAdvisor.GRASS_RESIDUE_SWATH
+            grassResidueSummary.residueAvailable = true
+        end
+    elseif FieldAdvisor.isUniformCutFieldIdleResidue(grassResidueSummary) then
+        residueState = FieldAdvisor.GRASS_RESIDUE_NONE
+        if grassResidueSummary ~= nil then
+            grassResidueSummary.residueState = FieldAdvisor.GRASS_RESIDUE_NONE
+            grassResidueSummary.residueAvailable = false
+            grassResidueSummary.residueSource = "none"
+        end
+    end
 
     local shredLevel = FieldAdvisor.getStateNumber(probeState, "stubbleShredLevel")
     if aggregation ~= nil then
@@ -5649,6 +6400,12 @@ function FieldAdvisor.addGrassWorkActions(actions, fieldState, field, aggregatio
     ) then
         residueState = FieldAdvisor.GRASS_RESIDUE_SWATH
         meadowPhase = "cut"
+    elseif FieldAdvisor.isGrassCollectEffectivelyDone(grassResidueSummary, nil) then
+        residueState = FieldAdvisor.GRASS_RESIDUE_NONE
+        if grassResidueSummary ~= nil then
+            grassResidueSummary.residueState = FieldAdvisor.GRASS_RESIDUE_NONE
+            grassResidueSummary.residueAvailable = false
+        end
     elseif meadowPhase ~= "harvestable" and residueState ~= FieldAdvisor.GRASS_RESIDUE_NONE then
         meadowPhase = "cut"
     end
@@ -5686,25 +6443,49 @@ function FieldAdvisor.addGrassWorkActions(actions, fieldState, field, aggregatio
                 autoComplete = true,
             })
         elseif residueState == FieldAdvisor.GRASS_RESIDUE_SWATH then
-            FieldAdvisor_addAction(actions, {
-                actionType = "grass_collect",
-                label = FieldAdvisor.text("ftdl_action_grass_collect", "Heu sammeln (Ladewagen)"),
-                pickerLabel = FieldAdvisor.text("ftdl_action_grass_collect", "Heu sammeln (Ladewagen)"),
-                autoComplete = true,
-            })
-            FieldAdvisor_addAction(actions, {
-                actionType = "grass_bale",
-                label = FieldAdvisor.text("ftdl_action_grass_bale", "Ballen pressen"),
-                pickerLabel = FieldAdvisor.text("ftdl_action_grass_bale", "Ballen pressen"),
-                autoComplete = false,
-            })
-            FieldAdvisor_addAction(actions, {
-                actionType = "grass_silage_bale",
-                label = FieldAdvisor.text("ftdl_action_grass_silage_bale", "Silageballen pressen"),
-                pickerLabel = FieldAdvisor.text("ftdl_action_grass_silage_bale", "Silageballen pressen"),
-                autoComplete = false,
-            })
-        elseif residueState == FieldAdvisor.GRASS_RESIDUE_BALED then
+            if FieldAdvisor.isGrassCollectEffectivelyDone(grassResidueSummary, nil) then
+                local regrowthLabel = FieldAdvisor.getGrassPostMowDisplayLabel(field, fieldState, aggregation)
+                    or FieldAdvisor.getGrassHarvestWindowLabel(fieldState, field, aggregation)
+                if regrowthLabel == "-" then
+                    regrowthLabel = FieldAdvisor.text("ftdl_action_regrowth", "Nachwuchs")
+                end
+                FieldAdvisor_addAction(actions, {
+                    actionType = "harvest_info",
+                    label = regrowthLabel,
+                    pickerLabel = regrowthLabel,
+                    autoComplete = false,
+                })
+            elseif not FieldAdvisor.hasGrassWindrowLineEvidence(grassResidueSummary)
+                and not FieldAdvisor.hasGrassSwathMaterialRemaining(grassResidueSummary) then
+                FieldAdvisor_addAction(actions, {
+                    actionType = "grass_swath",
+                    label = FieldAdvisor.text("ftdl_action_grass_swath", "Schwaden"),
+                    pickerLabel = FieldAdvisor.text("ftdl_action_grass_swath", "Schwaden"),
+                    autoComplete = true,
+                })
+            else
+                FieldAdvisor_addAction(actions, {
+                    actionType = "grass_collect",
+                    label = FieldAdvisor.text("ftdl_action_grass_collect", "Heu sammeln (Ladewagen)"),
+                    pickerLabel = FieldAdvisor.text("ftdl_action_grass_collect", "Heu sammeln (Ladewagen)"),
+                    autoComplete = true,
+                })
+                FieldAdvisor_addAction(actions, {
+                    actionType = "grass_bale",
+                    label = FieldAdvisor.text("ftdl_action_grass_bale", "Ballen pressen"),
+                    pickerLabel = FieldAdvisor.text("ftdl_action_grass_bale", "Ballen pressen"),
+                    autoComplete = true,
+                })
+                FieldAdvisor_addAction(actions, {
+                    actionType = "grass_silage_bale",
+                    label = FieldAdvisor.text("ftdl_action_grass_silage_bale", "Silageballen pressen"),
+                    pickerLabel = FieldAdvisor.text("ftdl_action_grass_silage_bale", "Silageballen pressen"),
+                    autoComplete = true,
+                })
+            end
+        elseif residueState == FieldAdvisor.GRASS_RESIDUE_BALED
+            and fieldBaleCount > 0
+            and not FieldAdvisor.hasGrassSwathMaterialRemaining(grassResidueSummary) then
             FieldAdvisor_addAction(actions, {
                 actionType = "grass_bale_collect",
                 label = FieldAdvisor.text("ftdl_action_grass_bale_collect", "Ballen einsammeln"),
@@ -5721,11 +6502,12 @@ end
 ---@param scsSample table|nil
 ---@param rules table|nil
 ---@return table[] actions
-function FieldAdvisor.resolveActionCandidates(field, fieldState, pfSample, scsSample, rules, aggregation, weedSummary, grassResidueSummary)
+function FieldAdvisor.resolveActionCandidates(field, fieldState, pfSample, scsSample, rules, aggregation, weedSummary, grassResidueSummary, baleSummary)
     rules = rules or FieldGameRules.get()
     local actions = {}
 
     local probeState = FieldAdvisor.resolveHarvestFieldState(fieldState, aggregation)
+    local soilState = aggregation ~= nil and aggregation.representativeState or fieldState
     local isGrass = aggregation ~= nil
         and aggregation.dominantSituation == FieldAdvisor.PROBE_SITUATION.GRASS
     if not isGrass then
@@ -5751,17 +6533,16 @@ function FieldAdvisor.resolveActionCandidates(field, fieldState, pfSample, scsSa
     local postHarvestSoilWork = FieldAdvisor.isPostHarvestSoilWorkPhase(field, probeState)
 
     local needsPlowing = FieldAdvisor.getStateBool(fieldState, "needsPlowing")
-    local needsLime = FieldAdvisor.getStateBool(fieldState, "needsLime")
     local needsRolling = FieldAdvisor.getStateBool(fieldState, "needsRolling")
     local plowLevel = FieldAdvisor.getStateNumber(fieldState, "plowLevel")
-    local limeLevel = FieldAdvisor.getStateNumber(fieldState, "limeLevel")
+    local limeLevel = FieldAdvisor.getStateNumber(soilState, "limeLevel")
     local weedState = FieldAdvisor.getStateNumber(fieldState, "weedState")
     local stoneLevel = FieldAdvisor.getStateNumber(fieldState, "stoneLevel")
     local rollerLevel = FieldAdvisor.getStateNumber(fieldState, "rollerLevel")
 
     if cropPhase == "harvest_ready" then
         if isGrass then
-            FieldAdvisor.addGrassWorkActions(actions, fieldState, field, aggregation, grassResidueSummary)
+            FieldAdvisor.addGrassWorkActions(actions, fieldState, field, aggregation, grassResidueSummary, baleSummary)
         else
             FieldAdvisor_addAction(actions, {
                 actionType = "harvest",
@@ -5809,7 +6590,7 @@ function FieldAdvisor.resolveActionCandidates(field, fieldState, pfSample, scsSa
             })
         end
 
-        if rules.limeRequired and not isGrass and (needsLime or limeLevel > 0) then
+        if FieldAdvisor.fieldNeedsLimeWork(soilState, rules) and not isGrass then
             FieldAdvisor_addAction(actions, {
                 actionType = "lime",
                 label = FieldAdvisor.text("ftdl_action_lime", "Kalken"),
@@ -5830,7 +6611,7 @@ function FieldAdvisor.resolveActionCandidates(field, fieldState, pfSample, scsSa
 
     if cropPhase == "growing" then
         if isGrass then
-            FieldAdvisor.addGrassWorkActions(actions, fieldState, field, aggregation, grassResidueSummary)
+            FieldAdvisor.addGrassWorkActions(actions, fieldState, field, aggregation, grassResidueSummary, baleSummary)
         end
 
         if FieldAdvisor.fieldNeedsWeedCombat(fieldState, rules, weedSummary) then
@@ -5961,7 +6742,7 @@ function FieldAdvisor.resolveActionCandidates(field, fieldState, pfSample, scsSa
             end
         end
 
-        if postHarvestSoilWork and rules.limeRequired and not isGrass and (needsLime or limeLevel > 0) then
+        if postHarvestSoilWork and FieldAdvisor.fieldNeedsLimeWork(soilState, rules) and not isGrass then
             FieldAdvisor_addAction(actions, {
                 actionType = "lime",
                 label = FieldAdvisor.text("ftdl_action_lime", "Kalken"),
@@ -6285,7 +7066,7 @@ function FieldAdvisor.isPositionInsideField(field, x, z)
     return FieldAdvisor.testPositionInsideField(field, x, z) == true
 end
 
---- Permissive inside test for field-local scans — unknown keeps legacy behaviour (Proton).
+--- Permissive inside test for field-local scans — unknown keeps legacy behaviour when polygon test is unavailable.
 ---@param field table|nil
 ---@param x number
 ---@param z number
@@ -6394,30 +7175,8 @@ function FieldAdvisor.hasCompletionProgress(task, context)
         return FieldAdvisor.getWeedStateLevel(fieldState) < (baseline.weedState or 0)
     end
 
-    if actionType == "grass_swath" or actionType == "grass_collect"
-        or actionType == "grass_bale" or actionType == "grass_silage_bale"
-        or actionType == "grass_bale_collect" then
-        if context.grassResidueSummary == nil or context.grassResidueSummary.residueAvailable ~= true then
-            return false
-        end
-
-        local residue = context.grassResidueSummary.residueState or FieldAdvisor.GRASS_RESIDUE_NONE
-        local baleCount = context.baleSummary ~= nil and context.baleSummary.total or 0
-        local baselineBales = baseline.baleCount or 0
-
-        if actionType == "grass_swath" then
-            return residue == FieldAdvisor.GRASS_RESIDUE_SWATH
-                or residue == FieldAdvisor.GRASS_RESIDUE_BALED
-        end
-        if actionType == "grass_collect" then
-            return residue == FieldAdvisor.GRASS_RESIDUE_NONE
-        end
-        if actionType == "grass_bale" or actionType == "grass_silage_bale" then
-            return residue ~= FieldAdvisor.GRASS_RESIDUE_SWATH
-                and baleCount > baselineBales
-        end
-
-        return baleCount < baselineBales or baleCount <= 0
+    if FieldTaskCompletion ~= nil and FieldTaskCompletion.isGrassLogisticsAction(actionType) then
+        return FieldTaskCompletion.isGrassLogisticsComplete(actionType, context, task)
     end
 
     if actionType == "pf_ph" and context.pfSample ~= nil and context.pfSample.pHValue ~= nil and baseline.phValue ~= nil then
@@ -6457,6 +7216,7 @@ function FieldAdvisor.buildFieldLabels(field, fieldState, worldX, worldZ)
 
     local needsRolling = FieldAdvisor.getStateBool(effectiveFieldState, "needsRolling")
     local needsPlowing = FieldAdvisor.getStateBool(effectiveFieldState, "needsPlowing")
+    local needsLime = FieldAdvisor.getStateBool(effectiveFieldState, "needsLime")
 
     local context = FieldAdvisor.buildFieldContext(field, fieldState, worldX, worldZ, aggregation)
     local weedSummary = context.weedSummary
@@ -6469,7 +7229,8 @@ function FieldAdvisor.buildFieldLabels(field, fieldState, worldX, worldZ)
         context.rules,
         aggregation,
         weedSummary,
-        grassResidueSummary
+        grassResidueSummary,
+        context.baleSummary
     )
     local action = FieldAdvisor.selectPrimaryAction(actions)
     local fruitTypeIndex = FieldAdvisor.resolveDisplayArableFruitIndex(field, aggregation, fieldState)
@@ -6482,7 +7243,7 @@ function FieldAdvisor.buildFieldLabels(field, fieldState, worldX, worldZ)
             and FieldAdvisor.text("ftdl_weed_dead", "tot")
             or FieldAdvisor.formatWeedDisplayLabel(effectiveFieldState, rules, weedSummary),
         stones = FieldAdvisor.formatStoneLabel(stoneLevel, rules),
-        lime = FieldAdvisor.formatLimeLabel(limeLevel, rules),
+        lime = FieldAdvisor.formatLimeLabel(limeLevel, rules, needsLime),
         roller = FieldAdvisor.formatRollerLabel(rollerLevel, needsRolling),
         plow = FieldAdvisor.formatPlowLabel(effectiveFieldState, rules),
         ph = context.pfSample ~= nil and context.pfSample.phLabel or nil,

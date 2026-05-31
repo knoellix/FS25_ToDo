@@ -96,7 +96,7 @@ Optional second paragraph in the same string."
   - Scan: cross (E–W, N–S) + diagonal bars through field center (~85 probe points active).
   - Signals: windrow liters (`DensityMapHeightUtil`), engine height (`getDensityHeightAtWorldPos`), fill-type at point (`getDensityTypeIndexAtWorldPos`), `stubbleShredLevel`, field bales.
   - Fusion: **never default to `loose`** without positive material; cut + no signal → `none` (Nachwuchs only). `swath` from sparse line hits, windrow fill-type, or shred. `loose` only from dense scattered coverage.
-  - Proton: `DensityMapHeightUtil` global may be nil — use engine height/fill-type fallbacks; do not treat unavailable map as empty loose pile.
+  - When `DensityMapHeightUtil` is unavailable: use engine height/fill-type fallbacks; do not treat unavailable map as empty loose pile.
 - Post-mow suggestions must follow residue state:
   - `loose` -> `grass_swath`
   - `swath` -> show all three options (`grass_collect`/Ladewagen, `grass_bale`, `grass_silage_bale`)

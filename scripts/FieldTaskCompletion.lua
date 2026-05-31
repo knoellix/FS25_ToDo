@@ -45,11 +45,7 @@ FieldTaskCompletion.REGISTRY = {
         coverageOnly = true,
     },
     -- grass residue flow tracked via density-map windrow fill levels.
-    grass_mow = {
-        strategy = "grass",
-        grassStep = "mow",
-        coverageOnly = true,
-    },
+    grass_mow = { strategy = "point" },
     grass_swath = { strategy = "point" },
     grass_collect = { strategy = "point" },
     harvest = { strategy = "point" },
@@ -219,7 +215,7 @@ function FieldTaskCompletion.collectSamplePoints(field, centerX, centerZ, gridSt
             if not (ix == 0 and iz == 0) then
                 local sampleX = centerX + (ix / steps) * halfExtent
                 local sampleZ = centerZ + (iz / steps) * halfExtent
-                if FieldAdvisor.isPositionInsideField(field, sampleX, sampleZ) then
+                if FieldAdvisor.isPositionInsideFieldOrUnknown(field, sampleX, sampleZ) then
                     points[#points + 1] = { x = sampleX, z = sampleZ }
                 end
             end
@@ -361,6 +357,119 @@ function FieldTaskCompletion.getCompletionRatio(field, task, centerX, centerZ)
     return nil
 end
 
+---@param actionType string|nil
+---@return boolean
+function FieldTaskCompletion.isGrassLogisticsAction(actionType)
+    return actionType == "grass_mow"
+        or actionType == "grass_swath"
+        or actionType == "grass_collect"
+        or actionType == "grass_bale"
+        or actionType == "grass_silage_bale"
+        or actionType == "grass_bale_collect"
+end
+
+---@param actionMeta table|nil
+---@return number
+function FieldTaskCompletion.getBaselineBaleCount(actionMeta)
+    if actionMeta == nil or actionMeta.completionBaseline == nil then
+        return 0
+    end
+
+    return tonumber(actionMeta.completionBaseline.baleCount) or 0
+end
+
+---@param context table|nil
+---@return number
+function FieldTaskCompletion.getContextBaleCount(context)
+    if context == nil or context.baleSummary == nil then
+        return 0
+    end
+
+    return tonumber(context.baleSummary.total) or 0
+end
+
+---@param actionType string
+---@param context table
+---@param actionMeta table|nil
+---@return boolean
+function FieldTaskCompletion.isGrassLogisticsComplete(actionType, context, actionMeta)
+    if context == nil or FieldAdvisor == nil then
+        return false
+    end
+
+    local field = context.field
+    local fieldState = context.fieldState
+    local residueSummary = context.grassResidueSummary
+    local baseline = actionMeta ~= nil and actionMeta.completionBaseline or nil
+    local baselineBales = FieldTaskCompletion.getBaselineBaleCount(actionMeta)
+    local residueState = residueSummary ~= nil and residueSummary.residueState
+        or FieldAdvisor.GRASS_RESIDUE_NONE
+
+    if actionType == "grass_bale" or actionType == "grass_silage_bale" or actionType == "grass_bale_collect" then
+        local currentBales = FieldTaskCompletion.getContextBaleCount(context)
+        if currentBales <= baselineBales and field ~= nil and FieldAdvisor.sampleBaleCoverage ~= nil then
+            local fieldId = context.fieldId
+            if fieldId == nil and field.getId ~= nil then
+                fieldId = field:getId()
+            end
+            if fieldId ~= nil and FieldAdvisor.clearCoverageCache ~= nil then
+                FieldAdvisor.clearCoverageCache(fieldId, "bales")
+            end
+            context.baleSummary = FieldAdvisor.sampleBaleCoverage(field, 0)
+        end
+    end
+
+    local baleCount = FieldTaskCompletion.getContextBaleCount(context)
+
+    if actionType == "grass_mow" then
+        local aggregation = nil
+        if field ~= nil and context.worldX ~= nil and context.worldZ ~= nil then
+            aggregation = FieldAdvisor.aggregateFieldProbes(
+                field,
+                context.fieldId,
+                fieldState,
+                context.worldX,
+                context.worldZ,
+                FieldTaskCompletion.OVERVIEW_SAMPLE_GRID_STEPS
+            )
+        end
+
+        if FieldAdvisor.fieldHasPostMowGrassSignal(aggregation, fieldState, field, nil) then
+            return true
+        end
+
+        if aggregation ~= nil
+            and FieldAdvisor.getGrassMeadowPhase(fieldState, field, aggregation) == "cut" then
+            return true
+        end
+
+        return FieldAdvisor.isGrassPostMowState(fieldState, field, nil)
+            or FieldAdvisor.isGrassCut(fieldState, field, aggregation)
+    end
+
+    if actionType == "grass_swath" then
+        return FieldAdvisor.isGrassSwathWorkComplete(residueSummary)
+    end
+
+    if actionType == "grass_collect" then
+        return FieldAdvisor.isGrassCollectEffectivelyDone(residueSummary, baseline)
+    end
+
+    if actionType == "grass_bale" or actionType == "grass_silage_bale" then
+        return FieldAdvisor.isGrassBalingWorkComplete(
+            residueSummary,
+            context.baleSummary,
+            baseline
+        )
+    end
+
+    if actionType == "grass_bale_collect" then
+        return baleCount <= 0
+    end
+
+    return false
+end
+
 ---@param actionType string
 ---@param context table
 ---@param actionMeta table|nil
@@ -375,6 +484,10 @@ function FieldTaskCompletion.isActionComplete(actionType, context, actionMeta)
     local rules = context.rules or FieldGameRules.get()
     local pfSample = context.pfSample
     local scsSample = context.scsSample
+
+    if FieldTaskCompletion.isGrassLogisticsAction(actionType) then
+        return FieldTaskCompletion.isGrassLogisticsComplete(actionType, context, actionMeta)
+    end
 
     if actionType == "harvest" then
         return not FieldAdvisor.isHarvestReady(field, fieldState)
@@ -427,7 +540,7 @@ function FieldTaskCompletion.isActionComplete(actionType, context, actionMeta)
             return true
         end
 
-        return not context.needsLime and context.limeLevel <= 0
+        return not context.needsLime
     end
 
     if actionType == "weed_combat" or actionType == "weed_watch" then
@@ -534,55 +647,6 @@ function FieldTaskCompletion.isActionComplete(actionType, context, actionMeta)
         return FieldAdvisor.isFieldSown(fieldState) and not FieldAdvisor.isWithered(fieldState)
     end
 
-    if actionType == "grass_mow" then
-        return FieldAdvisor.isGrassPostMowState(fieldState, field, nil)
-            or FieldAdvisor.isGrassCut(fieldState, field)
-    end
-
-    if actionType == "grass_swath" then
-        local residueSummary = context.grassResidueSummary
-        if residueSummary ~= nil and residueSummary.residueAvailable == true then
-            return residueSummary.residueState == FieldAdvisor.GRASS_RESIDUE_SWATH
-                or residueSummary.residueState == FieldAdvisor.GRASS_RESIDUE_BALED
-        end
-
-        return false
-    end
-
-    if actionType == "grass_collect" then
-        local residueSummary = context.grassResidueSummary
-        if residueSummary ~= nil and residueSummary.residueAvailable == true then
-            return residueSummary.residueState == FieldAdvisor.GRASS_RESIDUE_NONE
-        end
-
-        return false
-    end
-
-    if actionType == "grass_bale" or actionType == "grass_silage_bale" then
-        local residueSummary = context.grassResidueSummary
-        local baleSummary = context.baleSummary
-        local baseline = actionMeta ~= nil and actionMeta.completionBaseline or nil
-        local baselineBales = baseline ~= nil and tonumber(baseline.baleCount) or 0
-
-        if residueSummary ~= nil
-            and residueSummary.residueAvailable == true
-            and baleSummary ~= nil then
-            return residueSummary.residueState ~= FieldAdvisor.GRASS_RESIDUE_SWATH
-                and tonumber(baleSummary.total or 0) > baselineBales
-        end
-
-        return false
-    end
-
-    if actionType == "grass_bale_collect" then
-        local baleSummary = context.baleSummary
-        if baleSummary ~= nil then
-            return tonumber(baleSummary.total or 0) <= 0
-        end
-
-        return false
-    end
-
     return false
 end
 
@@ -605,8 +669,8 @@ function FieldTaskCompletion.shouldUseCachedRatio(entry, fieldCache)
         return false
     end
 
-    -- Coverage uses polygon queries; edges can change while center fingerprint stays stable.
-    if entry == nil or entry.strategy == "coverage" then
+    -- Point tasks must always re-evaluate; cached grid ratios (e.g. legacy grass_mow) block completion.
+    if entry == nil or entry.strategy == "coverage" or entry.strategy == "point" then
         return false
     end
 
@@ -682,12 +746,20 @@ function FieldTaskCompletion.isTaskComplete(task, scanner, fieldCache)
         return ratio ~= nil and ratio >= threshold
     end
 
-    if ratio ~= nil then
+    if ratio ~= nil and entry.strategy ~= "point" then
         return ratio >= threshold
     end
 
     if entry.strategy ~= "point" or FieldAdvisor == nil then
         return false
+    end
+
+    if FieldTaskCompletion.isGrassLogisticsAction(task.actionType) and task.fieldId ~= nil then
+        FieldAdvisor.clearCoverageCache(task.fieldId, "bales")
+        FieldAdvisor.clearCoverageCache(task.fieldId, "grassResidue")
+        if fieldCache ~= nil then
+            fieldCache.pointContext = nil
+        end
     end
 
     local context = fieldCache ~= nil and fieldCache.pointContext or nil
