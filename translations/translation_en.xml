@@ -105,6 +105,7 @@
         <text name="ftdl_action_scs_stress_watch" text="Stress"/>
         <text name="ftdl_action_harvest_info" text="Harvest"/>
         <text name="ftdl_action_growing" text="Growing"/>
+        <text name="ftdl_growth_stubble" text="Stubble"/>
         <text name="ftdl_action_regrowth" text="Regrowth"/>
         <text name="ftdl_action_none" text="OK"/>
         <text name="ftdl_action_organic_pass" text="Manure/slurry %d/%d"/>

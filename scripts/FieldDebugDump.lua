@@ -95,7 +95,7 @@ function FieldDebugDump.dumpField(fieldId)
 
     local fieldState = FieldAdvisor.getEnrichedFieldState(field, fieldId, worldX, worldZ)
     out(string.format(
-        "FieldState: fruitTypeIndex=%s currentFruitTypeIndex=%s fruitTypeName=%s ground=%s growth=%s lastGrowth=%s weedState=%s sprayLevel=%s stubbleShred=%s",
+        "FieldState: fruitTypeIndex=%s currentFruitTypeIndex=%s fruitTypeName=%s ground=%s growth=%s lastGrowth=%s weedState=%s weedFactor=%s sprayLevel=%s stubbleShred=%s",
         fruitLabel(fieldState ~= nil and fieldState.fruitTypeIndex or nil),
         fruitLabel(fieldState ~= nil and fieldState.currentFruitTypeIndex or nil),
         stringify(fieldState ~= nil and fieldState.fruitTypeName or nil),
@@ -103,6 +103,7 @@ function FieldDebugDump.dumpField(fieldId)
         stringify(FieldAdvisor.getGrowthState(fieldState)),
         stringify(FieldAdvisor.getLastGrowthState(fieldState)),
         stringify(FieldAdvisor.getStateNumber(fieldState, "weedState")),
+        stringify(FieldAdvisor.getWeedFactor(fieldState)),
         stringify(FieldAdvisor.getStateNumber(fieldState, "sprayLevel")),
         stringify(FieldAdvisor.getStateNumber(fieldState, "stubbleShredLevel"))
     ))
@@ -136,7 +137,9 @@ function FieldDebugDump.dumpField(fieldId)
 
     local situation = FieldAdvisor.classifyProbe(fieldState, field)
     out(string.format("classifyProbe -> %s", stringify(situation)))
-    local aggregation = FieldAdvisor.aggregateFieldProbes(field, fieldId, fieldState, worldX, worldZ)
+    local aggregation = FieldAdvisor.aggregateFieldProbes(
+        field, fieldId, fieldState, worldX, worldZ, FieldAdvisor.OVERVIEW_SAMPLE_GRID_STEPS
+    )
     out(string.format("aggregate: dominant=%s dominantGrassFruit=%s dominantArableFruit=%s",
         stringify(aggregation.dominantSituation),
         fruitLabel(aggregation.dominantGrassFruit),
@@ -214,9 +217,11 @@ function FieldDebugDump.dumpField(fieldId)
             stringify(FieldAdvisor.isWeedTaskDoneByCoverage(weedSummary))
         ))
         out(string.format(
-            "weedAdvisor: needsCombat=%s needsWatch=%s displayLabel='%s' centerDeadOrSprayed=%s",
+            "weedAdvisor: needsCombat=%s needsWatch=%s needsHoe=%s needsSpray=%s displayLabel='%s' centerDeadOrSprayed=%s",
             stringify(FieldAdvisor.fieldNeedsWeedCombat(fieldState, context.rules, weedSummary)),
             stringify(FieldAdvisor.fieldNeedsWeedWatch(fieldState, context.rules, weedSummary)),
+            stringify(FieldAdvisor.fieldNeedsWeedHoe(fieldState, context.rules, weedSummary)),
+            stringify(FieldAdvisor.fieldShouldSuggestWeedSpray(fieldState, context.rules, weedSummary)),
             stringify(FieldAdvisor.formatWeedDisplayLabel(fieldState, context.rules, weedSummary)),
             stringify(FieldAdvisor.isWeedDeadOrSprayed(fieldState))
         ))

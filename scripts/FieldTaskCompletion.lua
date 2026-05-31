@@ -49,8 +49,8 @@ FieldTaskCompletion.REGISTRY = {
     grass_swath = { strategy = "point" },
     grass_collect = { strategy = "point" },
     harvest = { strategy = "point" },
-    weed_hoe = { strategy = "point" },
-    weed_combat = { strategy = "point" },
+    weed_hoe = { strategy = "sample", coverageOnly = true },
+    weed_combat = { strategy = "sample", coverageOnly = true },
     weed_watch = { strategy = "point" },
     pf_ph = { strategy = "point" },
     pf_n = { strategy = "point" },
@@ -127,14 +127,14 @@ function FieldTaskCompletion.getDensityMapGroundRatio(field, groundTypeName)
     local targetValue = nil
     local enumValue = FieldGroundType[groundTypeName]
     if enumValue == nil and FieldGroundType.getByName ~= nil then
-        local okName, named = pcall(FieldGroundType.getByName, groundTypeName)
+        local okName, named = pcall(FieldGroundType.getByName, FieldGroundType, groundTypeName)
         if okName then
             enumValue = named
         end
     end
 
     if enumValue ~= nil and FieldGroundType.getValueByType ~= nil then
-        local ok, value = pcall(FieldGroundType.getValueByType, enumValue)
+        local ok, value = pcall(FieldGroundType.getValueByType, FieldGroundType, enumValue)
         if ok then
             targetValue = value
         end
@@ -549,12 +549,7 @@ function FieldTaskCompletion.isActionComplete(actionType, context, actionMeta)
             return true
         end
 
-        if context.weedSummary ~= nil and (context.weedSummary.total or 0) > 0 then
-            return FieldAdvisor.isWeedTaskDoneByCoverage(context.weedSummary)
-        end
-
-        return FieldAdvisor.isWeedDeadOrSprayed(fieldState)
-            or FieldAdvisor.getEffectiveWeedPressure(fieldState) <= FieldAdvisor.WEED_FACTOR_COMPLETE_THRESHOLD
+        return FieldAdvisor.isWeedProbeWorkDone(fieldState)
     end
 
     if actionType == "stones" then
@@ -758,6 +753,14 @@ function FieldTaskCompletion.isTaskComplete(task, scanner, fieldCache)
     if FieldTaskCompletion.isGrassLogisticsAction(task.actionType) and task.fieldId ~= nil then
         FieldAdvisor.clearCoverageCache(task.fieldId, "bales")
         FieldAdvisor.clearCoverageCache(task.fieldId, "grassResidue")
+        if fieldCache ~= nil then
+            fieldCache.pointContext = nil
+        end
+    end
+
+    if task.fieldId ~= nil
+        and (task.actionType == "weed_hoe" or task.actionType == "weed_combat" or task.actionType == "weed_watch") then
+        FieldAdvisor.clearCoverageCache(task.fieldId, "weed")
         if fieldCache ~= nil then
             fieldCache.pointContext = nil
         end

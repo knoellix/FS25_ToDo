@@ -343,7 +343,7 @@ function FieldToDoMenuFrame:onFrameUpdate(dt)
             self:refreshLists(true)
         end
         if manager.consumeManualTasksDirty ~= nil and manager:consumeManualTasksDirty() then
-            self:refreshManualTaskList(true)
+            self:refreshManualTaskList(true, true)
         end
         self:syncOwnedFieldsFromScan()
         self:updateFieldScanIndicator(dt, manager)
@@ -1019,7 +1019,7 @@ function FieldToDoMenuFrame:onClickAdoptFieldSuggestion()
     end
 
     self.selectedTaskId = task.id
-    self:refreshManualTaskList()
+    self:refreshManualTaskList(false, true)
 end
 
 function FieldToDoMenuFrame:resetFieldSuggestionIndices()
@@ -1308,7 +1308,7 @@ function FieldToDoMenuFrame:onFieldTaskActionPicked(...)
     end
 
     self.selectedTaskId = task.id
-    self:refreshManualTaskList()
+    self:refreshManualTaskList(true, true)
 end
 
 ---@param text string|nil
@@ -1331,7 +1331,7 @@ function FieldToDoMenuFrame:onAddFieldTaskDialog(text, clickOk)
         self.selectedTaskId = task.id
     end
 
-    self:refreshManualTaskList()
+    self:refreshManualTaskList(false, true)
 end
 
 ---@param listIndex number|nil
@@ -1420,7 +1420,7 @@ function FieldToDoMenuFrame:onAddTaskDialog(text, clickOk)
         self.selectedTaskId = task.id
     end
 
-    self:refreshManualTaskList()
+    self:refreshManualTaskList(false, true)
 end
 
 ---@param text string|nil

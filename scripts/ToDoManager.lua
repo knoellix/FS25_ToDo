@@ -82,6 +82,19 @@ function ToDoManager:assignSortIndex(task)
     task.sortIndex = self.nextSortIndex
 end
 
+--- Insert a new open task at the top of the open group (lowest sortIndex).
+---@param task table
+function ToDoManager:assignSortIndexAtTop(task)
+    for _, existing in pairs(self.manualTasks) do
+        if existing.id ~= task.id and existing.completed ~= true then
+            existing.sortIndex = (tonumber(existing.sortIndex) or existing.id) + 1
+        end
+    end
+
+    task.sortIndex = 1
+    self.nextSortIndex = (self.nextSortIndex or 0) + 1
+end
+
 function ToDoManager:normalizeTaskSortIndices()
     local open = {}
     local done = {}
@@ -670,7 +683,7 @@ function ToDoManager:addManualTask(text)
 
     self.manualTasks[task.id] = task
     self.nextTaskId = self.nextTaskId + 1
-    self:assignSortIndex(task)
+    self:assignSortIndexAtTop(task)
     self:requestDebouncedSave()
 
     return task
@@ -781,7 +794,7 @@ function ToDoManager:addTaskFromFieldAction(fieldRecord, action, allowUntrackabl
 
     self.manualTasks[task.id] = task
     self.nextTaskId = self.nextTaskId + 1
-    self:assignSortIndex(task)
+    self:assignSortIndexAtTop(task)
     self:requestDebouncedSave()
     self:invalidateFieldAutoCheckCache(fieldRecord.id)
 
@@ -822,7 +835,7 @@ function ToDoManager:addCustomFieldTask(fieldRecord, text, actionType, autoCompl
 
     self.manualTasks[task.id] = task
     self.nextTaskId = self.nextTaskId + 1
-    self:assignSortIndex(task)
+    self:assignSortIndexAtTop(task)
     self:requestDebouncedSave()
     self:invalidateFieldAutoCheckCache(fieldRecord.id)
 
@@ -987,7 +1000,7 @@ function ToDoManager:toggleManualTask(taskId)
 
     if task.completed then
         task.completed = false
-        self:assignSortIndex(task)
+        self:assignSortIndexAtTop(task)
     else
         self:onTaskMarkedComplete(task)
     end

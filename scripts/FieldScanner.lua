@@ -339,7 +339,10 @@ function FieldScanner:getEngineFieldById(fieldId)
 
     local allFields = g_fieldManager.fields
     if allFields == nil and g_fieldManager.getFields ~= nil then
-        allFields = g_fieldManager:getFields()
+        local ok, fields = pcall(g_fieldManager.getFields, g_fieldManager)
+        if ok then
+            allFields = fields
+        end
     end
 
     if allFields == nil then

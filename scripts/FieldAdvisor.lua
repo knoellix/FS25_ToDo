@@ -811,7 +811,8 @@ function FieldAdvisor.classifyProbe(fieldState, field)
             return FieldAdvisor.PROBE_SITUATION.GRASS, FieldAdvisor.inferGrassFruitTypeIndexFromState(fieldState)
         end
 
-        if fieldState.isGrass == true or fieldState.isGrassCrop == true or fieldState.isGrassland == true then
+        if (fieldState.isGrass == true or fieldState.isGrassCrop == true or fieldState.isGrassland == true)
+            and FieldAdvisor.isGrassCrop(fruitIdx) then
             return FieldAdvisor.PROBE_SITUATION.GRASS, FieldAdvisor.inferGrassFruitTypeIndexFromState(fieldState)
         end
     end
@@ -1238,6 +1239,25 @@ function FieldAdvisor.isArableFieldContext(aggregation, fieldState, field, world
     return FieldAdvisor.classifyProbe(harvestState, field) == FieldAdvisor.PROBE_SITUATION.ARABLE
 end
 
+--- Arable weed advice only — not on dominant grass/meadow (engine weed layers on grass misread as 100%).
+---@param aggregation table|nil
+---@param fieldState table|nil
+---@param field table|nil
+---@param worldX number|nil
+---@param worldZ number|nil
+---@return boolean
+function FieldAdvisor.shouldTrackArableWeed(aggregation, fieldState, field, worldX, worldZ)
+    if aggregation ~= nil and aggregation.dominantSituation == FieldAdvisor.PROBE_SITUATION.GRASS then
+        return false
+    end
+
+    if FieldAdvisor.isGrassCropFieldContext(aggregation, fieldState, field, worldX, worldZ) then
+        return false
+    end
+
+    return true
+end
+
 ---@param field table|nil
 ---@param aggregation table|nil
 ---@param fieldState table|nil
@@ -1307,6 +1327,11 @@ end
 ---@return number|nil
 function FieldAdvisor.inferGrassFruitTypeIndexFromState(fieldState)
     if fieldState == nil then
+        return nil
+    end
+
+    if FieldAdvisor.isBareSoilProbe(fieldState, nil)
+        or FieldAdvisor.isWorkedBareGround(fieldState) then
         return nil
     end
 
@@ -1777,17 +1802,33 @@ function FieldAdvisor.isWeedDeadOrSprayed(fieldState)
             return true
         end
 
-        -- Low factor + herbicide only on early sprayed weeds (states 1–2), not regrowth after sleep.
+        -- Regrowth after sleep: live density beats stale herbicide on foliage stages 1–5.
+        if weedFactor > FieldAdvisor.WEED_FACTOR_TREATED_THRESHOLD then
+            return false
+        end
+
+        -- Early sprayed weeds (states 1–2) with low factor + herbicide residue.
         if FieldAdvisor.hasHerbicideResidue(fieldState)
             and weedFactor <= FieldAdvisor.WEED_FACTOR_TREATED_THRESHOLD
             and weedState <= FieldAdvisor.WEED_STATE_SPRAYED_LIVE_MAX then
             return true
         end
 
+        -- Mid/late stages with herbicide but no live regrowth factor.
+        if FieldAdvisor.hasHerbicideResidue(fieldState)
+            and weedState > FieldAdvisor.WEED_STATE_SPRAYED_LIVE_MAX then
+            return true
+        end
+
         return false
     end
 
-    -- Brown spray residue on foliage states 4–5 without a reliable weedFactor reading.
+    -- No weedFactor: dying foliage only — not stale spray on stage 3 regrowth.
+    if weedState >= 4
+        and weedState < FieldAdvisor.WEED_STATE_DEAD_MIN then
+        return true
+    end
+
     if FieldAdvisor.hasHerbicideResidue(fieldState)
         and weedState >= 4 then
         return true
@@ -1828,7 +1869,7 @@ function FieldAdvisor.isWeedProbeDead(fieldState)
     end
 
     if weedState <= 0 then
-        return false
+        return true
     end
 
     return FieldAdvisor.isWeedDeadOrSprayed(fieldState)
@@ -1857,8 +1898,9 @@ end
 ---@param fieldId number|nil
 ---@param worldX number|nil
 ---@param worldZ number|nil
+---@param aggregation table|nil when dominant grass, probes on grass tiles are skipped
 ---@return table summary
-function FieldAdvisor.sampleWeedCoverage(field, fieldId, worldX, worldZ)
+function FieldAdvisor.sampleWeedCoverage(field, fieldId, worldX, worldZ, aggregation)
     local cached = FieldAdvisor.getCoverageCache(fieldId, "weed", FieldAdvisor.WEED_COVERAGE_CACHE_TTL_MS)
     if cached ~= nil then
         return cached
@@ -1893,18 +1935,26 @@ function FieldAdvisor.sampleWeedCoverage(field, fieldId, worldX, worldZ)
     end
     points = FieldAdvisor.reduceSamplePoints(points, FieldAdvisor.COVERAGE_MAX_SAMPLE_POINTS)
 
+    local skipGrassProbes = aggregation ~= nil
+        and aggregation.dominantSituation == FieldAdvisor.PROBE_SITUATION.GRASS
+
     for _, point in ipairs(points) do
         if FieldAdvisor.isPositionInsideFieldOrUnknown(field, point.x, point.z) then
             local sampleState = FieldAdvisor.getEnrichedFieldState(field, fieldId, point.x, point.z)
-            summary.total = summary.total + 1
+            if skipGrassProbes
+                and FieldAdvisor.classifyProbe(sampleState, field) == FieldAdvisor.PROBE_SITUATION.GRASS then
+                -- skip — grass/meadow tiles are not arable weed targets
+            else
+                summary.total = summary.total + 1
 
-            local dead = FieldAdvisor.isWeedProbeDead(sampleState)
-            local live = not dead and FieldAdvisor.isWeedProbeLive(sampleState)
+                local dead = FieldAdvisor.isWeedProbeDead(sampleState)
+                local live = not dead and FieldAdvisor.isWeedProbeLive(sampleState)
 
-            if dead then
-                summary.dead = summary.dead + 1
-            elseif live then
-                summary.live = summary.live + 1
+                if dead then
+                    summary.dead = summary.dead + 1
+                elseif live then
+                    summary.live = summary.live + 1
+                end
             end
         end
     end
@@ -1923,6 +1973,16 @@ function FieldAdvisor.sampleWeedCoverage(field, fieldId, worldX, worldZ)
     return summary
 end
 
+---@param fieldState table|nil
+---@return boolean
+function FieldAdvisor.isWeedProbeWorkDone(fieldState)
+    if fieldState == nil then
+        return true
+    end
+
+    return not FieldAdvisor.isWeedProbeLive(fieldState)
+end
+
 ---@param weedSummary table|nil
 ---@return boolean
 function FieldAdvisor.isWeedTaskDoneByCoverage(weedSummary)
@@ -1930,26 +1990,31 @@ function FieldAdvisor.isWeedTaskDoneByCoverage(weedSummary)
         return false
     end
 
+    local total = weedSummary.total or 0
+    local live = weedSummary.live or 0
+    local dead = weedSummary.dead or 0
+    if total <= 0 then
+        return false
+    end
+
     local classified = weedSummary.classified
     if classified == nil then
-        classified = (weedSummary.live or 0) + (weedSummary.dead or 0)
+        classified = live + dead
     end
+
+    -- Mechanical work: every sampled probe must be weed-free (no live probes left).
+    if live <= 0 then
+        return true
+    end
+
     if classified <= 0 then
         return false
     end
 
-    if weedSummary.liveRatio <= FieldAdvisor.WEED_LIVE_RATIO_DONE_THRESHOLD then
-        return true
-    end
-
-    if weedSummary.deadRatio >= (1 - FieldAdvisor.WEED_LIVE_RATIO_DONE_THRESHOLD) then
-        return true
-    end
-
-    -- Residual live probes on a nearly dead field (e.g. sprayed residue misread as live).
-    if weedSummary.dead > 0
-        and weedSummary.live <= 1
-        and weedSummary.deadRatio >= 0.85 then
+    -- Spray residue: nearly all probes dead, at most one misread live probe.
+    if dead > 0
+        and live <= 1
+        and (weedSummary.deadRatio or 0) >= (1 - FieldAdvisor.WEED_LIVE_RATIO_DONE_THRESHOLD) then
         return true
     end
 
@@ -3214,7 +3279,8 @@ function FieldAdvisor.isGrassCollectEffectivelyDone(summary, baseline)
     end
 
     if summary.residueAvailable ~= true then
-        return true
+        local state = summary.residueState or FieldAdvisor.GRASS_RESIDUE_NONE
+        return state == FieldAdvisor.GRASS_RESIDUE_NONE
     end
 
     local state = summary.residueState or FieldAdvisor.GRASS_RESIDUE_NONE
@@ -4030,13 +4096,8 @@ function FieldAdvisor.formatWeedDisplayLabel(fieldState, rules, weedSummary)
             return FieldAdvisor.text("ftdl_weed_dead", "tot")
         end
 
-        if weedSummary.liveRatio > 0.001 then
-            local percent = math.floor(weedSummary.liveRatio * 100 + 0.5)
-            local doneThreshold = math.floor(FieldAdvisor.WEED_LIVE_RATIO_DONE_THRESHOLD * 100 + 0.5)
-            if percent <= doneThreshold then
-                return FieldAdvisor.text("ftdl_val_none", "kein")
-            end
-            return string.format("%d%%", percent)
+        if (weedSummary.live or 0) >= 1 and weedSummary.liveRatio > 0.001 then
+            return string.format("%d%%", math.floor(weedSummary.liveRatio * 100 + 0.5))
         end
 
         return FieldAdvisor.text("ftdl_val_none", "kein")
@@ -4073,7 +4134,7 @@ function FieldAdvisor.fieldNeedsWeedCombat(fieldState, rules, weedSummary)
     end
 
     if weedSummary ~= nil and (weedSummary.total or 0) > 0 then
-        if FieldAdvisor.isWeedTaskDoneByCoverage(weedSummary) then
+        if (weedSummary.live or 0) <= 0 then
             return false
         end
         if (weedSummary.classified or 0) <= 0 then
@@ -4099,7 +4160,7 @@ function FieldAdvisor.fieldNeedsWeedWatch(fieldState, rules, weedSummary)
     end
 
     if weedSummary ~= nil and (weedSummary.total or 0) > 0 then
-        if FieldAdvisor.isWeedTaskDoneByCoverage(weedSummary) then
+        if (weedSummary.live or 0) <= 0 then
             return false
         end
         if (weedSummary.classified or 0) <= 0 then
@@ -4154,12 +4215,21 @@ function FieldAdvisor.fieldNeedsWeedHoe(fieldState, rules, weedSummary)
         return false
     end
 
-    if FieldAdvisor.fieldNeedsWeedCombat(fieldState, rules, weedSummary) then
+    if weedSummary ~= nil and (weedSummary.live or 0) <= 0 then
+        return false
+    end
+
+    if FieldAdvisor.fieldNeedsWeedWatch(fieldState, rules, weedSummary) then
         return true
     end
 
-    if not FieldAdvisor.fieldNeedsWeedWatch(fieldState, rules, weedSummary) then
+    if not FieldAdvisor.fieldNeedsWeedCombat(fieldState, rules, weedSummary) then
         return false
+    end
+
+    -- Hoe for light combat weed; heavy cases rely on spray (or both in work-order preview).
+    if FieldAdvisor.fieldShouldSuggestWeedSpray(fieldState, rules, weedSummary) then
+        return true
     end
 
     local _, weedState = FieldAdvisor.getWeedSuggestionPressure(fieldState, weedSummary)
@@ -4173,6 +4243,14 @@ end
 ---@return boolean
 function FieldAdvisor.fieldShouldSuggestWeedSpray(fieldState, rules, weedSummary)
     if not FieldAdvisor.fieldNeedsWeedCombat(fieldState, rules, weedSummary) then
+        return false
+    end
+
+    if weedSummary ~= nil and (weedSummary.live or 0) <= 0 then
+        return false
+    end
+
+    if FieldAdvisor.isWeedDeadOrSprayed(fieldState) then
         return false
     end
 
@@ -4593,11 +4671,20 @@ end
 ---@param fieldState table|nil
 ---@return boolean
 function FieldAdvisor.isHarvestReady(field, fieldState)
-    if fieldState ~= nil then
-        if FieldAdvisor.resolveGroundTypeName(fieldState.groundType) == "HARVEST_READY" then
-            return true
-        end
+    local fruitTypeIndex = FieldAdvisor.resolveFruitTypeIndex(fieldState, field)
 
+    if fruitTypeIndex ~= nil and FieldAdvisor.isGrassCrop(fruitTypeIndex) then
+        return FieldAdvisor.isGrassHarvestable(fieldState, field, nil)
+    end
+
+    if fruitTypeIndex ~= nil and fruitTypeIndex > 0 then
+        if FieldAdvisor.isArableHarvestedStubble(field, fieldState, fruitTypeIndex) then
+            return false
+        end
+        return FieldAdvisor.isCropHarvestReady(field, fieldState, fruitTypeIndex)
+    end
+
+    if fieldState ~= nil then
         if fieldState.isHarvestReady == true then
             return true
         end
@@ -4607,12 +4694,7 @@ function FieldAdvisor.isHarvestReady(field, fieldState)
         return true
     end
 
-    local fruitTypeIndex = FieldAdvisor.resolveFruitTypeIndex(fieldState, field)
-    if fruitTypeIndex ~= nil and FieldAdvisor.isGrassCrop(fruitTypeIndex) then
-        return false
-    end
-
-    return FieldAdvisor.isCropHarvestReady(field, fieldState, fruitTypeIndex)
+    return false
 end
 
 ---@param key string|nil
@@ -5121,6 +5203,53 @@ function FieldAdvisor.evaluateFruitGrowth(fruitTypeIndex, growthState)
     return result
 end
 
+--- Arable field after combine: stubble/cut remain, not a standing harvestable crop.
+---@param field table|nil
+---@param fieldState table|nil
+---@param fruitTypeIndex number|nil
+---@return boolean
+function FieldAdvisor.isArableHarvestedStubble(field, fieldState, fruitTypeIndex)
+    if fieldState == nil or fruitTypeIndex == nil or fruitTypeIndex <= 0 then
+        return false
+    end
+
+    if FieldAdvisor.isGrassCrop(fruitTypeIndex) then
+        return false
+    end
+
+    if FieldAdvisor.isWithered(fieldState) then
+        return false
+    end
+
+    local growthState = FieldAdvisor.getEffectiveGrowthState(fieldState)
+    if growthState <= 0 then
+        return false
+    end
+
+    local growth = FieldAdvisor.evaluateFruitGrowth(fruitTypeIndex, growthState)
+    if growth.isCut then
+        return true
+    end
+
+    local fruitDesc = FieldAdvisor.getFruitTypeDesc(fruitTypeIndex)
+    if fruitDesc ~= nil and fruitDesc.maxHarvestingGrowthState ~= nil then
+        local maxHarvest = tonumber(fruitDesc.maxHarvestingGrowthState) or 0
+        if maxHarvest > 0 and growthState > maxHarvest then
+            return true
+        end
+    end
+
+    local ground = FieldAdvisor.getGroundTypeName(fieldState)
+    if FieldAdvisor.groundTypeIsOneOf(ground, { "STUBBLE", "HARVEST_READY" }) then
+        if growth.isHarvestReady or growth.isHarvestable then
+            return false
+        end
+        return true
+    end
+
+    return false
+end
+
 ---@param field table|nil
 ---@param fieldState table|nil
 ---@param fruitTypeIndex number|nil
@@ -5130,14 +5259,8 @@ function FieldAdvisor.isCropHarvestReadyByGrowth(field, fieldState, fruitTypeInd
         return false
     end
 
-    if fieldState ~= nil then
-        if FieldAdvisor.resolveGroundTypeName(fieldState.groundType) == "HARVEST_READY" then
-            return true
-        end
-
-        if fieldState.isHarvestReady == true then
-            return true
-        end
+    if FieldAdvisor.isArableHarvestedStubble(field, fieldState, fruitTypeIndex) then
+        return false
     end
 
     local growthState = FieldAdvisor.getEffectiveGrowthState(fieldState)
@@ -5152,6 +5275,16 @@ function FieldAdvisor.isCropHarvestReadyByGrowth(field, fieldState, fruitTypeInd
 
     if growth.isHarvestReady then
         return true
+    end
+
+    if fieldState ~= nil then
+        if FieldAdvisor.resolveGroundTypeName(fieldState.groundType) == "HARVEST_READY" then
+            return true
+        end
+
+        if fieldState.isHarvestReady == true then
+            return true
+        end
     end
 
     if FieldAdvisor.fruitDescHasHarvestReadyApi(fruitTypeIndex) then
@@ -5512,6 +5645,10 @@ function FieldAdvisor.hasActiveCrop(fieldState)
             if FieldAdvisor.isGrassCrop(fruitTypeIndex) and FieldAdvisor.isBareSoilProbe(fieldState, nil) then
                 return false
             end
+            if not FieldAdvisor.isGrassCrop(fruitTypeIndex)
+                and FieldAdvisor.isArableHarvestedStubble(nil, fieldState, fruitTypeIndex) then
+                return false
+            end
         end
         return true
     end
@@ -5567,6 +5704,12 @@ end
 ---@param fieldState table|nil
 ---@return string
 function FieldAdvisor.formatGrowthLabel(fieldState)
+    local fruitTypeIndex = FieldAdvisor.getFruitTypeIndex(fieldState)
+    if fruitTypeIndex ~= nil
+        and FieldAdvisor.isArableHarvestedStubble(nil, fieldState, fruitTypeIndex) then
+        return FieldAdvisor.text("ftdl_growth_stubble", "Stoppeln")
+    end
+
     local growthState = FieldAdvisor.getEffectiveGrowthState(fieldState)
     if growthState <= 0 then
         return "-"
@@ -5598,6 +5741,8 @@ function FieldAdvisor.isPostHarvestSoilWorkPhase(field, fieldState)
     return true
 end
 
+--- True when a still-grass field has a meaningful mix of worked strips and standing/mown grass.
+--- Single edge probes or mown-ground readings (CULTIVATED on cut grass) must not trigger this.
 ---@param field table|nil
 ---@param fieldId number|nil
 ---@param fieldState table|nil
@@ -5617,9 +5762,6 @@ function FieldAdvisor.fieldHasPartialSoilWork(field, fieldId, fieldState, worldX
         return false
     end
 
-    local centerIndex = FieldAdvisor.resolveFruitTypeIndex(fieldState, field)
-    local centerGrass = FieldAdvisor.isGrassFieldState(fieldState, field)
-
     if FieldAdvisor.classifyProbe(fieldState, field) ~= FieldAdvisor.PROBE_SITUATION.GRASS then
         return false
     end
@@ -5631,17 +5773,32 @@ function FieldAdvisor.fieldHasPartialSoilWork(field, fieldId, fieldState, worldX
         points[#points + 1] = { x = worldX, z = worldZ }
     end
 
+    local grassCount = 0
+    local workedCount = 0
+
     for _, point in ipairs(points) do
         if FieldAdvisor.isPositionInsideFieldOrUnknown(field, point.x, point.z) then
             local sampleState = FieldAdvisor.getEnrichedFieldState(field, fieldId, point.x, point.z)
-            local groundType = FieldAdvisor.getGroundTypeName(sampleState)
-            if FieldAdvisor.groundTypeIsOneOf(groundType, FieldAdvisor.SOIL_WORK_GROUND_TYPES) then
-                return true
+            local situation = FieldAdvisor.classifyProbe(sampleState, field)
+            if situation == FieldAdvisor.PROBE_SITUATION.GRASS then
+                grassCount = grassCount + 1
+            elseif situation == FieldAdvisor.PROBE_SITUATION.BARE_SOIL
+                or situation == FieldAdvisor.PROBE_SITUATION.ARABLE then
+                workedCount = workedCount + 1
             end
         end
     end
 
-    return false
+    local sampled = grassCount + workedCount
+    if sampled <= 0 or workedCount <= 0 or grassCount <= 0 then
+        return false
+    end
+
+    local workedRatio = workedCount / sampled
+    return workedCount >= 2
+        and grassCount >= 2
+        and workedRatio >= 0.08
+        and workedRatio <= 0.85
 end
 
 ---@param field table|nil
@@ -5749,13 +5906,19 @@ function FieldAdvisor.getCropPhase(field, fieldState, aggregation)
 
     if aggregation ~= nil and aggregation.dominantSituation == FieldAdvisor.PROBE_SITUATION.ARABLE then
         local arableFruit = FieldAdvisor.resolveDisplayArableFruitIndex(field, aggregation, harvestState)
-        if FieldAdvisor.isCropHarvestReady(field, harvestState, arableFruit) then
-            return "harvest_ready"
-        end
         if FieldAdvisor.isWithered(harvestState) then
             return "withered"
         end
-        return "growing"
+        if FieldAdvisor.isCropHarvestReady(field, harvestState, arableFruit) then
+            return "harvest_ready"
+        end
+        if FieldAdvisor.isArableHarvestedStubble(field, harvestState, arableFruit) then
+            return "post_harvest"
+        end
+        if FieldAdvisor.hasActiveCrop(harvestState) then
+            return "growing"
+        end
+        return "post_harvest"
     end
 
     if FieldAdvisor.isGrassFieldState(harvestState, field)
@@ -5787,6 +5950,9 @@ function FieldAdvisor.getCropPhase(field, fieldState, aggregation)
     end
 
     local arableFruit = FieldAdvisor.resolveFruitTypeIndex(harvestState, field)
+    if FieldAdvisor.isWithered(harvestState) then
+        return "withered"
+    end
     if FieldAdvisor.isCropHarvestReady(field, harvestState, arableFruit) then
         return "harvest_ready"
     end
@@ -5794,10 +5960,6 @@ function FieldAdvisor.getCropPhase(field, fieldState, aggregation)
     if FieldAdvisor.isGrassHarvestable(harvestState, field, aggregation)
         and not FieldAdvisor.isGrassCutGroundType(FieldAdvisor.getGroundTypeName(harvestState)) then
         return "harvest_ready"
-    end
-
-    if FieldAdvisor.isWithered(harvestState) then
-        return "withered"
     end
 
     if FieldAdvisor.hasActiveCrop(harvestState) then
@@ -5892,7 +6054,7 @@ function FieldAdvisor.getExpectedHarvestLabel(field, fieldState, aggregation, gr
         return FieldAdvisor.text(
             "ftdl_action_harvest_now_short",
             "Jetzt (%s)",
-            PrecisionFarmingReader.getCurrentMonthLabel()
+            FieldAdvisor.getHarvestPeriodDisplayLabel(FieldAdvisor.getCurrentSeasonPeriod())
         )
     end
 
@@ -5977,8 +6139,9 @@ function FieldAdvisor.buildFieldContext(field, fieldState, worldX, worldZ, aggre
         scsSample = SeasonalCropStressReader.sampleField(field)
     end
 
-    local weedSummary = rules.weedsEnabled
-        and FieldAdvisor.sampleWeedCoverage(field, fieldId, worldX, worldZ)
+    local trackArableWeed = FieldAdvisor.shouldTrackArableWeed(aggregation, probeState, field, worldX, worldZ)
+    local weedSummary = rules.weedsEnabled and trackArableWeed
+        and FieldAdvisor.sampleWeedCoverage(field, fieldId, worldX, worldZ, aggregation)
         or nil
 
     local probeSituation = FieldAdvisor.classifyProbe(probeState, field)
@@ -6601,7 +6764,7 @@ function FieldAdvisor.resolveActionCandidates(field, fieldState, pfSample, scsSa
                 label = FieldAdvisor.text(
                     "ftdl_action_harvest_now",
                     "Jetzt ernten (%s)",
-                    PrecisionFarmingReader.getCurrentMonthLabel()
+                    FieldAdvisor.getHarvestPeriodDisplayLabel(FieldAdvisor.getCurrentSeasonPeriod())
                 ),
                 autoComplete = true,
             })
@@ -6666,26 +6829,23 @@ function FieldAdvisor.resolveActionCandidates(field, fieldState, pfSample, scsSa
             FieldAdvisor.addGrassWorkActions(actions, fieldState, field, aggregation, grassResidueSummary, baleSummary)
         end
 
-        if FieldAdvisor.fieldNeedsWeedHoe(fieldState, rules, weedSummary) then
-            FieldAdvisor_addAction(actions, {
-                actionType = "weed_hoe",
-                label = FieldAdvisor.text("ftdl_action_weed_hoe_long", "Striegeln"),
-                autoComplete = true,
-            })
-        end
+        local trackArableWeed = FieldAdvisor.shouldTrackArableWeed(aggregation, probeState, field, nil, nil)
+        if trackArableWeed then
+            if FieldAdvisor.fieldNeedsWeedHoe(fieldState, rules, weedSummary) then
+                FieldAdvisor_addAction(actions, {
+                    actionType = "weed_hoe",
+                    label = FieldAdvisor.text("ftdl_action_weed_hoe_long", "Striegeln"),
+                    autoComplete = true,
+                })
+            end
 
-        if FieldAdvisor.fieldShouldSuggestWeedSpray(fieldState, rules, weedSummary) then
-            FieldAdvisor_addAction(actions, {
-                actionType = "weed_combat",
-                label = FieldAdvisor.text("ftdl_action_weed_combat_long", "Unkraut spritzen"),
-                autoComplete = true,
-            })
-        elseif FieldAdvisor.fieldNeedsWeedWatch(fieldState, rules, weedSummary) then
-            FieldAdvisor_addAction(actions, {
-                actionType = "weed_watch",
-                label = FieldAdvisor.text("ftdl_action_weed_watch_long", "Unkraut beobachten"),
-                autoComplete = true,
-            })
+            if FieldAdvisor.fieldShouldSuggestWeedSpray(fieldState, rules, weedSummary) then
+                FieldAdvisor_addAction(actions, {
+                    actionType = "weed_combat",
+                    label = FieldAdvisor.text("ftdl_action_weed_combat_long", "Unkraut spritzen"),
+                    autoComplete = true,
+                })
+            end
         end
 
         if rules.stonesEnabled and stoneLevel > 0 then
@@ -7299,10 +7459,16 @@ function FieldAdvisor.buildFieldLabels(field, fieldState, worldX, worldZ)
     local expectedHarvest = FieldAdvisor.getExpectedHarvestLabel(field, fieldState, aggregation, grassResidueSummary)
     local harvestState = FieldAdvisor.resolveHarvestFieldState(fieldState, aggregation)
 
-    return {
-        weed = FieldAdvisor.isWeedTaskDoneByCoverage(weedSummary)
+    local trackArableWeed = FieldAdvisor.shouldTrackArableWeed(aggregation, fieldState, field, worldX, worldZ)
+    local weedLabel = FieldAdvisor.text("ftdl_val_none", "kein")
+    if trackArableWeed then
+        weedLabel = FieldAdvisor.isWeedTaskDoneByCoverage(weedSummary)
             and FieldAdvisor.text("ftdl_weed_dead", "tot")
-            or FieldAdvisor.formatWeedDisplayLabel(effectiveFieldState, rules, weedSummary),
+            or FieldAdvisor.formatWeedDisplayLabel(effectiveFieldState, rules, weedSummary)
+    end
+
+    return {
+        weed = weedLabel,
         stones = FieldAdvisor.formatStoneLabel(stoneLevel, rules),
         lime = FieldAdvisor.formatLimeLabel(limeLevel, rules, needsLime),
         roller = FieldAdvisor.formatRollerLabel(rollerLevel, needsRolling),
