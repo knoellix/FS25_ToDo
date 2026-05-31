@@ -31,7 +31,7 @@ Optional second paragraph in the same string."
 
 ## Save and Runtime Safety
 
-- Do not read `savegame*/fields.xml` at runtime (`FieldSavegameReader.ENABLE_DISK_READ = false` — Proton can truncate the file on io.open).
+- Do not read `savegame*/fields.xml` at runtime (`FieldSavegameReader.ENABLE_DISK_READ = false` — io.open can truncate the file while the game still owns it).
 - If save overlay is ever re-enabled, only via `FieldSavegameReader` with strict one-shot cache and save/load guards.
 - Avoid repeated/looped file reads in menu/update paths; prefer live `FieldState` / engine data.
 - Avoid SCS field-map loops in menu/update paths (`buildFieldMap`/`enumerateFields`).
@@ -109,13 +109,15 @@ Optional second paragraph in the same string."
   - When `weedSummary.total > 0`, **coverage wins** for display, suggestions, auto-complete, and progress — do not let center `isWeedDeadOrSprayed` override live coverage (or vice versa).
   - `sampleWeedCoverage`: count dead vs live **mutually exclusive** per probe (`isWeedProbeDead` first, then live only if not dead).
   - `FieldTaskCompletion` weed tasks: if coverage exists, complete only via `isWeedTaskDoneByCoverage`.
+  - Do not treat regrown live weed (states 1–5) as dead just because old `sprayLevel` remains; only early sprayed states (1–2) + low `weedFactor`, or states 4–5 with herbicide residue, count as treated/dead.
+  - Weed suggestions: `weed_hoe` (Striegeln) for any actionable live weed; `weed_combat` (Spritzen) additionally when `weedState >= 3` or live pressure >= 10%.
 
-## Debug (Proton-friendly)
+## Debug
 
 - Manual only: **F9** (or LCtrl+F9) → `FieldDebugConsole` / `ftdlDump <id>`, `ftdlAll`, `ftdlHelp`. **No auto-dump** on menu open, save load, or row click.
 - Log tag: `[FS25_FieldToDoList] DUMP` in `log.txt`.
 - Useful dump lines: `weedCoverage`, `harvestState` vs `representativeState`, `getHarvestWindowHint`, `harvestProjection`.
-- `FSDensityMapUtil` may be **nil as global** under Proton — fruit/weed still work via `FieldState` probes; do not rely on density-map globals in menu paths.
+- `FSDensityMapUtil` may be **nil as global** at runtime — fruit/weed still work via `FieldState` probes; do not rely on density-map globals in menu paths.
 - If dump and UI disagree on Ernte month: compare center/harvestState growth vs representative (max-growth) probe.
 
 ## Validation Focus (Field Overview)

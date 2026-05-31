@@ -19,7 +19,7 @@
 - **Field overview:** multi-probe classification (crop, growth, harvest month, grass logistics) — not a single center sample
 - **Grass logistics:** post-mow chain (swath → collect / bale → bale collect) from live residue signals
 - **Save data:** `fieldToDoList.xml` in the savegame folder (tasks debounced ~2 s after edits; settings saved immediately)
-- **Field status:** live ground/crop readout from the game (the mod does not read `fields.xml` at runtime — safer on Proton/Linux)
+- **Field status:** live ground/crop readout from the game (the mod does not read `fields.xml` at runtime — avoids save-file conflicts while the game is running)
 - **Grass meadows:** mow when ready; post-mow hints for swath/collect/bale; avoids suggesting sow on grass
 
 ## Optional mods
@@ -43,7 +43,7 @@ Works fully without add-ons using base game field data.
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | Windows                | `%USERPROFILE%\Documents\My Games\FarmingSimulator2025\mods\`                                                                 |
 | macOS                  | `~/Library/Application Support/FarmingSimulator2025/mods/`                                                                    |
-| Linux (Steam / Proton) | `~/.local/share/Steam/steamapps/compatdata/2300320/pfx/drive_c/users/steamuser/Documents/My Games/FarmingSimulator2025/mods/` |
+| Linux (Steam) | `~/.local/share/Steam/steamapps/compatdata/2300320/pfx/drive_c/users/steamuser/Documents/My Games/FarmingSimulator2025/mods/` |
 
 3. Enable **Field To-Do List** in the in-game mod manager.
 4. Load any career save — the mod activates automatically on load.
@@ -58,7 +58,7 @@ python3 tools/generate_assets.py   # optional if DDS assets are missing
 ./build.sh
 ```
 
-Default target (Linux Steam/Proton):
+Default target (Linux Steam):
 `~/.local/share/Steam/steamapps/compatdata/2300320/pfx/drive_c/users/steamuser/Documents/My Games/FarmingSimulator2025/mods/FS25_FieldToDoList.zip`
 
 Custom target:
@@ -69,7 +69,7 @@ FS25_MODS_DIR=/path/to/mods ./build.sh
 
 ## Debug (field advisor)
 
-Works on **Windows, macOS, and Linux** (including Steam/Proton). Use when a field shows wrong crop, harvest month, or grass logistics in the overview.
+Works on **Windows, macOS, and Linux**. Use when a field shows wrong crop, harvest month, or grass logistics in the overview.
 
 | Input | Action |
 | ----- | ------ |
@@ -85,7 +85,7 @@ Works on **Windows, macOS, and Linux** (including Steam/Proton). Use when a fiel
 | -------- | ---- |
 | Windows | `%USERPROFILE%\Documents\My Games\FarmingSimulator2025\log.txt` |
 | macOS | `~/Library/Application Support/FarmingSimulator2025/log.txt` |
-| Linux (Steam / Proton) | `~/.local/share/Steam/steamapps/compatdata/2300320/pfx/drive_c/users/steamuser/Documents/My Games/FarmingSimulator2025/log.txt` |
+| Linux (Steam) | `~/.local/share/Steam/steamapps/compatdata/2300320/pfx/drive_c/users/steamuser/Documents/My Games/FarmingSimulator2025/log.txt` |
 
 Search for `[FS25_FieldToDoList] DUMP`. Useful lines: `meadowPhase`, `grassResidue`, `grassCrossScan`, `heightReader`, `harvestState`, `aggregation`.
 
@@ -114,7 +114,7 @@ Use issue templates for bug reports, feature requests, and translations:
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
-**0.1.0.5** — incremental field scan and scan status; multi-probe field advisor (crop, growth, harvest, grass logistics); Proton-safe swath detection; menu and task-list performance; targeted row refresh and 15 s passive rescan.
+**0.1.0.5** — incremental field scan and scan status; multi-probe field advisor (crop, growth, harvest, grass logistics); windrow/residue detection; menu and task-list performance; targeted row refresh and 15 s passive rescan.
 
 ## Current Work In Progress
 

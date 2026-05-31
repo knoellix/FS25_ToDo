@@ -1,7 +1,7 @@
 ---
 name: fs25-mod-audit
 description: >-
-  Code-Audit für die Mod FS25_FieldToDoList (Giants/FS25 Lua, Proton/Linux).
+  Code-Audit für die Mod FS25_FieldToDoList (Giants/FS25 Lua).
   Prüft Runtime-Sicherheit, Engine-API-Korrektheit, Feld-/Frucht-Klassifikation,
   Ernte-/Wachstumslogik, Unkraut-/Gras-Logistik und UI/HUD-Verhalten – verteilt
   auf parallele Subagenten. Verwende dieses Skill, wenn der User die Mod (oder
@@ -48,7 +48,7 @@ Kleines Diff-Audit (1–2 Dateien)? Dann ohne Subagenten direkt prüfen.
 
 ## Dimensionen (je 1 Subagent)
 
-### 1. Runtime-Sicherheit (Proton / Lua 5.1)
+### 1. Runtime-Sicherheit (Lua 5.1)
 Dateien: alle `scripts/*.lua`, v. a. `FieldSavegameReader.lua`, `ToDoManager.lua`,
 `SeasonalCropStressReader.lua`, `InGameMenuIntegration.lua`, `gui/FieldToDoMenuFrame.lua`.
 - Kein `goto` / `::label::` (Giants-Runtime ist Lua-5.1-Stil → Datei lädt sonst nicht).
@@ -71,7 +71,7 @@ Fokus: jede Verwendung von FS-Globals/Manager-APIs.
   `pcall(fn, util, x, z)` (das schiebt `util` als 1. Argument rein). Echte Bug-Klasse.
 - Parallelogramm für `getFillLevelAtArea`: **6 Koordinaten** (x0,z0, x1,z1, x2,z2).
 - Manager-Methoden mit `:`/self korrekt; `g_fruitTypeManager`/`g_fillTypeManager` nil-guarded.
-- `rawget(_G, "FSDensityMapUtil")` vor optionalen Globals (Proton: oft nil).
+- `rawget(_G, "FSDensityMapUtil")` vor optionalen Globals (kann nil sein).
 - `DensityMapHeightUtil`-Calls in Proben-Loops mit `pcall` absichern.
 - Rückgaben mit `tonumber`/Typprüfung absichern; `pcall`-`ok` auswerten.
 
@@ -116,7 +116,7 @@ Dateien: `FieldAdvisor.lua` (Weed-/Residue-Funktionen), `FieldTaskCompletion.lua
 - Mehrdeutige Proben (weder dead noch live) nicht künstlich „erledigt“ wirken lassen.
 - `FieldTaskCompletion` Weed: bei Coverage nur `isWeedTaskDoneByCoverage`.
 - Gras-Reststoff: `loose → swath → (collect/bale/silage) → bale_collect` aus Live-Daten.
-- `DensityMapHeightUtil` nil (Proton): Residue-Tasks/Progress nicht als `NONE`=leer werten.
+- `DensityMapHeightUtil` nil: Residue-Tasks/Progress nicht als `NONE`=leer werten.
 - `grass_swath` complete nur bei `SWATH`/`BALED`, nicht bei `NONE`.
 - `hasCompletionProgress` für Gras: braucht `grassResidueSummary`/`baleSummary` im Context.
 - Ballen nur innerhalb Feldpolygon; Auto-Complete = gleiche Signale wie Vorschläge.

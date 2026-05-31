@@ -5,8 +5,8 @@
 
 FieldSavegameReader = {}
 
---- Disabled by default: io.open on savegame fields.xml can truncate the file under Proton/Wine
---- (sharing violation while the game owns the file). Grass/field data must come from live FieldState only.
+--- Disabled by default: io.open on savegame fields.xml can truncate the file while the game
+--- still owns it. Use live FieldState only.
 FieldSavegameReader.ENABLE_DISK_READ = false
 
 FieldSavegameReader.cache = nil

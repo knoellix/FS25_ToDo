@@ -8,7 +8,7 @@ FieldDebugDump.lastDumpedFieldId = nil
 
 ---@param value any
 ---@return string
-local function s(value)
+local function stringify(value)
     if value == nil then
         return "nil"
     end
@@ -20,12 +20,12 @@ end
 local function fruitLabel(fruitTypeIndex)
     local idx = tonumber(fruitTypeIndex)
     if idx == nil or idx <= 0 then
-        return s(fruitTypeIndex)
+        return stringify(fruitTypeIndex)
     end
     local name = FieldAdvisor ~= nil and FieldAdvisor.getFruitTypeName(idx) or nil
     local generic = FieldAdvisor ~= nil and FieldAdvisor.isGenericGrassFruitIndex(idx) or false
     local grass = FieldAdvisor ~= nil and FieldAdvisor.isGrassCrop(idx) or false
-    return string.format("%d(%s, grass=%s, generic=%s)", idx, s(name), s(grass), s(generic))
+    return string.format("%d(%s, grass=%s, generic=%s)", idx, stringify(name), stringify(grass), stringify(generic))
 end
 
 ---@param line string
@@ -70,7 +70,7 @@ local function dumpDensityMapFruit(worldX, worldZ)
         return
     end
     local ok, idx = pcall(FSDensityMapUtil.getFruitTypeIndexAtWorldPos, worldX, worldZ)
-    out(string.format("FSDensityMapUtil.getFruitTypeIndexAtWorldPos(%.1f,%.1f): ok=%s -> %s", worldX, worldZ, s(ok), fruitLabel(ok and idx or nil)))
+    out(string.format("FSDensityMapUtil.getFruitTypeIndexAtWorldPos(%.1f,%.1f): ok=%s -> %s", worldX, worldZ, stringify(ok), fruitLabel(ok and idx or nil)))
 end
 
 ---@param fieldId number
@@ -98,27 +98,27 @@ function FieldDebugDump.dumpField(fieldId)
         "FieldState: fruitTypeIndex=%s currentFruitTypeIndex=%s fruitTypeName=%s ground=%s growth=%s lastGrowth=%s weedState=%s sprayLevel=%s stubbleShred=%s",
         fruitLabel(fieldState ~= nil and fieldState.fruitTypeIndex or nil),
         fruitLabel(fieldState ~= nil and fieldState.currentFruitTypeIndex or nil),
-        s(fieldState ~= nil and fieldState.fruitTypeName or nil),
-        s(FieldAdvisor.getGroundTypeName(fieldState)),
-        s(FieldAdvisor.getGrowthState(fieldState)),
-        s(FieldAdvisor.getLastGrowthState(fieldState)),
-        s(FieldAdvisor.getStateNumber(fieldState, "weedState")),
-        s(FieldAdvisor.getStateNumber(fieldState, "sprayLevel")),
-        s(FieldAdvisor.getStateNumber(fieldState, "stubbleShredLevel"))
+        stringify(fieldState ~= nil and fieldState.fruitTypeName or nil),
+        stringify(FieldAdvisor.getGroundTypeName(fieldState)),
+        stringify(FieldAdvisor.getGrowthState(fieldState)),
+        stringify(FieldAdvisor.getLastGrowthState(fieldState)),
+        stringify(FieldAdvisor.getStateNumber(fieldState, "weedState")),
+        stringify(FieldAdvisor.getStateNumber(fieldState, "sprayLevel")),
+        stringify(FieldAdvisor.getStateNumber(fieldState, "stubbleShredLevel"))
     ))
 
     local heightUtil = FieldAdvisor.resolveDensityMapHeightUtil ~= nil and FieldAdvisor.resolveDensityMapHeightUtil() or nil
     out(string.format(
         "heightReader: util=%s engineHeight=%s planeId=%s centerMaterial=%.4f",
-        s(heightUtil ~= nil),
-        s(getDensityHeightAtWorldPos ~= nil),
-        s(FieldAdvisor.getHeightDetailPlaneId ~= nil and FieldAdvisor.getHeightDetailPlaneId() or nil),
+        stringify(heightUtil ~= nil),
+        stringify(getDensityHeightAtWorldPos ~= nil),
+        stringify(FieldAdvisor.getHeightDetailPlaneId ~= nil and FieldAdvisor.getHeightDetailPlaneId() or nil),
         FieldAdvisor.measureHeightMaterialAtPoint ~= nil and FieldAdvisor.measureHeightMaterialAtPoint(worldX, worldZ) or 0
     ))
 
     out(string.format(
         "field obj: fruitTypeIndex=%s currentFruitTypeIndex=%s plannedFruitTypeIndex=%s name=%s",
-        s(field.fruitTypeIndex), s(field.currentFruitTypeIndex), s(field.plannedFruitTypeIndex), s(field.name)
+        stringify(field.fruitTypeIndex), stringify(field.currentFruitTypeIndex), stringify(field.plannedFruitTypeIndex), stringify(field.name)
     ))
     out(string.format("inferGrassFruitTypeIndexFromField -> %s", fruitLabel(FieldAdvisor.inferGrassFruitTypeIndexFromField(field))))
 
@@ -135,35 +135,35 @@ function FieldDebugDump.dumpField(fieldId)
     end
 
     local situation = FieldAdvisor.classifyProbe(fieldState, field)
-    out(string.format("classifyProbe -> %s", s(situation)))
+    out(string.format("classifyProbe -> %s", stringify(situation)))
     local aggregation = FieldAdvisor.aggregateFieldProbes(field, fieldId, fieldState, worldX, worldZ)
     out(string.format("aggregate: dominant=%s dominantGrassFruit=%s dominantArableFruit=%s",
-        s(aggregation.dominantSituation),
+        stringify(aggregation.dominantSituation),
         fruitLabel(aggregation.dominantGrassFruit),
         fruitLabel(aggregation.dominantArableFruit)))
     out(string.format("resolveGrassFruitTypeIndex -> %s", fruitLabel(FieldAdvisor.resolveGrassFruitTypeIndex(fieldState, field, aggregation, worldX, worldZ))))
     local displayLabel = FieldAdvisor.getFieldFruitDisplayLabel(field, fieldId, fieldState, worldX, worldZ, aggregation)
-    out(string.format("getFieldFruitDisplayLabel -> '%s'", s(displayLabel)))
+    out(string.format("getFieldFruitDisplayLabel -> '%s'", stringify(displayLabel)))
 
     local context = FieldAdvisor.buildFieldContext(field, fieldState, worldX, worldZ)
     local weedSummary = context ~= nil and context.weedSummary or nil
     local probeState = aggregation.centerState or fieldState
     out(string.format(
         "meadowPhase: center=%s representative=%s ground=%s growthFlags(cut=%s harvestable=%s harvestReady=%s)",
-        s(FieldAdvisor.getGrassMeadowPhase(probeState, field, aggregation)),
-        s(FieldAdvisor.getGrassMeadowPhase(aggregation.representativeState, field, aggregation)),
-        s(FieldAdvisor.getGroundTypeName(fieldState)),
-        s((function()
+        stringify(FieldAdvisor.getGrassMeadowPhase(probeState, field, aggregation)),
+        stringify(FieldAdvisor.getGrassMeadowPhase(aggregation.representativeState, field, aggregation)),
+        stringify(FieldAdvisor.getGroundTypeName(fieldState)),
+        stringify((function()
             local grassFruit = FieldAdvisor.resolveGrassFruitTypeIndex(fieldState, field, aggregation, worldX, worldZ)
             local growth = FieldAdvisor.evaluateFruitGrowth(grassFruit, FieldAdvisor.getEffectiveGrowthState(fieldState))
             return growth.isCut
         end)()),
-        s((function()
+        stringify((function()
             local grassFruit = FieldAdvisor.resolveGrassFruitTypeIndex(fieldState, field, aggregation, worldX, worldZ)
             local growth = FieldAdvisor.evaluateFruitGrowth(grassFruit, FieldAdvisor.getEffectiveGrowthState(fieldState))
             return growth.isHarvestable
         end)()),
-        s((function()
+        stringify((function()
             local grassFruit = FieldAdvisor.resolveGrassFruitTypeIndex(fieldState, field, aggregation, worldX, worldZ)
             local growth = FieldAdvisor.evaluateFruitGrowth(grassFruit, FieldAdvisor.getEffectiveGrowthState(fieldState))
             return growth.isHarvestReady
@@ -172,23 +172,23 @@ function FieldDebugDump.dumpField(fieldId)
     local grassResidue = context ~= nil and context.grassResidueSummary or nil
     if grassResidue ~= nil then
         out(string.format(
-            "grassResidue: available=%s source=%s state=%s total=%s occupied=%s ratio=%.3f liters=%.3f maxSample=%.3f maxMaterial=%.4f centerMat=%.4f swathHits=%s windrowHits=%s shred=%s crossLine=%s lineEv=%s crossPts=%s fillTypes=%d",
-            s(grassResidue.residueAvailable),
-            s(grassResidue.residueSource),
-            s(grassResidue.residueState),
-            s(grassResidue.total),
-            s(grassResidue.occupied),
+            "grassResidue: available=%s source=%s state=%s total=%s occupied=%s ratio=%.3f liters=%.3f maxSample=%.3f maxMaterial=%.4f centerMat=%.4f swathHits=%s windrowFillTypeHits=%s shred=%s crossLineTransitions=%s windrowLineEvidence=%s crossScanPoints=%s fillTypes=%d",
+            stringify(grassResidue.residueAvailable),
+            stringify(grassResidue.residueSource),
+            stringify(grassResidue.residueState),
+            stringify(grassResidue.total),
+            stringify(grassResidue.occupied),
             grassResidue.occupiedRatio or 0,
             grassResidue.totalLiters or 0,
             grassResidue.maxSampleLiters or 0,
             grassResidue.maxSampleMaterial or 0,
             grassResidue.centerMaterial or 0,
-            s(grassResidue.swathHits),
-            s(grassResidue.windrowTypeHits),
-            s(grassResidue.signalShred),
-            s(grassResidue.crossLineTransitions),
-            s(FieldAdvisor.hasGrassWindrowLineEvidence(grassResidue)),
-            s(grassResidue.crossScanPoints),
+            stringify(grassResidue.swathHits),
+            stringify(grassResidue.windrowTypeHits),
+            stringify(grassResidue.signalShred),
+            stringify(grassResidue.crossLineTransitions),
+            stringify(FieldAdvisor.hasGrassWindrowLineEvidence(grassResidue)),
+            stringify(grassResidue.crossScanPoints),
             #(FieldAdvisor.collectWindrowFillTypeIndices(
                 FieldAdvisor.resolveGrassFruitTypeIndex(fieldState, field, aggregation, worldX, worldZ)
             ))
@@ -202,60 +202,60 @@ function FieldDebugDump.dumpField(fieldId)
         end
         out(string.format(
             "baleCoverage: total=%s mapBales=%s",
-            s(baleSummary.total),
-            s(mapBaleCount)
+            stringify(baleSummary.total),
+            stringify(mapBaleCount)
         ))
     end
     if weedSummary ~= nil then
         out(string.format(
             "weedCoverage: total=%s live=%s dead=%s liveRatio=%.3f deadRatio=%.3f doneByCoverage=%s",
-            s(weedSummary.total), s(weedSummary.live), s(weedSummary.dead),
+            stringify(weedSummary.total), stringify(weedSummary.live), stringify(weedSummary.dead),
             weedSummary.liveRatio or 0, weedSummary.deadRatio or 0,
-            s(FieldAdvisor.isWeedTaskDoneByCoverage(weedSummary))
+            stringify(FieldAdvisor.isWeedTaskDoneByCoverage(weedSummary))
         ))
         out(string.format(
             "weedAdvisor: needsCombat=%s needsWatch=%s displayLabel='%s' centerDeadOrSprayed=%s",
-            s(FieldAdvisor.fieldNeedsWeedCombat(fieldState, context.rules, weedSummary)),
-            s(FieldAdvisor.fieldNeedsWeedWatch(fieldState, context.rules, weedSummary)),
-            s(FieldAdvisor.formatWeedDisplayLabel(fieldState, context.rules, weedSummary)),
-            s(FieldAdvisor.isWeedDeadOrSprayed(fieldState))
+            stringify(FieldAdvisor.fieldNeedsWeedCombat(fieldState, context.rules, weedSummary)),
+            stringify(FieldAdvisor.fieldNeedsWeedWatch(fieldState, context.rules, weedSummary)),
+            stringify(FieldAdvisor.formatWeedDisplayLabel(fieldState, context.rules, weedSummary)),
+            stringify(FieldAdvisor.isWeedDeadOrSprayed(fieldState))
         ))
     end
 
     out(string.format("season: period=%s calMonth=%s seasonalGrowth=%s growthMode=%s",
-        s(FieldAdvisor.getCurrentSeasonPeriod()),
-        s(FieldAdvisor.getCalendarMonthForSeasonPeriod(FieldAdvisor.getCurrentSeasonPeriod())),
-        s(FieldAdvisor.isSeasonalGrowthEnabled()),
-        s(FieldAdvisor.getActiveGrowthMode())))
+        stringify(FieldAdvisor.getCurrentSeasonPeriod()),
+        stringify(FieldAdvisor.getCalendarMonthForSeasonPeriod(FieldAdvisor.getCurrentSeasonPeriod())),
+        stringify(FieldAdvisor.isSeasonalGrowthEnabled()),
+        stringify(FieldAdvisor.getActiveGrowthMode())))
 
     local arableFruit = FieldAdvisor.resolveFruitTypeIndex(fieldState, field)
     local fruitForHarvest = arableFruit or aggregation.dominantArableFruit
     local harvestState = FieldAdvisor.resolveHarvestFieldState(fieldState, aggregation)
     out(string.format("harvestState: growth=%s hint='%s' (representative growth=%s hint='%s')",
-        s(FieldAdvisor.getEffectiveGrowthState(harvestState)),
-        s(FieldAdvisor.getHarvestWindowHint(
+        stringify(FieldAdvisor.getEffectiveGrowthState(harvestState)),
+        stringify(FieldAdvisor.getHarvestWindowHint(
             FieldAdvisor.resolveFruitTypeIndex(harvestState, field) or fruitForHarvest, harvestState)),
-        s(FieldAdvisor.getEffectiveGrowthState(aggregation.representativeState)),
-        s(FieldAdvisor.getHarvestWindowHint(fruitForHarvest, aggregation.representativeState))))
+        stringify(FieldAdvisor.getEffectiveGrowthState(aggregation.representativeState)),
+        stringify(FieldAdvisor.getHarvestWindowHint(fruitForHarvest, aggregation.representativeState))))
     out(string.format("resolveFruitTypeIndex (arable) -> %s", fruitLabel(fruitForHarvest)))
     if fruitForHarvest ~= nil then
         local desc = FieldAdvisor.getFruitTypeDesc(fruitForHarvest)
         if desc ~= nil then
             out(string.format("fruitDesc: minHarvest=%s maxHarvest=%s hasGetIsHarvestReady=%s hasGetIsHarvestableInPeriod=%s",
-                s(desc.minHarvestingGrowthState), s(desc.maxHarvestingGrowthState),
-                s(desc.getIsHarvestReady ~= nil), s(desc.getIsHarvestableInPeriod ~= nil)))
+                stringify(desc.minHarvestingGrowthState), stringify(desc.maxHarvestingGrowthState),
+                stringify(desc.getIsHarvestReady ~= nil), stringify(desc.getIsHarvestableInPeriod ~= nil)))
         end
-        out(string.format("estimatePeriodsUntilHarvest -> %s", s(FieldAdvisor.estimateNonSeasonalPeriodsUntilHarvest(fruitForHarvest, harvestState, desc))))
+        out(string.format("estimatePeriodsUntilHarvest -> %s", stringify(FieldAdvisor.estimateNonSeasonalPeriodsUntilHarvest(fruitForHarvest, harvestState, desc))))
         out(string.format("getExpectedHarvestPeriod -> %s (%s)",
-            s(FieldAdvisor.getExpectedHarvestPeriod(fruitForHarvest, harvestState)),
-            s(FieldAdvisor.getHarvestPeriodDisplayLabel(
+            stringify(FieldAdvisor.getExpectedHarvestPeriod(fruitForHarvest, harvestState)),
+            stringify(FieldAdvisor.getHarvestPeriodDisplayLabel(
                 FieldAdvisor.getExpectedHarvestPeriod(fruitForHarvest, harvestState)))))
-        out(string.format("getHarvestWindowHint -> '%s'", s(FieldAdvisor.getHarvestWindowHint(fruitForHarvest, harvestState))))
+        out(string.format("getHarvestWindowHint -> '%s'", stringify(FieldAdvisor.getHarvestWindowHint(fruitForHarvest, harvestState))))
         local growthState = FieldAdvisor.getEffectiveGrowthState(harvestState)
         out(string.format("harvestProjection: growth=%s stepsUntilRipe=%s",
-            s(growthState),
-            s(FieldAdvisor.estimateNonSeasonalPeriodsUntilHarvest(fruitForHarvest, harvestState, desc))))
-        out(string.format("isCropHarvestReady -> %s", s(FieldAdvisor.isCropHarvestReady(field, harvestState, fruitForHarvest))))
+            stringify(growthState),
+            stringify(FieldAdvisor.estimateNonSeasonalPeriodsUntilHarvest(fruitForHarvest, harvestState, desc))))
+        out(string.format("isCropHarvestReady -> %s", stringify(FieldAdvisor.isCropHarvestReady(field, harvestState, fruitForHarvest))))
     end
 
     out(string.format("===== END FIELD %d =====", fieldId))
@@ -277,8 +277,8 @@ function FieldDebugDump.dumpFruitTypes()
     for _, desc in pairs(fruitTypes) do
         if desc ~= nil and desc.index ~= nil then
             out(string.format("idx=%s name=%s min=%s max=%s grass=%s generic=%s",
-                s(desc.index), s(desc.name), s(desc.minHarvestingGrowthState), s(desc.maxHarvestingGrowthState),
-                s(FieldAdvisor.isGrassCrop(desc.index)), s(FieldAdvisor.isGenericGrassFruitIndex(desc.index))))
+                stringify(desc.index), stringify(desc.name), stringify(desc.minHarvestingGrowthState), stringify(desc.maxHarvestingGrowthState),
+                stringify(FieldAdvisor.isGrassCrop(desc.index)), stringify(FieldAdvisor.isGenericGrassFruitIndex(desc.index))))
         end
     end
     out("===== END FRUIT TYPES =====")

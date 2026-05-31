@@ -49,6 +49,7 @@ FieldTaskCompletion.REGISTRY = {
     grass_swath = { strategy = "point" },
     grass_collect = { strategy = "point" },
     harvest = { strategy = "point" },
+    weed_hoe = { strategy = "point" },
     weed_combat = { strategy = "point" },
     weed_watch = { strategy = "point" },
     pf_ph = { strategy = "point" },
@@ -543,7 +544,7 @@ function FieldTaskCompletion.isActionComplete(actionType, context, actionMeta)
         return not context.needsLime
     end
 
-    if actionType == "weed_combat" or actionType == "weed_watch" then
+    if actionType == "weed_hoe" or actionType == "weed_combat" or actionType == "weed_watch" then
         if not rules.weedsEnabled then
             return true
         end

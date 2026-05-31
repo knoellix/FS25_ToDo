@@ -18,7 +18,7 @@ All notable changes to **FS25_FieldToDoList** are documented here.
 - Passive full rescan while menu open: **5 s → 15 s** (enough for fields without open tasks).
 - **Multi-probe field advisor:** dominant situation + representative state from a 3×3 grid; fruit, growth, and harvest labels share one path (`buildFieldLabels`).
 - **Growth column:** overview growth state comes from the same harvest projection as suggestions (not a separate center-only read).
-- **Grass / meadow logistics:** post-mow residue chain (loose → swath → collect / bale → bale collect) uses live height-map and windrow signals; permissive inside-field checks on Proton where the engine returns no polygon test.
+- **Grass / meadow logistics:** post-mow residue chain (loose → swath → collect / bale → bale collect) uses live height-map and windrow signals; permissive inside-field checks when the engine polygon test returns false.
 - **Luzerne / clover / alfalfa:** after mow, swath/collect hints instead of a misleading next-harvest month while logistics are pending.
 - **Harvest projection:** effective growth state for withered crops; calendar month clamped 1–12; non-seasonal period estimate without max-harvest-state fallback.
 - **Engine API hardening:** shared `getFieldCenterWorldPosition` (pcall) across advisor, scanner, visit, PF/SCS readers, debug dump, and completion baselines; `g_fieldManager.getFields` guarded.
@@ -31,7 +31,7 @@ All notable changes to **FS25_FieldToDoList** are documented here.
 - Field list stuck on `…` placeholders (deferred reload no longer invalidates scan cache every 500 ms; `reloadData()` instead of `reloadVisibleItems()` on scan progress).
 - Overview scan not advancing when ESC tab was open (scan tick + UI sync wiring).
 - Scan reset loop when growth/ownership events fired during incremental scan; UI sync no longer depends on fragile page-visibility checks (`ownedFieldsScanActive` + direct list sync after tick).
-- **Proton swath regression:** clover/lucerne after mow showed harvest window instead of swath/collect when strict inside-field tests returned false.
+- **Swath regression:** clover/lucerne after mow showed harvest window instead of swath/collect when strict inside-field tests returned false.
 - **Plowed empty fields** (e.g. field 14): no longer labeled „Gras“; lone bare center no longer overrides a grass/arable majority.
 - **Weed done rule:** `weedState <= 0` no longer counts as dead/sprayed coverage.
 - **Auto-complete ground ratio:** correct `FieldGroundType.getValueByType` usage; numeric area coercion.
@@ -48,7 +48,7 @@ All notable changes to **FS25_FieldToDoList** are documented here.
 
 ### Added
 
-- **Debug tooling:** hotkey **F9** (or **Left Ctrl + F9**) — works on Windows, macOS, and Linux; on Proton often opens a fallback dialog if the native console is unavailable.
+- **Debug tooling:** hotkey **F9** (or **Left Ctrl + F9**) — works on Windows, macOS, and Linux; opens a fallback dialog when the native dev console is unavailable.
 - Console commands: `ftdlDump <fieldId>`, `ftdlFruits`, `ftdlAll`, `ftdlHelp` — output goes to `log.txt` (`[FS25_FieldToDoList] DUMP …`).
 - Grass residue **cross scan** (full E–W and N–S bars through field center) to detect narrow swath lines.
 
@@ -57,7 +57,7 @@ All notable changes to **FS25_FieldToDoList** are documented here.
 - Field advisor: harvest month from **center probe** (fixes wrong months for maize, edge strips, etc.).
 - Luzerne/clover/alfalfa: correct crop labels and post-mow **„Nachwuchs“** instead of misleading „Wächst“ / harvest month while logistics are pending.
 - Weed tasks: **≤ 5 % live weed** on classified probes → treated as done (dead/sprayed coverage).
-- Grass logistics on Proton: fallback when `DensityMapHeightUtil` global is missing (engine height map + field signals).
+- Grass logistics: fallback when `DensityMapHeightUtil` global is missing (engine height map + field signals).
 - Task list: **↑ / ↓** icon buttons with tooltips; menu/residue scan performance tuning.
 
 ### Fixed
@@ -67,7 +67,7 @@ All notable changes to **FS25_FieldToDoList** are documented here.
 
 ### Known limitations
 
-- Grass swath → collect/bale chain still being tuned (residue detection varies by map and Proton); use `ftdlDump` for diagnosis.
+- Grass swath → collect/bale chain still being tuned (residue detection varies by map and engine APIs); use `ftdlDump` for diagnosis.
 
 ## [0.1.0.3] — 2026-05-27
 
@@ -79,7 +79,7 @@ All notable changes to **FS25_FieldToDoList** are documented here.
 
 ### Fixed
 
-- Field overview stability on Proton/Linux (no runtime read of savegame `fields.xml` — avoids save corruption risk).
+- Field overview stability (no runtime read of savegame `fields.xml` — avoids save corruption risk).
 - Lua compatibility fix that could hide all owned fields in the overview.
 
 ### Docs

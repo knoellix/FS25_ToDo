@@ -23,7 +23,7 @@ Preferred channels:
 Include when possible:
 
 - Affected mod version / git tag
-- FS25 game version and platform (Windows, macOS, Linux/Proton)
+- FS25 game version and platform (Windows, macOS, Linux)
 - Steps to reproduce
 - Impact (e.g. savegame damaged, unintended file writes, crash)
 - Relevant `log.txt` excerpts (redact personal paths if needed)
@@ -46,4 +46,4 @@ You should receive an acknowledgment within a reasonable time. Fixes may ship as
 
 ## Project safety notes
 
-This mod intentionally **does not read `fields.xml` at runtime** (Proton/save safety). If you find code paths that bypass that policy, please report them.
+This mod intentionally **does not read `fields.xml` at runtime** (avoids file conflicts while the game owns the save). If you find code paths that bypass that policy, please report them.

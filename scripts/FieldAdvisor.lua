@@ -6,12 +6,12 @@
 FieldAdvisor = {}
 
 FieldAdvisor.WEED_LABELS = {
-    [0] = "kein",
-    [1] = "leicht",
-    [2] = "mittel",
-    [3] = "stark",
-    [4] = "stark",
-    [5] = "stark",
+    [0] = "none",
+    [1] = "light",
+    [2] = "medium",
+    [3] = "heavy",
+    [4] = "heavy",
+    [5] = "heavy",
 }
 
 -- Internal fruit names that behave like grass (no plowing, usually no mineral fertilizing).
@@ -26,7 +26,7 @@ FieldAdvisor.GRASS_FRUIT_NAMES = {
     LUCERNE = true,
     MEDICK = true,
 }
--- Density map often reports these indices for every meadow crop (Luzerne/Alfalfa included).
+-- Density map often reports these indices for every meadow crop (lucerne/alfalfa included).
 FieldAdvisor.GENERIC_GRASS_FRUIT_NAMES = {
     GRASS = true,
     MEADOW = true,
@@ -54,6 +54,7 @@ FieldAdvisor.WEED_FACTOR_TREATED_THRESHOLD = 0.15
 FieldAdvisor.WEED_STATE_TREATED_MAX = 3
 -- After herbicide, density map can still report high weedFactor with weedState 4–6 (brown residue).
 FieldAdvisor.WEED_STATE_SPRAYED_LIVE_MAX = 2
+FieldAdvisor.WEED_SPRAY_PRESSURE_THRESHOLD = 0.10
 FieldAdvisor.WEED_LIVE_RATIO_DONE_THRESHOLD = 0.05
 FieldAdvisor.WEED_COVERAGE_CACHE_TTL_MS = 2000
 FieldAdvisor.GRASS_RESIDUE_CACHE_TTL_ACTIVE_MS = 1500
@@ -70,7 +71,7 @@ FieldAdvisor.GRASS_RESIDUE_ENGINE_MATERIAL_MIN = 0.008
 FieldAdvisor.GRASS_SWATH_OCCUPANCY_MAX = 0.30
 FieldAdvisor.GRASS_SWATH_OCCUPANCY_HARD_MAX = 0.15
 FieldAdvisor.GRASS_SWATH_DENSITY_MULTIPLIER = 3.5
--- Edge piles / unreachable remnants: not swath lines (Schwaden = Linien, not Haufen).
+-- Edge piles / unreachable remnants: windrow lines, not isolated piles.
 FieldAdvisor.GRASS_WINDROW_PILE_RATIO_MAX = 0.05
 FieldAdvisor.GRASS_WINDROW_LINE_MIN_SWATH_HITS = 2
 FieldAdvisor.GRASS_WINDROW_CROSS_LINE_MIN_TRANSITIONS = 2
@@ -530,7 +531,7 @@ function FieldAdvisor.isGrassCutGroundType(groundType)
         or string.find(groundType, "CUT", 1, true) ~= nil
 end
 
---- Post-mow meadow signal: cut ground, stubble, getIsCut, or growth above max harvest (Geistal alfalfa/clover).
+--- Post-mow meadow signal: cut ground, stubble, getIsCut, or growth above max harvest (Geistal map alfalfa/clover).
 ---@param fieldState table|nil
 ---@param field table|nil
 ---@param fruitTypeIndex number|nil
@@ -1151,7 +1152,7 @@ function FieldAdvisor.aggregateFieldProbes(field, fieldId, centerState, worldX, 
     end
 
     -- Harvest month uses the field center probe — not max-growth edges (Jul silage)
-    -- and not min-growth edge strips (growth 0 / missing fruit → "Wächst").
+    -- and not min-growth edge strips (growth 0 / missing fruit → localized "Growing").
     local harvestState = centerState
 
     local aggregation = {
@@ -1568,7 +1569,7 @@ function FieldAdvisor.buildGrassRegrowthProjectionState(fieldState, fruitTypeInd
     return projected
 end
 
---- Harvest/regrowth label for mown grass (Luzerne/Klee): next window or „Nachwuchs“, never „Wächst“.
+--- Harvest/regrowth label for mown grass (lucerne/clover): next harvest window or "Regrowth", never "Growing".
 ---@param field table|nil
 ---@param fieldState table|nil
 ---@param aggregation table|nil
@@ -1706,10 +1707,10 @@ function FieldAdvisor.formatWeedLabel(weedState, rules)
             or string.format("%d", weedState)
     else
         local weedKeys = {
-            kein = { "ftdl_val_none", "kein" },
-            leicht = { "ftdl_weed_light", "leicht" },
-            mittel = { "ftdl_weed_medium", "mittel" },
-            stark = { "ftdl_weed_heavy", "stark" },
+            none = { "ftdl_val_none", "kein" },
+            light = { "ftdl_weed_light", "leicht" },
+            medium = { "ftdl_weed_medium", "mittel" },
+            heavy = { "ftdl_weed_heavy", "stark" },
         }
         local weedEntry = weedKeys[label]
         if weedEntry ~= nil then
@@ -1766,8 +1767,7 @@ function FieldAdvisor.isWeedDeadOrSprayed(fieldState)
         return true
     end
 
-    if FieldAdvisor.hasHerbicideResidue(fieldState)
-        and weedState > FieldAdvisor.WEED_STATE_SPRAYED_LIVE_MAX then
+    if weedState <= 0 then
         return true
     end
 
@@ -1777,16 +1777,23 @@ function FieldAdvisor.isWeedDeadOrSprayed(fieldState)
             return true
         end
 
+        -- Low factor + herbicide only on early sprayed weeds (states 1–2), not regrowth after sleep.
         if FieldAdvisor.hasHerbicideResidue(fieldState)
             and weedFactor <= FieldAdvisor.WEED_FACTOR_TREATED_THRESHOLD
-            and weedState <= FieldAdvisor.WEED_STATE_TREATED_MAX then
+            and weedState <= FieldAdvisor.WEED_STATE_SPRAYED_LIVE_MAX then
             return true
         end
 
         return false
     end
 
-    return weedState <= 0
+    -- Brown spray residue on foliage states 4–5 without a reliable weedFactor reading.
+    if FieldAdvisor.hasHerbicideResidue(fieldState)
+        and weedState >= 4 then
+        return true
+    end
+
+    return false
 end
 
 ---@param fieldState table|nil
@@ -1799,12 +1806,6 @@ function FieldAdvisor.isWeedProbeLive(fieldState)
     local weedState = FieldAdvisor.getWeedStateLevel(fieldState)
     if weedState <= 0 or weedState >= FieldAdvisor.WEED_STATE_DEAD_MIN then
         return false
-    end
-
-    if FieldAdvisor.hasHerbicideResidue(fieldState) then
-        if weedState > FieldAdvisor.WEED_STATE_SPRAYED_LIVE_MAX then
-            return false
-        end
     end
 
     if FieldAdvisor.isWeedDeadOrSprayed(fieldState) then
@@ -1824,12 +1825,6 @@ function FieldAdvisor.isWeedProbeDead(fieldState)
     local weedState = FieldAdvisor.getWeedStateLevel(fieldState)
     if weedState >= FieldAdvisor.WEED_STATE_DEAD_MIN then
         return true
-    end
-
-    if FieldAdvisor.hasHerbicideResidue(fieldState) then
-        if weedState > FieldAdvisor.WEED_STATE_SPRAYED_LIVE_MAX then
-            return true
-        end
     end
 
     if weedState <= 0 then
@@ -3053,7 +3048,7 @@ function FieldAdvisor.hasGrassSwathMaterialRemaining(summary)
     return false
 end
 
---- Ballen/Silageballen erledigt: Schwaden weg, nicht schon beim ersten Ballen.
+--- Baling/silage-baling complete: swaths gone, not on the first bale alone.
 ---@param summary table|nil
 ---@param baleSummary table|nil
 ---@param baseline table|nil
@@ -3135,7 +3130,7 @@ function FieldAdvisor.isGrassWindrowPileRemnant(summary)
     return false
 end
 
---- Schwaden = windrow lines on the cross (multiple aligned hits), not isolated piles.
+--- Windrows = aligned line hits on the cross scan, not isolated piles.
 ---@param summary table|nil
 ---@return boolean
 function FieldAdvisor.hasGrassWindrowLineEvidence(summary)
@@ -3192,7 +3187,7 @@ function FieldAdvisor.hasGrassWindrowLineEvidence(summary)
     return false
 end
 
---- Schwaden erledigt = echte Windrow-Linien (nicht nur state=swath / lose Mähgut-Fläche).
+--- Swathing complete = real windrow lines (not residueState=swath / loose mow residue).
 ---@param summary table|nil
 ---@return boolean
 function FieldAdvisor.isGrassSwathWorkComplete(summary)
@@ -3239,7 +3234,7 @@ function FieldAdvisor.isGrassCollectEffectivelyDone(summary, baseline)
             return true
         end
 
-        -- Mähen → Schwaden legen: loose cut grass is not "collect done".
+        -- Mow → swath: loose cut grass is not "collect done".
         if state == FieldAdvisor.GRASS_RESIDUE_LOOSE then
             if maxMaterial >= FieldAdvisor.GRASS_WINDROW_POST_COLLECT_MATERIAL_MIN then
                 return true
@@ -3251,7 +3246,7 @@ function FieldAdvisor.isGrassCollectEffectivelyDone(summary, baseline)
             return true
         end
 
-        -- False SWATH from uniform stubble height: still need Schwaden legen.
+        -- False SWATH from uniform stubble height: still need to form windrows.
         if state == FieldAdvisor.GRASS_RESIDUE_SWATH
             and centerMaterial < FieldAdvisor.GRASS_WINDROW_CENTER_MATERIAL_MIN then
             return false
@@ -3335,7 +3330,7 @@ function FieldAdvisor.refineGrassResidueSummary(summary, aggregation, probeState
     local swathHits = tonumber(summary.swathHits) or 0
     local windrowHits = tonumber(summary.windrowTypeHits) or 0
 
-    local function looksLikeLyingSwath()
+    local function hasLyingSwathSignals()
         if swathHits >= 1 or windrowHits >= 1 then
             return true
         end
@@ -3353,7 +3348,7 @@ function FieldAdvisor.refineGrassResidueSummary(summary, aggregation, probeState
         local postMow = FieldAdvisor.isGrassPostMowState(probeState, field, grassFruitHint)
             or shredLevel > 0
             or FieldAdvisor.isGrassCutGroundType(FieldAdvisor.getGroundTypeName(probeState))
-        if looksLikeLyingSwath() then
+        if hasLyingSwathSignals() then
             summary.residueState = FieldAdvisor.GRASS_RESIDUE_SWATH
             summary.residueAvailable = true
             return summary
@@ -4130,6 +4125,62 @@ function FieldAdvisor.fieldNeedsWeedWatch(fieldState, rules, weedSummary)
         and pressure < FieldAdvisor.WEED_FACTOR_COMBAT_THRESHOLD
 end
 
+---@param fieldState table|nil
+---@param rules table
+---@param weedSummary table|nil
+---@return number pressure
+---@return number weedState
+function FieldAdvisor.getWeedSuggestionPressure(fieldState, weedSummary)
+    local weedState = FieldAdvisor.getWeedStateLevel(fieldState)
+
+    if weedSummary ~= nil and (weedSummary.total or 0) > 0 then
+        local classified = weedSummary.classified
+            or ((weedSummary.live or 0) + (weedSummary.dead or 0))
+        if classified > 0 and (weedSummary.liveRatio or 0) > 0 then
+            return weedSummary.liveRatio, weedState
+        end
+    end
+
+    return FieldAdvisor.getEffectiveWeedPressure(fieldState), weedState
+end
+
+--- Mechanical weeding (hoe) for light or moderate live weed.
+---@param fieldState table|nil
+---@param rules table
+---@param weedSummary table|nil
+---@return boolean
+function FieldAdvisor.fieldNeedsWeedHoe(fieldState, rules, weedSummary)
+    if not rules.weedsEnabled then
+        return false
+    end
+
+    if FieldAdvisor.fieldNeedsWeedCombat(fieldState, rules, weedSummary) then
+        return true
+    end
+
+    if not FieldAdvisor.fieldNeedsWeedWatch(fieldState, rules, weedSummary) then
+        return false
+    end
+
+    local _, weedState = FieldAdvisor.getWeedSuggestionPressure(fieldState, weedSummary)
+    return weedState >= 1 and weedState <= FieldAdvisor.WEED_STATE_SPRAYED_LIVE_MAX
+end
+
+--- Herbicide spray for stronger weed pressure or growth stage.
+---@param fieldState table|nil
+---@param rules table
+---@param weedSummary table|nil
+---@return boolean
+function FieldAdvisor.fieldShouldSuggestWeedSpray(fieldState, rules, weedSummary)
+    if not FieldAdvisor.fieldNeedsWeedCombat(fieldState, rules, weedSummary) then
+        return false
+    end
+
+    local pressure, weedState = FieldAdvisor.getWeedSuggestionPressure(fieldState, weedSummary)
+    return weedState >= 3
+        or pressure >= FieldAdvisor.WEED_SPRAY_PRESSURE_THRESHOLD
+end
+
 ---@param period number
 ---@return string
 function FieldAdvisor.getEnvironmentPeriodLabel(period)
@@ -4659,8 +4710,8 @@ function FieldAdvisor.getLocalizedFruitTitle(fruitTypeIndex)
         return "-"
     end
 
-    -- Specific grass crops (Luzerne/Klee/…) often share a generic grass fill type whose
-    -- title localizes to "Gras". Prefer the crop's own name so Luzerne is not shown as Gras.
+    -- Specific grass crops (lucerne/clover/…) often share a generic grass fill type whose
+    -- title localizes to "Grass". Prefer the crop name over the generic grass label.
     if fruitDesc.name ~= nil
         and FieldAdvisor.isGrassCrop(fruitTypeIndex)
         and not FieldAdvisor.isGenericGrassFruitIndex(fruitTypeIndex) then
@@ -4830,7 +4881,7 @@ function FieldAdvisor.scoreGrassFruitGrowthMatch(fruitTypeIndex, fieldState)
     return score
 end
 
---- Density map often returns generic GRASS for Alfalfa/Luzerne; match growth flags per grass crop.
+--- Density map often returns generic GRASS for alfalfa/lucerne; match growth flags per grass crop.
 ---@param fieldState table|nil
 ---@param field table|nil
 ---@param probeIndex number|nil
@@ -4865,7 +4916,7 @@ function FieldAdvisor.disambiguateGrassFruitTypeIndex(fieldState, field, probeIn
     return probeIndex
 end
 
---- Detect Luzerne/Klee/etc. from windrow/cut residue fill type (more reliable than generic GRASS index).
+--- Detect lucerne/clover/etc. from windrow/cut residue fill type (more reliable than generic GRASS index).
 ---@param field table|nil
 ---@param worldX number|nil
 ---@param worldZ number|nil
@@ -5656,7 +5707,7 @@ function FieldAdvisor.getFieldFruitDisplayLabel(field, fieldId, fieldState, worl
         end
         local label = FieldAdvisor.getLocalizedFruitTitle(fruitTypeIndex)
         local hasPartialWork = FieldAdvisor.fieldHasPartialSoilWork(field, fieldId, fieldState, worldX, worldZ)
-        -- Specific grass crops (Luzerne/Klee) must not collapse to generic "Gras (teilw. bearb.)"
+        -- Specific grass crops (lucerne/clover) must not collapse to generic "Grass (part. worked)"
         -- when probes already resolved a non-generic index — e.g. mown alfalfa with worked strips.
         if label ~= "-"
             and (not hasPartialWork or not FieldAdvisor.isGenericGrassFruitIndex(fruitTypeIndex)) then
@@ -6153,7 +6204,7 @@ function FieldAdvisor.getOrganicFertilizerPassTarget(pass, passTotal, targetN)
     return math.floor(safeTarget * (safePass / safeTotal))
 end
 
---- Boden-Schritte zwischen Mist/Gülle-Durchgängen (nie zwei Düngungen direkt hintereinander).
+--- Soil-work steps between manure/slurry passes (never two fertilizer passes back-to-back).
 ---@param soilActions table[]
 ---@return table[]
 function FieldAdvisor.collectOrganicInterleaveSlots(soilActions)
@@ -6181,6 +6232,7 @@ function FieldAdvisor.isOrganicInterleavePrefixSoil(action)
 
     local actionType = action.actionType
     return actionType == "stones"
+        or actionType == "weed_hoe"
         or actionType == "weed_combat"
         or actionType == "weed_watch"
         or actionType == "pf_ph"
@@ -6242,7 +6294,7 @@ function FieldAdvisor.interleaveFertilizerPasses(actions)
         end
     end
 
-    -- Mist/Gülle passes between soil work (user picks manure or slurry each time).
+    -- Manure/slurry passes between soil work (user picks manure or slurry each time).
     local maxPasses = #interleaveSlots + 1
     while #fertActions > maxPasses do
         table.remove(fertActions)
@@ -6261,7 +6313,7 @@ function FieldAdvisor.interleaveFertilizerPasses(actions)
     local interleaved = {}
 
     if #interleaveSlots == 0 then
-        -- No plow/sow/lime/roller/cultivate on this field: at most one Mist/Gülle pass.
+        -- No plow/sow/lime/roller/cultivate on this field: at most one manure/slurry pass.
         fertActions[1].fertPass = 1
         fertActions[1].fertPassTotal = 1
         fertActions[1].label = FieldAdvisor.getOrganicFertilizerPassLabel(1, 1)
@@ -6614,10 +6666,18 @@ function FieldAdvisor.resolveActionCandidates(field, fieldState, pfSample, scsSa
             FieldAdvisor.addGrassWorkActions(actions, fieldState, field, aggregation, grassResidueSummary, baleSummary)
         end
 
-        if FieldAdvisor.fieldNeedsWeedCombat(fieldState, rules, weedSummary) then
+        if FieldAdvisor.fieldNeedsWeedHoe(fieldState, rules, weedSummary) then
+            FieldAdvisor_addAction(actions, {
+                actionType = "weed_hoe",
+                label = FieldAdvisor.text("ftdl_action_weed_hoe_long", "Striegeln"),
+                autoComplete = true,
+            })
+        end
+
+        if FieldAdvisor.fieldShouldSuggestWeedSpray(fieldState, rules, weedSummary) then
             FieldAdvisor_addAction(actions, {
                 actionType = "weed_combat",
-                label = FieldAdvisor.text("ftdl_action_weed_combat_long", "Unkraut bekämpfen"),
+                label = FieldAdvisor.text("ftdl_action_weed_combat_long", "Unkraut spritzen"),
                 autoComplete = true,
             })
         elseif FieldAdvisor.fieldNeedsWeedWatch(fieldState, rules, weedSummary) then
@@ -6814,7 +6874,8 @@ function FieldAdvisor.getShortActionLabel(action)
         lime = { "ftdl_action_lime", "Kalken" },
         sow = { "ftdl_action_sow", "Säen" },
         roller = { "ftdl_action_roller", "Walzen" },
-        weed_combat = { "ftdl_action_weed_combat", "Unkraut" },
+        weed_hoe = { "ftdl_action_weed_hoe", "Striegeln" },
+        weed_combat = { "ftdl_action_weed_combat", "Spritzen" },
         weed_watch = { "ftdl_action_weed_watch", "Unkraut?" },
         pf_ph = { "ftdl_action_pf_ph", "Kalk/pH" },
         pf_n = { "ftdl_action_pf_n", "Düngen" },
@@ -7159,7 +7220,7 @@ function FieldAdvisor.hasCompletionProgress(task, context)
         return false
     end
 
-    if actionType == "weed_combat" or actionType == "weed_watch" then
+    if actionType == "weed_hoe" or actionType == "weed_combat" or actionType == "weed_watch" then
         if context.weedSummary ~= nil and (context.weedSummary.total or 0) > 0 then
             return FieldAdvisor.isWeedTaskDoneByCoverage(context.weedSummary)
         end

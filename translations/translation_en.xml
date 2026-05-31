@@ -95,7 +95,8 @@
         <text name="ftdl_action_lime" text="Lime"/>
         <text name="ftdl_action_sow" text="Sow"/>
         <text name="ftdl_action_roller" text="Roll"/>
-        <text name="ftdl_action_weed_combat" text="Weeds"/>
+        <text name="ftdl_action_weed_hoe" text="Hoe"/>
+        <text name="ftdl_action_weed_combat" text="Spray"/>
         <text name="ftdl_action_weed_watch" text="Weeds?"/>
         <text name="ftdl_action_pf_ph" text="Lime/pH"/>
         <text name="ftdl_action_pf_n" text="Fertilize"/>
@@ -117,7 +118,8 @@
         <text name="ftdl_action_resow" text="Resow"/>
         <text name="ftdl_action_sow_empty" text="Sow"/>
         <text name="ftdl_action_stones_pick" text="Pick stones"/>
-        <text name="ftdl_action_weed_combat_long" text="Combat weeds"/>
+        <text name="ftdl_action_weed_hoe_long" text="Hoe weeds"/>
+        <text name="ftdl_action_weed_combat_long" text="Spray weeds"/>
         <text name="ftdl_action_weed_watch_long" text="Watch weeds"/>
         <text name="ftdl_action_raise_ph" text="Raise pH (lime)"/>
         <text name="ftdl_action_fert_n" text="Fertilize (N)"/>

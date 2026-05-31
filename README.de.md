@@ -17,7 +17,7 @@
 - **Auswahl-UX:** nach Verschieben bleibt die Aufgabe ausgewählt; nach Löschen wird die Auswahl entfernt
 - **Erntehinweise:** Vorschlagsspalte zeigt Monatsnamen statt missverständlicher Monatsanzahl
 - **Speicherstand-Daten:** `fieldToDoList.xml` im Savegame-Ordner (Tasks mit ~2 s Debounce; Einstellungen sofort)
-- **Feldstatus:** Live-Boden-/Fruchtdaten aus dem Spiel (kein Laufzeit-Lesen von `fields.xml` — sicherer unter Proton/Linux)
+- **Feldstatus:** Live-Boden-/Fruchtdaten aus dem Spiel (kein Laufzeit-Lesen von `fields.xml` — vermeidet Konflikte, solange das Spiel läuft)
 - **Graswiesen:** Mähen bei Reife; Hinweise zu Schwaden/Sammeln/Ballen; kein falsches Säen auf Wiesen
 
 ## Optionale Mods
@@ -38,7 +38,7 @@ Funktioniert vollständig auch ohne Zusatzmods nur mit Basegame-Felddaten.
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | Windows                | `%USERPROFILE%\Documents\My Games\FarmingSimulator2025\mods\`                                                                  |
 | macOS                  | `~/Library/Application Support/FarmingSimulator2025/mods/`                                                                      |
-| Linux (Steam / Proton) | `~/.local/share/Steam/steamapps/compatdata/2300320/pfx/drive_c/users/steamuser/Documents/My Games/FarmingSimulator2025/mods/` |
+| Linux (Steam) | `~/.local/share/Steam/steamapps/compatdata/2300320/pfx/drive_c/users/steamuser/Documents/My Games/FarmingSimulator2025/mods/` |
 
 3. **Field To-Do List** im Spiel aktivieren.
 4. Karriere-Spielstand laden — der Mod wird automatisch aktiv.
@@ -53,7 +53,7 @@ python3 tools/generate_assets.py   # optional, falls DDS-Assets fehlen
 ./build.sh
 ```
 
-Standardziel (Linux Steam/Proton):
+Standardziel (Linux Steam):
 `~/.local/share/Steam/steamapps/compatdata/2300320/pfx/drive_c/users/steamuser/Documents/My Games/FarmingSimulator2025/mods/FS25_FieldToDoList.zip`
 
 Eigenes Ziel:
@@ -64,7 +64,7 @@ FS25_MODS_DIR=/pfad/zu/mods ./build.sh
 
 ## Debug (Feldberater)
 
-Funktioniert unter **Windows, macOS und Linux** (inkl. Steam/Proton). Nutzen, wenn ein Feld falsche Kultur, Erntemonat oder Gras-Logistik in der Übersicht zeigt.
+Funktioniert unter **Windows, macOS und Linux**. Nutzen, wenn ein Feld falsche Kultur, Erntemonat oder Gras-Logistik in der Übersicht zeigt.
 
 | Eingabe | Aktion |
 | ------- | ------ |
@@ -80,7 +80,7 @@ Funktioniert unter **Windows, macOS und Linux** (inkl. Steam/Proton). Nutzen, we
 | --------- | ---- |
 | Windows | `%USERPROFILE%\Documents\My Games\FarmingSimulator2025\log.txt` |
 | macOS | `~/Library/Application Support/FarmingSimulator2025/log.txt` |
-| Linux (Steam / Proton) | `~/.local/share/Steam/steamapps/compatdata/2300320/pfx/drive_c/users/steamuser/Documents/My Games/FarmingSimulator2025/log.txt` |
+| Linux (Steam) | `~/.local/share/Steam/steamapps/compatdata/2300320/pfx/drive_c/users/steamuser/Documents/My Games/FarmingSimulator2025/log.txt` |
 
 Nach `[FS25_FieldToDoList] DUMP` suchen. Wichtig: `meadowPhase`, `grassResidue`, `grassCrossScan`, `heightReader`, `harvestState`.
 
@@ -106,7 +106,7 @@ Siehe [CHANGELOG.md](CHANGELOG.md). **0.1.0.5:** inkrementeller Feld-Scan, Scan-
 
 ## Bekannte Punkte / WIP
 
-- Gras Schwaden → Sammeln/Ballen wird auf manchen Maps noch nachgeschärft (Proton ohne `DensityMapHeightUtil`).
+- Gras Schwaden → Sammeln/Ballen wird auf manchen Maps noch nachgeschärft (wenn `DensityMapHeightUtil` zur Laufzeit fehlt — Fallback über Engine-Höhenkarte).
 - Auto-Completion ist insgesamt noch in Arbeit und braucht breitere Tests auf realen Spielständen.
 
 ## Issues

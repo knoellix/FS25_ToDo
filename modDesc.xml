@@ -17,7 +17,7 @@ Field work list and To-Dos for Farming Simulator 25.
 • Work-order presets and organic Mist/slurry multi-pass (Mist/slurry → plow → Mist/slurry → sow → roll)
 • Adopt suggestions, visit field (teleport), auto-complete when work is done
 • Grass-aware suggestions (mow when harvest-ready; swath/collect/bale hints after mowing; no false "sow" on meadows)
-• Field status from live ground data (stable on Proton/Linux; no runtime fields.xml reads)
+• Field status from live ground data (no runtime fields.xml reads)
 • Saves tasks and settings in fieldToDoList.xml per savegame
 
 Optional: Precision Farming (pH / nitrogen columns). Seasonal Crop Stress: not fully supported yet.
@@ -32,7 +32,7 @@ Feld-Arbeitsliste und To-Dos für Farming Simulator 25.
 • Reihenfolge-Presets und Mist/Gülle mehrfach (Mist/Gülle → Pflügen → Mist/Gülle → Säen → Walzen)
 • Vorschläge übernehmen, Feld besuchen (Teleport), Auto-Erledigt bei erledigter Arbeit
 • Gras-sichere Vorschläge (Mähen bei Ernte-Reife; Schwaden/Sammeln/Ballen nach dem Mähen; kein falsches „Säen“ auf Wiesen)
-• Feldstatus aus Live-Bodendaten (stabil unter Proton/Linux; kein Laufzeit-Lesen von fields.xml)
+• Feldstatus aus Live-Bodendaten (kein Laufzeit-Lesen von fields.xml)
 • Speichert Aufgaben und Einstellungen in fieldToDoList.xml je Savegame
 
 Optional: Precision Farming (pH / Stickstoff). Seasonal Crop Stress: noch nicht voll unterstützt.

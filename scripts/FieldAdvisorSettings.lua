@@ -13,7 +13,7 @@ FieldAdvisorSettings.PRESETS = {
         label = "Pflügen → Kalk → Säen → Düngen",
         order = {
             "harvest", "stones", "cultivate", "plow", "roller", "lime", "pf_ph", "sow", "pf_n",
-            "weed_combat", "weed_watch", "scs_moisture", "scs_stress_high", "scs_stress_watch",
+            "weed_hoe", "weed_combat", "weed_watch", "scs_moisture", "scs_stress_high", "scs_stress_watch",
             "grass_swath", "grass_collect", "grass_bale", "grass_silage_bale", "grass_bale_collect", "grass_mow",
             "harvest_info", "growing", "none",
         },
@@ -23,7 +23,7 @@ FieldAdvisorSettings.PRESETS = {
         label = "Kalk → Pflügen → Säen → Düngen",
         order = {
             "harvest", "stones", "cultivate", "lime", "plow", "roller", "pf_ph", "sow", "pf_n",
-            "weed_combat", "weed_watch", "scs_moisture", "scs_stress_high", "scs_stress_watch",
+            "weed_hoe", "weed_combat", "weed_watch", "scs_moisture", "scs_stress_high", "scs_stress_watch",
             "grass_swath", "grass_collect", "grass_bale", "grass_silage_bale", "grass_bale_collect", "grass_mow",
             "harvest_info", "growing", "none",
         },
@@ -33,7 +33,7 @@ FieldAdvisorSettings.PRESETS = {
         label = "Düngen → Pflügen → Kalk → Säen",
         order = {
             "harvest", "stones", "cultivate", "plow", "roller", "pf_ph", "pf_n", "lime", "sow",
-            "weed_combat", "weed_watch", "scs_moisture", "scs_stress_high", "scs_stress_watch",
+            "weed_hoe", "weed_combat", "weed_watch", "scs_moisture", "scs_stress_high", "scs_stress_watch",
             "grass_swath", "grass_collect", "grass_bale", "grass_silage_bale", "grass_bale_collect", "grass_mow",
             "harvest_info", "growing", "none",
         },
@@ -43,7 +43,7 @@ FieldAdvisorSettings.PRESETS = {
         label = "Pflügen → Kalk → Säen → N-Düngen",
         order = {
             "harvest", "stones", "cultivate", "plow", "roller", "lime", "sow", "pf_ph", "pf_n",
-            "weed_combat", "weed_watch", "scs_moisture", "scs_stress_high", "scs_stress_watch",
+            "weed_hoe", "weed_combat", "weed_watch", "scs_moisture", "scs_stress_high", "scs_stress_watch",
             "grass_swath", "grass_collect", "grass_bale", "grass_silage_bale", "grass_bale_collect", "grass_mow",
             "harvest_info", "growing", "none",
         },
@@ -53,7 +53,7 @@ FieldAdvisorSettings.PRESETS = {
         label = "Bodenarbeit → Säen → Düngen",
         order = {
             "harvest", "stones", "cultivate", "lime", "plow", "roller", "pf_ph", "sow", "pf_n",
-            "weed_combat", "weed_watch", "scs_moisture", "scs_stress_high", "scs_stress_watch",
+            "weed_hoe", "weed_combat", "weed_watch", "scs_moisture", "scs_stress_high", "scs_stress_watch",
             "grass_swath", "grass_collect", "grass_bale", "grass_silage_bale", "grass_bale_collect", "grass_mow",
             "harvest_info", "growing", "none",
         },
@@ -118,7 +118,7 @@ function FieldAdvisorSettings.getWorkOrderLabel()
     return preset.label
 end
 
---- Shown in HUD/menu when organic multi-pass is active (Mist/Gülle between Bodenarbeit).
+--- Shown in HUD/menu when organic multi-pass is active (manure/slurry between soil work).
 ---@return string
 function FieldAdvisorSettings.getWorkOrderDisplayLabel()
     if FieldAdvisorSettings.isOrganicMultiPassEnabled() then

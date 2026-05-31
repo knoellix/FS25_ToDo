@@ -95,7 +95,8 @@
         <text name="ftdl_action_lime" text="Kalken"/>
         <text name="ftdl_action_sow" text="Säen"/>
         <text name="ftdl_action_roller" text="Walzen"/>
-        <text name="ftdl_action_weed_combat" text="Unkraut"/>
+        <text name="ftdl_action_weed_hoe" text="Striegeln"/>
+        <text name="ftdl_action_weed_combat" text="Spritzen"/>
         <text name="ftdl_action_weed_watch" text="Unkraut?"/>
         <text name="ftdl_action_pf_ph" text="Kalk/pH"/>
         <text name="ftdl_action_pf_n" text="Düngen"/>
@@ -117,7 +118,8 @@
         <text name="ftdl_action_resow" text="Neu ansäen"/>
         <text name="ftdl_action_sow_empty" text="Ansäen"/>
         <text name="ftdl_action_stones_pick" text="Steine lesen"/>
-        <text name="ftdl_action_weed_combat_long" text="Unkraut bekämpfen"/>
+        <text name="ftdl_action_weed_hoe_long" text="Striegeln"/>
+        <text name="ftdl_action_weed_combat_long" text="Unkraut spritzen"/>
         <text name="ftdl_action_weed_watch_long" text="Unkraut beobachten"/>
         <text name="ftdl_action_raise_ph" text="pH anheben (Kalk)"/>
         <text name="ftdl_action_fert_n" text="Düngen (N)"/>

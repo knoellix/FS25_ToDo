@@ -1,8 +1,8 @@
 --[[
     FieldDebugConsole.lua
-    Proton-friendly debug command entry. Hotkey F9 (or LCtrl+F9) tries to open
-    the native dev console; if that is unavailable, opens a command dialog that
-    runs mod debug commands and forwards other input to executeConsoleCommand
+    Debug command entry with TextInputDialog fallback when the native console is unavailable.
+    Hotkey F9 (or LCtrl+F9) tries the native dev console first; otherwise opens a command
+    dialog that runs mod debug commands and forwards other input to executeConsoleCommand
     when the engine exposes it.
 ]]
 

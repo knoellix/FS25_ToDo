@@ -337,7 +337,7 @@ function ToDoManager:markOwnedFieldsOverviewStale()
         return
     end
 
-    -- Do not reset an running incremental scan; apply after it finishes.
+    -- Do not reset a running incremental scan; apply after it finishes.
     if self.ownedFieldsScanInProgress == true then
         return
     end
