@@ -241,6 +241,25 @@ function FieldToDoMenuFrame:updateOptionalColumns()
 
     if self.organicMultiPassBtnText ~= nil and FieldAdvisorSettings ~= nil then
         self.organicMultiPassBtnText:setText(FieldAdvisorSettings.getOrganicMultiPassLabel())
+        self:applyToggleBtnColor(self.organicMultiPassBtnText, FieldAdvisorSettings.isOrganicMultiPassEnabled())
+    end
+
+    if self.mulchBtnText ~= nil and FieldAdvisorSettings ~= nil then
+        self.mulchBtnText:setText(FieldAdvisorSettings.getMulchingLabel())
+        self:applyToggleBtnColor(self.mulchBtnText, FieldAdvisorSettings.isMulchingEnabled())
+    end
+end
+
+-- Toggle labels: bright green = active, muted grey = off, so the on/off state reads at a glance.
+function FieldToDoMenuFrame:applyToggleBtnColor(textElement, enabled)
+    if textElement == nil or textElement.setTextColor == nil then
+        return
+    end
+
+    if enabled then
+        textElement:setTextColor(0.32, 0.82, 0.45, 1.0)
+    else
+        textElement:setTextColor(0.62, 0.64, 0.68, 1.0)
     end
 end
 
@@ -623,7 +642,16 @@ function FieldToDoMenuFrame:populateCellForItemInSection(list, section, index, c
         end
 
         if textElement ~= nil then
-            textElement:setText(task.text)
+            local displayText = task.text
+            if not task.completed then
+                -- Tag whether the engine auto-completes this task or it must be ticked manually
+                -- (e.g. swath / loader-collect cannot be sensed; see docs/DECISIONS.md).
+                local tag = task.autoComplete == true
+                    and FieldToDoL10n.getText("ftdl_task_tag_auto", "auto")
+                    or FieldToDoL10n.getText("ftdl_task_tag_manual", "manuell")
+                displayText = string.format("%s  (%s)", task.text, tag)
+            end
+            textElement:setText(displayText)
             if task.completed then
                 textElement.textColor = { 0.65, 0.65, 0.65, 1 }
             else
@@ -970,7 +998,15 @@ function FieldToDoMenuFrame:onClickAdoptFieldSuggestion()
         return
     end
 
-    if not FieldWorkCatalog.isTrackable(action.actionType)
+    local actionType = action.actionType
+    -- Swath / loader-collect cannot be sensed in this runtime; they are adopted as manual
+    -- reminder tasks rather than rejected as "not trackable" (see docs/DECISIONS.md).
+    local isManualGrassLogistics = actionType == "grass_swath" or actionType == "grass_collect"
+
+    -- For a non-actionable info primary, swap to a real trackable action when available,
+    -- but never override an explicit manual grass-logistics pick.
+    if not isManualGrassLogistics
+        and not FieldWorkCatalog.isTrackable(action.actionType)
         and field.suggestionDetails ~= nil then
         for _, candidate in ipairs(field.suggestionDetails) do
             if candidate ~= nil
@@ -986,7 +1022,7 @@ function FieldToDoMenuFrame:onClickAdoptFieldSuggestion()
         action.autoComplete = true
     end
 
-    local task, errorKey = manager:addTaskFromFieldAction(field, action, false)
+    local task, errorKey = manager:addTaskFromFieldAction(field, action, isManualGrassLogistics)
     if task == nil then
         if errorKey == "no_suggestion" then
             InfoDialog.show(FieldToDoL10n.getText(
@@ -1052,6 +1088,18 @@ function FieldToDoMenuFrame:onClickToggleOrganicMultiPass()
     end
 
     FieldAdvisorSettings.toggleOrganicMultiPass()
+    self:resetFieldSuggestionIndices()
+    self:updateOptionalColumns()
+    self:refreshLists()
+    self:persistAdvisorSettings()
+end
+
+function FieldToDoMenuFrame:onClickToggleMulching()
+    if FieldAdvisorSettings == nil then
+        return
+    end
+
+    FieldAdvisorSettings.toggleMulching()
     self:resetFieldSuggestionIndices()
     self:updateOptionalColumns()
     self:refreshLists()

@@ -67,10 +67,8 @@
             <!-- Right: owned fields -->
             <ThreePartBitmap width="960px" height="700px" position="500px 100px">
                 <GuiElement profile="fs25_subCategoryContainer" width="920px">
-                <GuiElement profile="emptyPanel" position="10px -10px" size="220px 24px">
-                    <Text profile="ftdlSectionHeader" text="$l10n_ftdl_section_fields" position="0px 0px"/>
-                    <Text profile="ftdlScanStatusDot" id="fieldScanStatusDot" position="188px 1px" text="●"/>
-                </GuiElement>
+                    <Text profile="ftdlSectionHeader" text="$l10n_ftdl_section_fields" position="10px -10px"/>
+                    <Text profile="ftdlScanStatusDot" id="fieldScanStatusDot" position="198px -9px" text="●"/>
 
                     <GuiElement profile="ftdlListHeaderRow" position="0px -40px">
                         <Text profile="ftdlColHeader" id="hdr_fieldName" position="4px 0px" size="44px 24px" text="$l10n_ftdl_col_field"/>
@@ -132,6 +130,10 @@
                     <Bitmap profile="ftdlMiniBtnBgWide" position="126px -580px"/>
                     <Text profile="ftdlMiniBtnTextSmall" id="organicMultiPassBtnText" position="126px -580px" size="150px 34px" text="$l10n_ftdl_organic_once"/>
                     <Button profile="ftdlMiniBtnHitWide" position="126px -580px" onClick="onClickToggleOrganicMultiPass"/>
+
+                    <Bitmap profile="ftdlMiniBtnBgWide" position="284px -580px"/>
+                    <Text profile="ftdlMiniBtnTextSmall" id="mulchBtnText" position="284px -580px" size="150px 34px" text="$l10n_ftdl_mulch_on"/>
+                    <Button profile="ftdlMiniBtnHitWide" position="284px -580px" onClick="onClickToggleMulching"/>
 
                     <Bitmap profile="ftdlMiniBtnBg" position="0px -616px"/>
                     <Text profile="ftdlMiniBtnText" position="0px -616px" text="$l10n_ftdl_btn_visit"/>
@@ -232,12 +234,15 @@
 
         <Profile name="ftdlMiniBtnBg" extends="baseReference" with="anchorTopLeft">
             <size value="118px 34px"/>
-            <imageColor value="0.18 0.18 0.20 1"/>
+            <imageColor value="0.12 0.15 0.19 1"/>
         </Profile>
 
-        <Profile name="ftdlMiniBtnHit" extends="emptyPanel" with="anchorTopLeft">
+        <Profile name="ftdlMiniBtnHit" extends="baseReference" with="anchorTopLeft">
             <size value="118px 34px"/>
             <isFocusable value="true"/>
+            <imageColor value="0 0 0 0"/>
+            <imageFocusedColor value="0.20 0.58 0.78 0.40"/>
+            <imageHighlightedColor value="0.20 0.58 0.78 0.25"/>
         </Profile>
 
         <Profile name="ftdlMiniBtnText" extends="fs25_textDefault" with="anchorTopLeft">

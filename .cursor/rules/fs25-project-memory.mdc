@@ -71,6 +71,15 @@ Optional second paragraph in the same string."
 - Keep HUD simple (plain panel, no settings line in HUD).
 - In `InGameMenuIntegration`, use `Logging.info`/`Logging.warning`; avoid `print()`.
 
+## Consolidation (mandatory before more Advisor fixes)
+
+- Follow `docs/CONSOLIDATION_AND_NAMING_PLAN.md`: audit → merge duplicate logic → regression → read-through comments → naming.
+- One decision = one function. New functions are fine when they CONSOLIDATE (one function that knows all rules of a decision, replacing several old ones — callers moved, old ones deleted). NOT fine when they add a parallel `is*`/`has*`/`should*` next to logic that already answers the same question.
+- Every bug fix: name the ONE deciding function; adjust it (or replace several with one bundling function), do not stack a second helper beside it.
+- New logic belongs inside the responsible decision function / pipeline stage — not as a special branch in `buildFieldContext` / `resolveActionCandidates` that bypasses it.
+- Mantra: one function that knows all the rules of a decision, not four that contradict each other.
+- Done only after 5-field regression in `docs/REGRESSION.md` (see consolidation plan).
+
 ## Task and Advisor Rules
 
 - Open tasks render above completed tasks.

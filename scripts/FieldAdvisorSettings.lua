@@ -12,7 +12,7 @@ FieldAdvisorSettings.PRESETS = {
         labelKey = "ftdl_preset_standard",
         label = "Pflügen → Kalk → Säen → Düngen",
         order = {
-            "harvest", "stones", "cultivate", "plow", "roller", "lime", "pf_ph", "sow", "pf_n",
+            "harvest", "mulch", "stones", "cultivate", "plow", "roller", "lime", "pf_ph", "sow", "pf_n",
             "weed_hoe", "weed_combat", "weed_watch", "scs_moisture", "scs_stress_high", "scs_stress_watch",
             "grass_swath", "grass_collect", "grass_bale", "grass_silage_bale", "grass_bale_collect", "grass_mow",
             "harvest_info", "growing", "none",
@@ -22,7 +22,7 @@ FieldAdvisorSettings.PRESETS = {
         labelKey = "ftdl_preset_lime_before_plow",
         label = "Kalk → Pflügen → Säen → Düngen",
         order = {
-            "harvest", "stones", "cultivate", "lime", "plow", "roller", "pf_ph", "sow", "pf_n",
+            "harvest", "mulch", "stones", "cultivate", "lime", "plow", "roller", "pf_ph", "sow", "pf_n",
             "weed_hoe", "weed_combat", "weed_watch", "scs_moisture", "scs_stress_high", "scs_stress_watch",
             "grass_swath", "grass_collect", "grass_bale", "grass_silage_bale", "grass_bale_collect", "grass_mow",
             "harvest_info", "growing", "none",
@@ -32,7 +32,7 @@ FieldAdvisorSettings.PRESETS = {
         labelKey = "ftdl_preset_fert_before_sow",
         label = "Düngen → Pflügen → Kalk → Säen",
         order = {
-            "harvest", "stones", "cultivate", "plow", "roller", "pf_ph", "pf_n", "lime", "sow",
+            "harvest", "mulch", "stones", "cultivate", "plow", "roller", "pf_ph", "pf_n", "lime", "sow",
             "weed_hoe", "weed_combat", "weed_watch", "scs_moisture", "scs_stress_high", "scs_stress_watch",
             "grass_swath", "grass_collect", "grass_bale", "grass_silage_bale", "grass_bale_collect", "grass_mow",
             "harvest_info", "growing", "none",
@@ -42,7 +42,7 @@ FieldAdvisorSettings.PRESETS = {
         labelKey = "ftdl_preset_sow_before_fert",
         label = "Pflügen → Kalk → Säen → N-Düngen",
         order = {
-            "harvest", "stones", "cultivate", "plow", "roller", "lime", "sow", "pf_ph", "pf_n",
+            "harvest", "mulch", "stones", "cultivate", "plow", "roller", "lime", "sow", "pf_ph", "pf_n",
             "weed_hoe", "weed_combat", "weed_watch", "scs_moisture", "scs_stress_high", "scs_stress_watch",
             "grass_swath", "grass_collect", "grass_bale", "grass_silage_bale", "grass_bale_collect", "grass_mow",
             "harvest_info", "growing", "none",
@@ -52,7 +52,7 @@ FieldAdvisorSettings.PRESETS = {
         labelKey = "ftdl_preset_soil_then_fert",
         label = "Bodenarbeit → Säen → Düngen",
         order = {
-            "harvest", "stones", "cultivate", "lime", "plow", "roller", "pf_ph", "sow", "pf_n",
+            "harvest", "mulch", "stones", "cultivate", "lime", "plow", "roller", "pf_ph", "sow", "pf_n",
             "weed_hoe", "weed_combat", "weed_watch", "scs_moisture", "scs_stress_high", "scs_stress_watch",
             "grass_swath", "grass_collect", "grass_bale", "grass_silage_bale", "grass_bale_collect", "grass_mow",
             "harvest_info", "growing", "none",
@@ -70,10 +70,37 @@ FieldAdvisorSettings.PRESET_KEYS = {
 
 FieldAdvisorSettings.workOrderPreset = FieldAdvisorSettings.DEFAULT_PRESET
 FieldAdvisorSettings.organicMultiPassEnabled = false
+-- Mulching has no FS25 game-rule gate (unlike stones/weeds/lime/plowing); it is an optional
+-- yield bonus. We expose a mod-side toggle so players who never mulch can hide the suggestion.
+FieldAdvisorSettings.mulchingEnabled = true
 
 ---@return boolean
 function FieldAdvisorSettings.isOrganicMultiPassEnabled()
     return FieldAdvisorSettings.organicMultiPassEnabled == true
+end
+
+---@return boolean
+function FieldAdvisorSettings.isMulchingEnabled()
+    return FieldAdvisorSettings.mulchingEnabled == true
+end
+
+---@return string
+function FieldAdvisorSettings.getMulchingLabel()
+    if FieldAdvisorSettings.isMulchingEnabled() then
+        return FieldToDoL10n.getText("ftdl_mulch_on", "Mulchen: an")
+    end
+
+    return FieldToDoL10n.getText("ftdl_mulch_off", "Mulchen: aus")
+end
+
+function FieldAdvisorSettings.toggleMulching()
+    FieldAdvisorSettings.mulchingEnabled = not FieldAdvisorSettings.isMulchingEnabled()
+    return FieldAdvisorSettings.mulchingEnabled
+end
+
+---@param enabled boolean|nil
+function FieldAdvisorSettings.setMulchingEnabled(enabled)
+    FieldAdvisorSettings.mulchingEnabled = enabled ~= false
 end
 
 ---@return string
@@ -220,6 +247,10 @@ function FieldAdvisorSettings.loadFromXMLFile(xmlFile, key)
 
     local organicMultiPass = xmlFile:getValue(key .. "#organicMultiPassEnabled")
     FieldAdvisorSettings.setOrganicMultiPassEnabled(organicMultiPass == true)
+
+    -- Absent attribute (older saves) keeps the default-on behaviour; only explicit false hides it.
+    local mulching = xmlFile:getValue(key .. "#mulchingEnabled")
+    FieldAdvisorSettings.setMulchingEnabled(mulching ~= false)
 end
 
 ---@param xmlFile XMLFile|nil
@@ -231,4 +262,5 @@ function FieldAdvisorSettings.saveToXMLFile(xmlFile, key)
 
     xmlFile:setValue(key .. "#workOrderPreset", FieldAdvisorSettings.getWorkOrderPreset())
     xmlFile:setValue(key .. "#organicMultiPassEnabled", FieldAdvisorSettings.isOrganicMultiPassEnabled())
+    xmlFile:setValue(key .. "#mulchingEnabled", FieldAdvisorSettings.isMulchingEnabled())
 end

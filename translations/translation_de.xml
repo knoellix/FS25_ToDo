@@ -74,6 +74,8 @@
         <text name="ftdl_organic_once" text="Mist/Gülle: einmal"/>
         <text name="ftdl_organic_multi" text="Mist/Gülle: mehrfach"/>
         <text name="ftdl_organic_workflow" text="Mist/Gülle → Pflügen → Mist/Gülle → Säen → Mist/Gülle → Walzen"/>
+        <text name="ftdl_mulch_on" text="Mulchen: an"/>
+        <text name="ftdl_mulch_off" text="Mulchen: aus"/>
 
         <text name="ftdl_scs_off" text="SCS: aus"/>
         <text name="ftdl_scs_loading" text="SCS: lädt…"/>
@@ -95,6 +97,8 @@
         <text name="ftdl_action_lime" text="Kalken"/>
         <text name="ftdl_action_sow" text="Säen"/>
         <text name="ftdl_action_roller" text="Walzen"/>
+        <text name="ftdl_action_mulch" text="Mulchen"/>
+        <text name="ftdl_action_mulch_after_harvest" text="Mulchen (vor Bodenarbeit)"/>
         <text name="ftdl_action_weed_hoe" text="Striegeln"/>
         <text name="ftdl_action_weed_combat" text="Spritzen"/>
         <text name="ftdl_action_weed_watch" text="Unkraut?"/>
@@ -108,6 +112,8 @@
         <text name="ftdl_growth_stubble" text="Stoppeln"/>
         <text name="ftdl_action_regrowth" text="Nachwuchs"/>
         <text name="ftdl_action_none" text="Ok"/>
+        <text name="ftdl_task_tag_auto" text="auto"/>
+        <text name="ftdl_task_tag_manual" text="manuell"/>
         <text name="ftdl_action_organic_pass" text="Mist/Gülle %d/%d"/>
         <text name="ftdl_action_mist_pass" text="Mist %d/%d"/>
         <text name="ftdl_action_slurry_pass" text="Gülle %d/%d"/>

@@ -74,6 +74,8 @@
         <text name="ftdl_organic_once" text="Manure/slurry: once"/>
         <text name="ftdl_organic_multi" text="Manure/slurry: multi-pass"/>
         <text name="ftdl_organic_workflow" text="Manure/slurry → Plow → Manure/slurry → Sow → Manure/slurry → Roll"/>
+        <text name="ftdl_mulch_on" text="Mulching: on"/>
+        <text name="ftdl_mulch_off" text="Mulching: off"/>
 
         <text name="ftdl_scs_off" text="SCS: off"/>
         <text name="ftdl_scs_loading" text="SCS: loading…"/>
@@ -95,6 +97,8 @@
         <text name="ftdl_action_lime" text="Lime"/>
         <text name="ftdl_action_sow" text="Sow"/>
         <text name="ftdl_action_roller" text="Roll"/>
+        <text name="ftdl_action_mulch" text="Mulch"/>
+        <text name="ftdl_action_mulch_after_harvest" text="Mulch (before tillage)"/>
         <text name="ftdl_action_weed_hoe" text="Hoe"/>
         <text name="ftdl_action_weed_combat" text="Spray"/>
         <text name="ftdl_action_weed_watch" text="Weeds?"/>
@@ -108,6 +112,8 @@
         <text name="ftdl_growth_stubble" text="Stubble"/>
         <text name="ftdl_action_regrowth" text="Regrowth"/>
         <text name="ftdl_action_none" text="OK"/>
+        <text name="ftdl_task_tag_auto" text="auto"/>
+        <text name="ftdl_task_tag_manual" text="manual"/>
         <text name="ftdl_action_organic_pass" text="Manure/slurry %d/%d"/>
         <text name="ftdl_action_mist_pass" text="Manure %d/%d"/>
         <text name="ftdl_action_slurry_pass" text="Slurry %d/%d"/>

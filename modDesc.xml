@@ -63,6 +63,8 @@ Version 0.1.0.5 — Vorab-Entwicklung.
 
     <extraSourceFiles>
         <sourceFile filename="scripts/FieldGameRules.lua"/>
+        <sourceFile filename="scripts/FieldPhase.lua"/>
+        <sourceFile filename="scripts/WeedAdvice.lua"/>
         <sourceFile filename="scripts/PrecisionFarmingBridge.lua"/>
         <sourceFile filename="scripts/PrecisionFarmingReader.lua"/>
         <sourceFile filename="scripts/FieldToDoL10n.lua"/>

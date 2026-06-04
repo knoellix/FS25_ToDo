@@ -35,6 +35,50 @@ local function out(line)
     end
 end
 
+---@param idx any
+---@return string
+local function fillTypeName(idx)
+    idx = tonumber(idx)
+    if idx == nil or idx <= 0 then
+        return stringify(idx)
+    end
+    if g_fillTypeManager ~= nil and g_fillTypeManager.getFillTypeByIndex ~= nil then
+        local ok, ft = pcall(g_fillTypeManager.getFillTypeByIndex, g_fillTypeManager, idx)
+        if ok and ft ~= nil and ft.name ~= nil then
+            return string.format("%d(%s)", idx, tostring(ft.name))
+        end
+    end
+    return tostring(idx)
+end
+
+--- Density-map availability probe at the field center. Grass residue (loose/swath) detection
+--- was removed because the engine fill APIs are absent in this runtime (see docs/DECISIONS.md);
+--- this only reports whether the windrow fill-level API is callable, for diagnosis.
+local function dumpResidueRawScan(field, fieldState, worldX, worldZ, aggregation)
+    if FieldAdvisor == nil or field == nil or worldX == nil or worldZ == nil then
+        return
+    end
+
+    local heightUtil = FieldAdvisor.resolveDensityMapHeightUtil ~= nil
+        and FieldAdvisor.resolveDensityMapHeightUtil() or nil
+    local windrowFillIndex = nil
+    if g_fruitTypeManager ~= nil and g_fruitTypeManager.getWindrowFillTypeIndexByFruitTypeIndex ~= nil then
+        local grassFruit = FieldAdvisor.resolveGrassFruitTypeIndex(fieldState, field, aggregation, worldX, worldZ)
+        if grassFruit ~= nil then
+            local ok, idx = pcall(
+                g_fruitTypeManager.getWindrowFillTypeIndexByFruitTypeIndex, g_fruitTypeManager, grassFruit
+            )
+            windrowFillIndex = ok and idx or nil
+        end
+    end
+
+    out(string.format("residueRaw: heightUtil=%s getHeight=%s getType=%s windrowFill=%s",
+        stringify(heightUtil ~= nil),
+        stringify(getDensityHeightAtWorldPos ~= nil),
+        stringify(getDensityTypeIndexAtWorldPos ~= nil),
+        fillTypeName(windrowFillIndex)))
+end
+
 ---@param fieldId number|nil
 ---@return table|nil, number|nil, number|nil
 local function findEngineField(fieldId)
@@ -110,11 +154,9 @@ function FieldDebugDump.dumpField(fieldId)
 
     local heightUtil = FieldAdvisor.resolveDensityMapHeightUtil ~= nil and FieldAdvisor.resolveDensityMapHeightUtil() or nil
     out(string.format(
-        "heightReader: util=%s engineHeight=%s planeId=%s centerMaterial=%.4f",
+        "heightReader: util=%s engineHeight=%s",
         stringify(heightUtil ~= nil),
-        stringify(getDensityHeightAtWorldPos ~= nil),
-        stringify(FieldAdvisor.getHeightDetailPlaneId ~= nil and FieldAdvisor.getHeightDetailPlaneId() or nil),
-        FieldAdvisor.measureHeightMaterialAtPoint ~= nil and FieldAdvisor.measureHeightMaterialAtPoint(worldX, worldZ) or 0
+        stringify(getDensityHeightAtWorldPos ~= nil)
     ))
 
     out(string.format(
@@ -174,29 +216,16 @@ function FieldDebugDump.dumpField(fieldId)
     ))
     local grassResidue = context ~= nil and context.grassResidueSummary or nil
     if grassResidue ~= nil then
+        -- Residue is bale-only now (loose/swath not sensable; see docs/DECISIONS.md).
         out(string.format(
-            "grassResidue: available=%s source=%s state=%s total=%s occupied=%s ratio=%.3f liters=%.3f maxSample=%.3f maxMaterial=%.4f centerMat=%.4f swathHits=%s windrowFillTypeHits=%s shred=%s crossLineTransitions=%s windrowLineEvidence=%s crossScanPoints=%s fillTypes=%d",
+            "grassResidue: available=%s source=%s state=%s fieldBaleCount=%s",
             stringify(grassResidue.residueAvailable),
             stringify(grassResidue.residueSource),
             stringify(grassResidue.residueState),
-            stringify(grassResidue.total),
-            stringify(grassResidue.occupied),
-            grassResidue.occupiedRatio or 0,
-            grassResidue.totalLiters or 0,
-            grassResidue.maxSampleLiters or 0,
-            grassResidue.maxSampleMaterial or 0,
-            grassResidue.centerMaterial or 0,
-            stringify(grassResidue.swathHits),
-            stringify(grassResidue.windrowTypeHits),
-            stringify(grassResidue.signalShred),
-            stringify(grassResidue.crossLineTransitions),
-            stringify(FieldAdvisor.hasGrassWindrowLineEvidence(grassResidue)),
-            stringify(grassResidue.crossScanPoints),
-            #(FieldAdvisor.collectWindrowFillTypeIndices(
-                FieldAdvisor.resolveGrassFruitTypeIndex(fieldState, field, aggregation, worldX, worldZ)
-            ))
+            stringify(grassResidue.fieldBaleCount)
         ))
     end
+    dumpResidueRawScan(field, fieldState, worldX, worldZ, aggregation)
     local baleSummary = context ~= nil and context.baleSummary or nil
     if baleSummary ~= nil then
         local mapBaleCount = nil
@@ -262,6 +291,21 @@ function FieldDebugDump.dumpField(fieldId)
             stringify(FieldAdvisor.estimateNonSeasonalPeriodsUntilHarvest(fruitForHarvest, harvestState, desc))))
         out(string.format("isCropHarvestReady -> %s", stringify(FieldAdvisor.isCropHarvestReady(field, harvestState, fruitForHarvest))))
     end
+
+    local phaseIsGrass = FieldAdvisor.isGrassFieldState(harvestState, field)
+        or (aggregation ~= nil and aggregation.dominantSituation == FieldAdvisor.PROBE_SITUATION.GRASS)
+    local phaseFacts = FieldAdvisor.buildFieldPhaseFacts(field, harvestState, aggregation, phaseIsGrass, fieldId)
+    local phaseFlags = phaseFacts.flags or {}
+    out(string.format(
+        "phaseFacts: dominant=%s grass=%s hasFruit=%s growth=%s maxHarvest=%s ground=%s shred=%s residue=%s/%s flags(cut=%s harvestable=%s harvestReady=%s withered=%s)",
+        stringify(phaseFacts.dominant), stringify(phaseFacts.isGrassCrop), stringify(phaseFacts.hasFruit),
+        stringify(phaseFacts.growth), stringify(phaseFacts.maxHarvest), stringify(phaseFacts.ground),
+        stringify(phaseFacts.shred), stringify(phaseFacts.residue), stringify(phaseFacts.residueReliable),
+        stringify(phaseFlags.cut), stringify(phaseFlags.harvestable), stringify(phaseFlags.harvestReady),
+        stringify(phaseFlags.withered)))
+    out(string.format("deriveFieldPhase -> %s  | getCropPhase -> %s",
+        stringify(FieldPhase.deriveFieldPhase(phaseFacts)),
+        stringify(FieldAdvisor.getCropPhase(field, fieldState, aggregation))))
 
     out(string.format("===== END FIELD %d =====", fieldId))
     FieldDebugDump.lastDumpedFieldId = fieldId

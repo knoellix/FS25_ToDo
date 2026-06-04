@@ -44,10 +44,14 @@ FieldTaskCompletion.REGISTRY = {
         strategy = "sample",
         coverageOnly = true,
     },
-    -- grass residue flow tracked via density-map windrow fill levels.
+    -- Grass logistics: only bale-producing/-removing steps have a reliable object signal.
+    -- Swath and loader-collect leave loose/windrow material that this runtime cannot read
+    -- (DensityMapHeightUtil.getFillLevelAtArea absent) -> not auto-trackable (see docs/DECISIONS.md).
     grass_mow = { strategy = "point" },
-    grass_swath = { strategy = "point" },
-    grass_collect = { strategy = "point" },
+    -- Mulching has no readable field state in this runtime -> manual reminder, never auto-done.
+    mulch = { strategy = "none" },
+    grass_swath = { strategy = "none" },
+    grass_collect = { strategy = "none" },
     harvest = { strategy = "point" },
     weed_hoe = { strategy = "sample", coverageOnly = true },
     weed_combat = { strategy = "sample", coverageOnly = true },
@@ -403,8 +407,6 @@ function FieldTaskCompletion.isGrassLogisticsComplete(actionType, context, actio
     local residueSummary = context.grassResidueSummary
     local baseline = actionMeta ~= nil and actionMeta.completionBaseline or nil
     local baselineBales = FieldTaskCompletion.getBaselineBaleCount(actionMeta)
-    local residueState = residueSummary ~= nil and residueSummary.residueState
-        or FieldAdvisor.GRASS_RESIDUE_NONE
 
     if actionType == "grass_bale" or actionType == "grass_silage_bale" or actionType == "grass_bale_collect" then
         local currentBales = FieldTaskCompletion.getContextBaleCount(context)
@@ -448,13 +450,8 @@ function FieldTaskCompletion.isGrassLogisticsComplete(actionType, context, actio
             or FieldAdvisor.isGrassCut(fieldState, field, aggregation)
     end
 
-    if actionType == "grass_swath" then
-        return FieldAdvisor.isGrassSwathWorkComplete(residueSummary)
-    end
-
-    if actionType == "grass_collect" then
-        return FieldAdvisor.isGrassCollectEffectivelyDone(residueSummary, baseline)
-    end
+    -- grass_swath / grass_collect have no reliable in-game signal (no density-map fill API)
+    -- and are intentionally manual (FieldWorkCatalog autoComplete=false); they never reach here.
 
     if actionType == "grass_bale" or actionType == "grass_silage_bale" then
         return FieldAdvisor.isGrassBalingWorkComplete(
