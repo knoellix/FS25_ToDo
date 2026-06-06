@@ -1,6 +1,13 @@
 --[[
     FieldAdvisor.lua
     Human-readable field condition labels and next-step suggestions (respects career rules).
+
+    Pipeline (one decision per concern — see docs/FIELD_PHASE.md, AUDIT_INVENTORY.md):
+      classifyProbe / aggregateFieldProbes  -> field kind + dominant situation
+      buildFieldPhaseFacts -> FieldPhase.deriveFieldPhase -> getCropPhase (legacy string)
+      buildFieldContext     -> probes, weed, bales (collects data; no phase decision)
+      resolveActionCandidates -> phase reconciliation once, then PHASE_ACTION_BUILDERS dispatch
+      FieldTaskCompletion   -> per-action completion from context (no phase re-derivation)
 ]]
 
 FieldAdvisor = {}
@@ -2422,7 +2429,7 @@ end
 ---@param baleSummary table|nil
 ---@return table summary
 function FieldAdvisor.deriveGrassResidueSummary(baleSummary)
-    local fieldBaleCount = FieldAdvisor.getFieldBaleCount(baleSummary)
+    local fieldBaleCount = FieldAdvisor.getFieldBaleCountByKind(baleSummary, "grass")
     local baled = fieldBaleCount > 0
 
     return {
@@ -2442,14 +2449,19 @@ end
 ---@param baseline table|nil
 ---@return boolean
 function FieldAdvisor.isGrassBalingWorkComplete(summary, baleSummary, baseline)
-    local baleCount = FieldAdvisor.getFieldBaleCount(baleSummary)
-    local baselineBales = baseline ~= nil and tonumber(baseline.baleCount) or 0
+    local grassNow = FieldAdvisor.getFieldBaleCountByKind(baleSummary, "grass")
+    local baselineGrass = baseline ~= nil and tonumber(baseline.baleGrassCount) or nil
+    if baselineGrass == nil and baseline ~= nil then
+        baselineGrass = tonumber(baseline.baleCount) or 0
+    end
+    baselineGrass = baselineGrass or 0
 
-    if baleCount > baselineBales then
+    if grassNow > baselineGrass then
         return true
     end
 
     return summary ~= nil and summary.residueState == FieldAdvisor.GRASS_RESIDUE_BALED
+        and grassNow > 0
 end
 
 ---@param node any
@@ -2465,6 +2477,61 @@ function FieldAdvisor.getNodeWorldXZ(node)
     end
 
     return nil, nil
+end
+
+-- Bale fill-type -> logistics kind. STRAW = arable straw bales; grass-derived bales (hay/silage/
+-- fresh grass) belong to grass logistics. Resolved from g_fillTypeManager and memoized by index.
+FieldAdvisor.BALE_KIND_BY_FILLTYPE_NAME = {
+    STRAW = "straw",
+    DRYGRASS_WINDROW = "grass",
+    SILAGE = "grass",
+    GRASS_WINDROW = "grass",
+}
+
+---@param bale any
+---@return number|nil
+function FieldAdvisor.getBaleFillTypeIndex(bale)
+    if bale == nil then
+        return nil
+    end
+
+    local idx = tonumber(bale.fillType)
+    if (idx == nil or idx <= 0) and bale.getFillType ~= nil then
+        local ok, value = pcall(bale.getFillType, bale)
+        if ok then
+            idx = tonumber(value)
+        end
+    end
+
+    return idx
+end
+
+--- Classify a field bale as "straw" | "grass" | "other" by its fill type (cached by index).
+---@param bale any
+---@return string
+function FieldAdvisor.classifyBaleKind(bale)
+    local idx = FieldAdvisor.getBaleFillTypeIndex(bale)
+    if idx == nil or idx <= 0 then
+        return "other"
+    end
+
+    if FieldAdvisor._baleKindByIndex ~= nil and FieldAdvisor._baleKindByIndex[idx] ~= nil then
+        return FieldAdvisor._baleKindByIndex[idx]
+    end
+
+    if g_fillTypeManager == nil or g_fillTypeManager.getFillTypeByIndex == nil then
+        return "other"
+    end
+
+    local ok, fillType = pcall(g_fillTypeManager.getFillTypeByIndex, g_fillTypeManager, idx)
+    if not ok or fillType == nil or fillType.name == nil then
+        return "other"
+    end
+
+    local kind = FieldAdvisor.BALE_KIND_BY_FILLTYPE_NAME[string.upper(tostring(fillType.name))] or "other"
+    FieldAdvisor._baleKindByIndex = FieldAdvisor._baleKindByIndex or {}
+    FieldAdvisor._baleKindByIndex[idx] = kind
+    return kind
 end
 
 ---@param bale any
@@ -2660,17 +2727,13 @@ function FieldAdvisor.getFieldBaleAssignmentHalfExtents(field, centerX, centerZ)
         return extentX + 2, extentZ + 2
     end
 
-    local areaHa = tonumber(field.areaHa) or 0
-    if areaHa <= 0 then
-        return 0, 0
-    end
-
-    local sideM = math.sqrt(areaHa * 10000)
-    local half = sideM * 0.48
-    return half, half
+    -- No areaHa guess for bales: barn/storage beside the field must not inflate the box.
+    return 0, 0
 end
 
---- Field-local bale test: engine field id, strict polygon, then tight area bounds only.
+--- Field-local bale test: cultivable polygon first, then engine id only inside measured bounds.
+--- Barn pads beside a field often share the same engine field/farmland id but lie outside
+--- the polygon — counting them blocked bale-collect auto-complete (Field 6 dump).
 ---@param field table|nil
 ---@param x number|nil
 ---@param z number|nil
@@ -2683,14 +2746,13 @@ function FieldAdvisor.isBalePositionInsideField(field, x, z, centerX, centerZ)
     end
 
     local targetFieldId = field.getId ~= nil and tonumber(field:getId()) or nil
-    local baleFieldId = FieldAdvisor.resolveEngineFieldIdAtWorldPosition(x, z)
-    if baleFieldId ~= nil and targetFieldId ~= nil then
-        return baleFieldId == targetFieldId
-    end
 
     local inside = FieldAdvisor.testPositionInsideField(field, x, z)
     if inside == true then
         return true
+    end
+    if inside == false then
+        return false
     end
 
     if centerX == nil or centerZ == nil then
@@ -2701,12 +2763,19 @@ function FieldAdvisor.isBalePositionInsideField(field, x, z, centerX, centerZ)
     end
 
     local halfX, halfZ = FieldAdvisor.getFieldBaleAssignmentHalfExtents(field, centerX, centerZ)
-    if halfX <= 0 or halfZ <= 0 then
-        return false
+    local withinExtents = halfX > 0 and halfZ > 0
+        and math.abs(x - centerX) <= halfX
+        and math.abs(z - centerZ) <= halfZ
+
+    if withinExtents then
+        local baleFieldId = FieldAdvisor.resolveEngineFieldIdAtWorldPosition(x, z)
+        if baleFieldId ~= nil and targetFieldId ~= nil then
+            return baleFieldId == targetFieldId
+        end
+        return true
     end
 
-    return math.abs(x - centerX) <= halfX
-        and math.abs(z - centerZ) <= halfZ
+    return false
 end
 
 ---@param baleSummary table|nil
@@ -2723,6 +2792,37 @@ function FieldAdvisor.getFieldBaleCount(baleSummary)
     return tonumber(baleSummary.fieldBaleCount) or 0
 end
 
+--- Bale count that matters for one logistics action (grass vs. straw vs. total).
+--- Single place for collect/press completion and grass cut-phase suggestions.
+---@param baleSummary table|nil
+---@param actionType string|nil
+---@return number
+function FieldAdvisor.getTrackedBaleCountForAction(baleSummary, actionType)
+    if actionType == "straw_bale" or actionType == "straw_bale_collect" then
+        return FieldAdvisor.getFieldBaleCountByKind(baleSummary, "straw")
+    end
+    if actionType == "grass_bale" or actionType == "grass_silage_bale" or actionType == "grass_bale_collect" then
+        return FieldAdvisor.getFieldBaleCountByKind(baleSummary, "grass")
+    end
+    return FieldAdvisor.getFieldBaleCount(baleSummary)
+end
+
+--- Field-local bale count for one logistics kind ("straw" | "grass" | "other"); nil kind = total.
+---@param baleSummary table|nil
+---@param kind string|nil
+---@return number
+function FieldAdvisor.getFieldBaleCountByKind(baleSummary, kind)
+    if baleSummary == nil then
+        return 0
+    end
+
+    if kind == nil then
+        return FieldAdvisor.getFieldBaleCount(baleSummary)
+    end
+
+    return tonumber(baleSummary[kind]) or 0
+end
+
 ---@param field table|nil
 ---@param cacheTtlMs number|nil
 ---@return table summary
@@ -2731,6 +2831,9 @@ function FieldAdvisor.sampleBaleCoverage(field, cacheTtlMs)
 
     local summary = {
         total = 0,
+        straw = 0,
+        grass = 0,
+        other = 0,
     }
 
     if field == nil then
@@ -2745,6 +2848,8 @@ function FieldAdvisor.sampleBaleCoverage(field, cacheTtlMs)
         if x ~= nil and z ~= nil
             and FieldAdvisor.isBalePositionInsideField(field, x, z, centerX, centerZ) then
             summary.total = summary.total + 1
+            local kind = FieldAdvisor.classifyBaleKind(bale)
+            summary[kind] = (summary[kind] or 0) + 1
         end
     end
 
@@ -3420,6 +3525,151 @@ function FieldAdvisor.isMulchableStubbleCrop(fruitTypeIndex)
     end
 
     return FieldAdvisor.MULCHABLE_STUBBLE_FRUITS[normalized] == true
+end
+
+-- Crops that leave loose straw after harvest (can be baled or picked up): cereals + canola + soy.
+-- Maize/sunflower and root/leaf crops leave no strawable swath in FS25.
+FieldAdvisor.STRAW_PRODUCING_FRUITS = {
+    WHEAT = true,
+    BARLEY = true,
+    OAT = true,
+    CANOLA = true,
+    RYE = true,
+    TRITICALE = true,
+    SORGHUM = true,
+    SOYBEAN = true,
+}
+
+---@param fruitDesc table|nil
+---@param growthMode number|nil
+---@param period number|nil
+---@return boolean
+function FieldAdvisor.isFruitPlantableInPeriod(fruitDesc, growthMode, period)
+    if fruitDesc == nil or fruitDesc.getIsPlantableInPeriod == nil then
+        return false
+    end
+
+    growthMode = growthMode or FieldAdvisor.getActiveGrowthMode()
+    period = period or FieldAdvisor.getCurrentSeasonPeriod()
+    local ok, plantable = pcall(fruitDesc.getIsPlantableInPeriod, fruitDesc, growthMode, period)
+    return ok and plantable == true
+end
+
+--- Next season period when the fruit may be sown (current period if allowed now).
+---@param fruitDesc table|nil
+---@param growthMode number|nil
+---@param fromPeriod number|nil
+---@return number|nil
+function FieldAdvisor.getNextPlantablePeriod(fruitDesc, growthMode, fromPeriod)
+    if fruitDesc == nil then
+        return nil
+    end
+
+    growthMode = growthMode or FieldAdvisor.getActiveGrowthMode()
+    fromPeriod = fromPeriod or FieldAdvisor.getCurrentSeasonPeriod()
+
+    for offset = 0, 11 do
+        local period = FieldAdvisor.getSeasonPeriodForOffset(fromPeriod, offset)
+        if FieldAdvisor.isFruitPlantableInPeriod(fruitDesc, growthMode, period) then
+            return period
+        end
+    end
+
+    return nil
+end
+
+--- Calendar month label for the next sow window of a planned fruit (e.g. "Mär").
+---@param fruitTypeIndex number|nil
+---@return string|nil
+function FieldAdvisor.getSowWindowHint(fruitTypeIndex)
+    if fruitTypeIndex == nil or fruitTypeIndex <= 0 then
+        return nil
+    end
+
+    local fruitDesc = FieldAdvisor.getFruitTypeDesc(fruitTypeIndex)
+    if fruitDesc == nil then
+        return nil
+    end
+
+    local period = FieldAdvisor.getNextPlantablePeriod(fruitDesc)
+    if period == nil then
+        return nil
+    end
+
+    local monthLabel = FieldAdvisor.getHarvestPeriodDisplayLabel(period)
+    if monthLabel == nil or monthLabel == "" or monthLabel == "-" then
+        return nil
+    end
+
+    return monthLabel
+end
+
+--- Planned sow label (fruit + optional next sow month from FruitTypeDesc).
+---@param plannedIndex number|nil
+---@param resow boolean|nil
+---@param short boolean|nil
+---@return string|nil
+function FieldAdvisor.formatPlannedSowLabel(plannedIndex, resow, short)
+    if plannedIndex == nil or plannedIndex <= 0 then
+        return nil
+    end
+
+    local plannedTitle = FieldAdvisor.getLocalizedFruitTitle(plannedIndex)
+    if plannedTitle == nil or plannedTitle == "-" then
+        return nil
+    end
+
+    local sowMonth = FieldAdvisor.getSowWindowHint(plannedIndex)
+    local hasMonth = sowMonth ~= nil and sowMonth ~= "-"
+
+    if short == true then
+        if hasMonth then
+            return FieldAdvisor.text("ftdl_action_sow_planned_short_month", "%s säen %s", plannedTitle, sowMonth)
+        end
+        return FieldAdvisor.text("ftdl_action_sow_planned_short", "%s säen", plannedTitle)
+    end
+
+    if resow == true then
+        if hasMonth then
+            return FieldAdvisor.text("ftdl_action_sow_planned_resow_month", "%s neu säen %s", plannedTitle, sowMonth)
+        end
+        return FieldAdvisor.text("ftdl_action_sow_planned_resow", "%s neu säen", plannedTitle)
+    end
+
+    if hasMonth then
+        return FieldAdvisor.text("ftdl_action_sow_planned_month", "%s säen %s", plannedTitle, sowMonth)
+    end
+
+    return FieldAdvisor.text("ftdl_action_sow_planned", "%s säen", plannedTitle)
+end
+
+--- Sow suggestion/task label with per-field planned crop when set (FieldPlannedCrop).
+---@param fieldId number|nil
+---@param resow boolean|nil true = post-harvest re-sow wording
+---@return string label, number|nil plannedFruitTypeIndex
+function FieldAdvisor.formatSowActionLabel(fieldId, resow)
+    local plannedIndex = FieldPlannedCrop ~= nil and FieldPlannedCrop.get(fieldId) or nil
+    local label = FieldAdvisor.formatPlannedSowLabel(plannedIndex, resow, false)
+    if label ~= nil then
+        return label, plannedIndex
+    end
+
+    if resow == true then
+        return FieldAdvisor.text("ftdl_action_resow", "Neu ansäen"), nil
+    end
+
+    return FieldAdvisor.text("ftdl_action_sow_empty", "Ansäen"), nil
+end
+
+---@param fruitTypeIndex number|nil
+---@return boolean
+function FieldAdvisor.isStrawProducingCrop(fruitTypeIndex)
+    local normalized = FieldAdvisor.normalizeFruitName(FieldAdvisor.getFruitTypeName(fruitTypeIndex))
+    if normalized == nil then
+        return false
+    end
+
+    return FieldAdvisor.STRAW_PRODUCING_FRUITS[normalized] == true
 end
 
 ---@param fruitTypeIndex number|nil
@@ -4495,7 +4745,14 @@ function FieldAdvisor.getFieldFruitDisplayLabel(field, fieldId, fieldState, worl
     if aggregation.dominantSituation == FieldAdvisor.PROBE_SITUATION.ARABLE then
         local fruitTypeIndex = FieldAdvisor.resolveDisplayArableFruitIndex(field, aggregation, fieldState)
         local label = FieldAdvisor.getLocalizedFruitTitle(fruitTypeIndex)
-        if label ~= "-" and not FieldAdvisor.fieldHasPartialSoilWork(field, fieldId, fieldState, worldX, worldZ) then
+        -- Fully tilled soil with no active crop (PLOWED/CULTIVATED/SEEDBED, growth 0) has no
+        -- standing crop, even if a stale fruit id lingers (e.g. just-plowed merged parcel) -> '-'.
+        -- Stubble (growth > 0) and sown ground keep their crop name.
+        local groundType = FieldAdvisor.getGroundTypeName(fieldState)
+        local tilledNoCrop = FieldAdvisor.getGrowthState(fieldState) <= 0
+            and FieldAdvisor.groundTypeIsOneOf(groundType, { "PLOWED", "CULTIVATED", "SEEDBED" })
+        if label ~= "-" and not tilledNoCrop
+            and not FieldAdvisor.fieldHasPartialSoilWork(field, fieldId, fieldState, worldX, worldZ) then
             return label
         end
     end
@@ -4564,10 +4821,6 @@ function FieldAdvisor.getFieldFruitDisplayLabel(field, fieldId, fieldState, worl
     return "-"
 end
 
----@param field table
----@param fieldState table|nil
----@param aggregation table|nil
----@return string
 --- Map a FieldPhase enum value to the legacy cropPhase string used by resolveActionCandidates.
 ---@param phase string FieldPhase.PHASE.*
 ---@param isGrass boolean
@@ -4706,20 +4959,12 @@ function FieldAdvisor.getExpectedHarvestLabel(field, fieldState, aggregation, gr
             return FieldAdvisor.text("ftdl_action_regrowth", "Nachwuchs")
         end
 
-        local postMowLabel = FieldAdvisor.getGrassPostMowDisplayLabel(field, harvestState, aggregation, grassResidueSummary)
-        if postMowLabel ~= nil then
-            return postMowLabel
-        end
-
         local probeState = aggregation ~= nil and aggregation.centerState or harvestState
-        local meadowPhase = FieldAdvisor.getGrassMeadowPhase(probeState, field, aggregation)
-
-        if meadowPhase == "cut" then
-            postMowLabel = FieldAdvisor.getGrassPostMowDisplayLabel(field, harvestState, aggregation, grassResidueSummary)
-            if postMowLabel ~= nil then
-                return postMowLabel
-            end
+        if FieldAdvisor.isGrassPostMowState(probeState, field, nil) then
+            return FieldAdvisor.text("ftdl_action_regrowth", "Nachwuchs")
         end
+
+        local meadowPhase = FieldAdvisor.getGrassMeadowPhase(probeState, field, aggregation)
 
         if meadowPhase == "harvestable" then
             return FieldAdvisor.text("ftdl_action_grass_mow_short", "Mähen")
@@ -4727,13 +4972,6 @@ function FieldAdvisor.getExpectedHarvestLabel(field, fieldState, aggregation, gr
 
         if meadowPhase == "withered" then
             return FieldAdvisor.text("ftdl_action_withered", "Verdorrt")
-        end
-
-        local grassFruit = FieldAdvisor.resolveGrassFruitTypeIndex(harvestState, field, aggregation)
-            or (aggregation ~= nil and aggregation.dominantGrassFruit)
-        local harvestWindow = FieldAdvisor.getHarvestWindowHint(grassFruit, harvestState)
-        if harvestWindow ~= "-" then
-            return FieldAdvisor.formatHarvestWindowLabel(harvestWindow)
         end
 
         if meadowPhase == "growing" or FieldAdvisor.getEffectiveGrowthState(harvestState) > 0 then
@@ -4763,18 +5001,6 @@ function FieldAdvisor.getExpectedHarvestLabel(field, fieldState, aggregation, gr
     local displayArableFruit = FieldAdvisor.resolveDisplayArableFruitIndex(field, aggregation, harvestState)
     if FieldAdvisor.isArableHarvestedStubble(field, harvestState, displayArableFruit or arableFruit) then
         return FieldAdvisor.text("ftdl_growth_stubble", "Stoppeln")
-    end
-
-    local harvestFruit = arableFruit
-    if harvestFruit == nil and aggregation ~= nil and aggregation.dominantArableFruit ~= nil then
-        if aggregation.centerSituation == FieldAdvisor.PROBE_SITUATION.ARABLE
-            or FieldAdvisor.hasActiveCrop(harvestState) then
-            harvestFruit = aggregation.dominantArableFruit
-        end
-    end
-    local harvestWindow = FieldAdvisor.getHarvestWindowHint(harvestFruit, harvestState)
-    if harvestWindow ~= "-" then
-        return FieldAdvisor.formatHarvestWindowLabel(harvestWindow)
     end
 
     if FieldAdvisor.hasActiveCrop(harvestState) then
@@ -4875,14 +5101,19 @@ function FieldAdvisor.buildFieldContext(field, fieldState, worldX, worldZ, aggre
     local baleTtl = isActiveResiduePhase
         and FieldAdvisor.BALE_CACHE_TTL_ACTIVE_MS
         or FieldAdvisor.BALE_CACHE_TTL_IDLE_MS
-    local shouldSampleBales = isGrassCropField or hasTrackedBales
+    -- Straw bales sit on arable harvested stubble, not just grass fields, so sample bales there too.
+    local arableStubbleFruit = (aggregation ~= nil and aggregation.dominantArableFruit)
+        or FieldAdvisor.resolveFruitTypeIndex(probeState, field)
+    local isArableStubble = not isGrassCropField
+        and FieldAdvisor.isArableHarvestedStubble(field, probeState, arableStubbleFruit)
+    local shouldSampleBales = isGrassCropField or hasTrackedBales or isArableStubble
     local baleSummary = shouldSampleBales
         and FieldAdvisor.sampleBaleCoverage(field, baleTtl)
         or nil
 
-    -- Grass residue (loose vs. swath vs. already-collected) is NOT sensable in this runtime:
-    -- the density-map fill API is absent and raw height reads are noise even on plowed-empty
-    -- fields (see docs/DECISIONS.md). Field-local bales are the only reliable post-mow signal.
+    -- Grass residue: only field-local bales are reliable (loose/swath not sensable — see
+    -- docs/DECISIONS.md). Straw bales are in baleSummary for all arable-stubble fields above;
+    -- grassResidueSummary is grass-only (drives post-mow meadow logistics).
     local grassResidueSummary = nil
     if isGrassCropField or hasTrackedBales then
         grassResidueSummary = FieldAdvisor.deriveGrassResidueSummary(baleSummary)
@@ -5172,7 +5403,7 @@ function FieldAdvisor.addGrassWorkActions(actions, fieldState, field, aggregatio
     local grassFruitHint = FieldAdvisor.resolveGrassFruitTypeIndex(probeState, field, aggregation, worldX, worldZ)
 
     local meadowPhase = FieldAdvisor.getGrassMeadowPhase(probeState, field, aggregation)
-    local fieldBaleCount = FieldAdvisor.getFieldBaleCount(baleSummary)
+    local grassBaleCount = FieldAdvisor.getFieldBaleCountByKind(baleSummary, "grass")
 
     -- Standing grass ready to mow: suggest mow and stop (not post-mow logistics).
     if meadowPhase == "harvestable"
@@ -5190,7 +5421,7 @@ function FieldAdvisor.addGrassWorkActions(actions, fieldState, field, aggregatio
 
     -- Post-mow signals (cut ground, stubble shred, or bales on the field) => logistics phase.
     if FieldAdvisor.isGrassPostMowState(probeState, field, grassFruitHint)
-        or fieldBaleCount > 0
+        or grassBaleCount > 0
         or FieldAdvisor.getStateNumber(probeState, "stubbleShredLevel") > 0
         or (aggregation ~= nil and (aggregation.maxStubbleShredLevel or 0) > 0)
         or FieldAdvisor.isGrassCutGroundType(FieldAdvisor.getGroundTypeName(probeState)) then
@@ -5213,7 +5444,7 @@ function FieldAdvisor.addGrassWorkActions(actions, fieldState, field, aggregatio
         -- returns material everywhere even on plowed-empty fields (see docs/DECISIONS.md).
         -- Reliable signal: bales physically on the field. Otherwise offer the full post-mow
         -- logistics chain so the user picks what matches the field; regrowth window as info.
-        if fieldBaleCount > 0 then
+        if grassBaleCount > 0 then
             FieldAdvisor_addAction(actions, {
                 actionType = "grass_bale_collect",
                 label = FieldAdvisor.text("ftdl_action_grass_bale_collect", "Ballen einsammeln"),
@@ -5448,9 +5679,6 @@ function FieldAdvisor.addGrowingActions(actions, ctx)
         local harvestState = FieldAdvisor.resolveHarvestFieldState(ctx.fieldState, ctx.aggregation)
         local harvestFruit = FieldAdvisor.resolveDisplayArableFruitIndex(ctx.field, ctx.aggregation, harvestState)
         local harvestWindow = FieldAdvisor.getHarvestWindowHint(harvestFruit, harvestState)
-        local growingLabel = harvestWindow ~= "-"
-            and harvestWindow
-            or FieldAdvisor.text("ftdl_action_growing", "Wächst")
         if harvestWindow ~= "-" then
             FieldAdvisor_addAction(actions, {
                 actionType = "harvest_info",
@@ -5462,8 +5690,8 @@ function FieldAdvisor.addGrowingActions(actions, ctx)
 
         FieldAdvisor_addAction(actions, {
             actionType = "growing",
-            label = growingLabel,
-            pickerLabel = growingLabel,
+            label = FieldAdvisor.text("ftdl_action_growing", "Wächst"),
+            pickerLabel = FieldAdvisor.text("ftdl_action_growing", "Wächst"),
             autoComplete = false,
         })
     end
@@ -5486,6 +5714,29 @@ function FieldAdvisor.addEmptyOrPostHarvestActions(actions, ctx)
                 label = FieldAdvisor.text("ftdl_action_mulch_after_harvest", "Mulchen (vor Bodenarbeit)"),
                 autoComplete = false,
             })
+        end
+    end
+
+    -- Straw logistics on cereal/canola/soy stubble, before soil work. Loose straw is not sensable
+    -- in this runtime (see docs/DECISIONS.md), so we react reliably to straw bales on the field
+    -- (collect) and otherwise offer pressing/picking up straw. Both auto-complete via field bales.
+    if cropPhase == "post_harvest" and not ctx.isGrass then
+        local strawBales = FieldAdvisor.getFieldBaleCountByKind(ctx.baleSummary, "straw")
+        if strawBales > 0 then
+            FieldAdvisor_addAction(actions, {
+                actionType = "straw_bale_collect",
+                label = FieldAdvisor.text("ftdl_action_straw_bale_collect", "Strohballen einsammeln"),
+                autoComplete = true,
+            })
+        else
+            local strawFruit = FieldAdvisor.resolveDisplayArableFruitIndex(ctx.field, ctx.aggregation, ctx.probeState)
+            if FieldAdvisor.isStrawProducingCrop(strawFruit) then
+                FieldAdvisor_addAction(actions, {
+                    actionType = "straw_bale",
+                    label = FieldAdvisor.text("ftdl_action_straw_bale", "Stroh pressen/bergen"),
+                    autoComplete = true,
+                })
+            end
         end
     end
 
@@ -5529,17 +5780,23 @@ function FieldAdvisor.addEmptyOrPostHarvestActions(actions, ctx)
         })
     end
 
+    local fieldId = ctx.field ~= nil and ctx.field.getId ~= nil and ctx.field:getId() or nil
+
     if cropPhase == "empty" then
+        local sowLabel, plannedIndex = FieldAdvisor.formatSowActionLabel(fieldId, false)
         FieldAdvisor_addAction(actions, {
             actionType = "sow",
-            label = FieldAdvisor.text("ftdl_action_sow_empty", "Ansäen"),
+            label = sowLabel,
             autoComplete = false,
+            plannedSowFruitIndex = plannedIndex,
         })
     elseif cropPhase == "post_harvest" and not ctx.isGrass then
+        local sowLabel, plannedIndex = FieldAdvisor.formatSowActionLabel(fieldId, true)
         FieldAdvisor_addAction(actions, {
             actionType = "sow",
-            label = FieldAdvisor.text("ftdl_action_resow", "Neu ansäen"),
+            label = sowLabel,
             autoComplete = true,
+            plannedSowFruitIndex = plannedIndex,
         })
     end
 
@@ -5675,6 +5932,8 @@ function FieldAdvisor.getShortActionLabel(action)
         grass_bale = { "ftdl_action_grass_bale", "Ballen" },
         grass_silage_bale = { "ftdl_action_grass_silage_bale", "Silageballen" },
         grass_bale_collect = { "ftdl_action_grass_bale_collect", "Ballen holen" },
+        straw_bale = { "ftdl_action_straw_bale", "Stroh pressen" },
+        straw_bale_collect = { "ftdl_action_straw_bale_collect", "Stroh holen" },
         harvest_info = { "ftdl_action_harvest_info", "Ernte" },
         growing = { "ftdl_action_growing", "Wächst" },
         none = { "ftdl_action_none", "Ok" },
@@ -5682,6 +5941,13 @@ function FieldAdvisor.getShortActionLabel(action)
 
     if action.actionType == "pf_n" and action.fertPass ~= nil and action.fertPassTotal ~= nil then
         return FieldAdvisor.getOrganicFertilizerPassLabel(action.fertPass, action.fertPassTotal)
+    end
+
+    if action.actionType == "sow" and action.plannedSowFruitIndex ~= nil then
+        local shortLabel = FieldAdvisor.formatPlannedSowLabel(action.plannedSowFruitIndex, false, true)
+        if shortLabel ~= nil then
+            return shortLabel
+        end
     end
 
     local short = shortLabels[action.actionType]
@@ -5802,6 +6068,45 @@ function FieldAdvisor.formatWorkOrderSuggestionPreview(actions, maxSteps)
 end
 
 ---@param actions table[]|nil
+---@return string|nil
+function FieldAdvisor.getHarvestInfoSuggestionLabel(actions)
+    if actions == nil then
+        return nil
+    end
+
+    for _, action in ipairs(actions) do
+        if action.actionType == "harvest_info" then
+            local label = action.label
+            if label ~= nil and label ~= "" and label ~= "-" then
+                return label
+            end
+        end
+    end
+
+    return nil
+end
+
+---@param baseLabel string|nil
+---@param actions table[]|nil
+---@return string|nil
+function FieldAdvisor.prefixHarvestInfoSuggestion(baseLabel, actions)
+    local harvestInfo = FieldAdvisor.getHarvestInfoSuggestionLabel(actions)
+    if harvestInfo == nil then
+        return baseLabel
+    end
+
+    if baseLabel == nil or baseLabel == "" then
+        return harvestInfo
+    end
+
+    if baseLabel == harvestInfo or string.find(baseLabel, harvestInfo, 1, true) ~= nil then
+        return baseLabel
+    end
+
+    return harvestInfo .. " → " .. baseLabel
+end
+
+---@param actions table[]|nil
 ---@param expectedHarvest string|nil
 ---@return string
 function FieldAdvisor.formatSuggestionColumn(actions, expectedHarvest)
@@ -5825,12 +6130,14 @@ function FieldAdvisor.formatSuggestionColumn(actions, expectedHarvest)
         4
     )
     if workOrderPreview ~= nil and #logisticsActions > 0 then
-        return workOrderPreview
+        return FieldAdvisor.prefixHarvestInfoSuggestion(workOrderPreview, actions)
+            or workOrderPreview
     end
 
     workOrderPreview = FieldAdvisor.formatWorkOrderSuggestionPreview(actions, 4)
     if workOrderPreview ~= nil then
-        return workOrderPreview
+        return FieldAdvisor.prefixHarvestInfoSuggestion(workOrderPreview, actions)
+            or workOrderPreview
     end
 
     local displayLabels = {}
@@ -5843,18 +6150,9 @@ function FieldAdvisor.formatSuggestionColumn(actions, expectedHarvest)
     end
 
     if #displayLabels == 0 then
-        for _, action in ipairs(actions) do
-            if action.actionType == "harvest_info" then
-                local label = action.label or ""
-                if label ~= "" then
-                    local template = FieldAdvisor.text("ftdl_action_harvest_window", "Ernte %s", "___")
-                    local prefix = string.gsub(template, "%%s", "")
-                    if prefix ~= "" and string.sub(label, 1, #prefix) == prefix then
-                        return string.sub(label, #prefix + 1)
-                    end
-                    return label
-                end
-            end
+        local harvestInfo = FieldAdvisor.getHarvestInfoSuggestionLabel(actions)
+        if harvestInfo ~= nil then
+            return harvestInfo
         end
 
         if expectedHarvest ~= nil and expectedHarvest ~= "" and expectedHarvest ~= "-" then
@@ -5866,10 +6164,13 @@ function FieldAdvisor.formatSuggestionColumn(actions, expectedHarvest)
 
     local primary = displayLabels[1]
     if #displayLabels > 1 then
-        return FieldAdvisor.text("ftdl_action_preview_more", "%s (+%d)", primary, #displayLabels - 1)
+        return FieldAdvisor.prefixHarvestInfoSuggestion(
+            FieldAdvisor.text("ftdl_action_preview_more", "%s (+%d)", primary, #displayLabels - 1),
+            actions
+        ) or FieldAdvisor.text("ftdl_action_preview_more", "%s (+%d)", primary, #displayLabels - 1)
     end
 
-    return primary
+    return FieldAdvisor.prefixHarvestInfoSuggestion(primary, actions) or primary
 end
 
 ---@param field table|nil
@@ -5961,6 +6262,8 @@ function FieldAdvisor.captureTaskBaseline(field, fieldId, worldX, worldZ)
         grassResidueState = context.grassResidueSummary ~= nil and context.grassResidueSummary.residueState or nil,
         grassResidueOccupiedRatio = context.grassResidueSummary ~= nil and context.grassResidueSummary.occupiedRatio or 0,
         baleCount = context.baleSummary ~= nil and context.baleSummary.total or 0,
+        baleGrassCount = context.baleSummary ~= nil and (context.baleSummary.grass or 0) or 0,
+        baleStrawCount = context.baleSummary ~= nil and (context.baleSummary.straw or 0) or 0,
         phValue = context.pfSample ~= nil and context.pfSample.pHValue or nil,
         nitrogenValue = context.pfSample ~= nil and context.pfSample.nitrogenValue or nil,
     }

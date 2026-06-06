@@ -10,3 +10,4 @@ Vollständiger FS25-Neustart nach jedem Build. Details: `CONSOLIDATION_AND_NAMIN
 | 4 | 9 | Weizen wächst, Unkraut | wächst; Unkraut separat | [x] | Dump 08:45: standing korrekt |
 | 5 | 63 | Klee schnittreif (growth=minHarvest) | „mähen“ (grass_harvestable) | [x] | Dump 09:17: grass_harvestable ✓ |
 | 6 | 76 | Luzerne schnittreif + partial soil work | „mähen“ (grass_harvestable) | [x] | Dump 09:17: grass_harvestable ✓ (partial-Aufschlag-Fix bestätigt) |
+| 7 | — | Getreide-Stoppel + Strohballen | „Strohballen einsammeln“ (auto wenn weg); ohne Ballen „Stroh pressen/bergen“ | [ ] | Neu 2026-06-04: `ftdlDump` → `baleCoverage: straw=N`; In-Game-Verify ausstehend |

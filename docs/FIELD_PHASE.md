@@ -30,8 +30,8 @@ Status: **festgelegt** (Phase 1.5). Phase 2 implementiert genau diesen Kontrakt 
 | `ground` | string | `getGroundTypeName` (z. B. `HARVEST_READY`, `PLOWED`, `GRASS_CUT`) |
 | `flags` | table | `evaluateFruitGrowth`: `{cut, harvestable, harvestReady, withered}` |
 | `shred` | number | `stubbleShredLevel` (>0 ⇒ frisch gemäht/gehäckselt) |
-| `residue` | `"none"`/`"loose"`/`"swath"`/`"baled"`/`"unknown"` | `deriveGrassResiduePhase` (Phase 2); **`unknown`** wenn Dichtekarte fehlt |
-| `residueReliable` | bool | false wenn `FSDensityMapUtil` fehlt (B1) |
+| `residue` | `"none"`/`"baled"` (Gras) | `deriveGrassResidueSummary` — ballen-basiert; loose/swath **nicht** sensierbar (B1) |
+| `residueReliable` | bool | immer `false` für loose/swath; Ballen-Zählung separat über `sampleBaleCoverage` |
 
 ---
 
@@ -47,7 +47,7 @@ Status: **festgelegt** (Phase 1.5). Phase 2 implementiert genau diesen Kontrakt 
 | `grass_standing` | Gras, wächst | Erntefenster |
 | `grass_harvestable` | Gras, mähbar | Mähen |
 | `grass_cut` | Gras gemäht, Rest unklar/`none` | Nachwuchs-Hinweis |
-| `grass_residue` | Gras-Rest vorhanden (Sub: `loose`/`swath`/`baled`) | Schwaden → Sammeln/Ballen → Ballen holen |
+| `grass_residue` | Gras-Rest (nur Ballen zuverlässig) | Ballen holen; sonst manuelle Kette (Schwaden/Sammeln/Ballen) |
 | `unknown` | nicht klassifizierbar | „Alles ok“ |
 
 ---

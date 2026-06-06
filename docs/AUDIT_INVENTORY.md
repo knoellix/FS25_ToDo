@@ -5,8 +5,8 @@ Vorlage und Tabellen: siehe `CONSOLIDATION_AND_NAMING_PLAN.md` § Phase 1.
 ## Vollständigkeit (keine Abkürzung — Standard)
 
 - [x] **Audit:** jede Datei unter `scripts/`, `gui/`, relevante `translations/`, `tools/` — jede `function`, jeder widersprüchliche Zweig.
-- [x] **Kommentare:** jede Zeile Kommentar in diesen Dateien **lesen** (Block für Block), siehe `COMMENT_PASS_LOG.md`.
-- [x] **Namen:** alle öffentlichen Funktionen und unklare Variablen in denselben Dateien.
+- [ ] **Kommentare:** jede Zeile Kommentar in diesen Dateien **lesen** (Block für Block), siehe `COMMENT_PASS_LOG.md` — **in Arbeit** (Block 1/4 FieldAdvisor).
+- [ ] **Namen:** alle öffentlichen Funktionen und unklare Variablen in denselben Dateien — **ausstehend** (Phase 5).
 
 Das ist **nicht** „nur Gras“ oder „nur FieldAdvisor“. FieldAdvisor zuerst (größtes Risiko), Rest **pflichtig** in derselben Kampagne.
 
@@ -166,7 +166,7 @@ Quelle: `FieldAdvisor.lua` (202 Funktionen), Aufrufer aus `scripts/`+`gui/`. Zei
 
 ## Metrik Vorher
 
-- `function FieldAdvisor.*` Anzahl: **202**
+- `function FieldAdvisor.*` Anzahl: **202** → **186** (nach Konsolidierung + Stroh-Logistik, 2026-06-04)
 - Entscheider „Feldphase/nach Ernte“ (A): **7** → Ziel 1 Kanon + 1 Stoppelregel
 - Entscheider „Gras-Rest“ (E): **11** → Ziel 1 Kanon + Roh-Signale
 - Entscheider „Unkraut“ (F): **10** → Ziel 1 Kanon (`deriveWeedAdvice`)

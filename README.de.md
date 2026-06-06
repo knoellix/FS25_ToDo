@@ -4,7 +4,7 @@
 
 **Autor:** Christian Möllmann ([knoellix](https://github.com/knoellix))  
 **Lizenz:** [GNU GPL v3](LICENSE)  
-**Version:** `0.1.0.5` (Vorabversion)
+**Version:** `0.1.0.6`
 
 ## Funktionen
 
@@ -15,7 +15,9 @@
 - **Listenreihenfolge:** `Hoch` / `Runter` Mini-Buttons (`^` / `v`) verschieben die ausgewählte Aufgabe (kein Drag-and-drop in der Giants-UI)
 - **Erledigt-Verhalten:** erledigte Aufgaben unter offenen; neu erledigte oben in der Erledigt-Gruppe; max. 10 erledigte (älteste werden entfernt)
 - **Auswahl-UX:** nach Verschieben bleibt die Aufgabe ausgewählt; nach Löschen wird die Auswahl entfernt
-- **Erntehinweise:** Vorschlagsspalte zeigt Monatsnamen statt missverständlicher Monatsanzahl
+- **Planfrucht:** pro Feld manuell setzen (Spalte **Plan** / **Planfrucht**) — Säen-Vorschläge mit Frucht und Sä-Monat; **Hof** für Nicht-Acker (kein Scan)
+- **Ernte-Spalte:** nur Status (Wächst, Nachwuchs, Mähen …); **Ernte-Monat** in der Vorschlags-Spalte
+- **Strohballen:** pressen/einsammeln auf Getreide-Stoppeln (Auto-Erledigen typ-bewusst)
 - **Speicherstand-Daten:** `fieldToDoList.xml` im Savegame-Ordner (Tasks mit ~2 s Debounce; Einstellungen sofort)
 - **Feldstatus:** Live-Boden-/Fruchtdaten aus dem Spiel (kein Laufzeit-Lesen von `fields.xml` — vermeidet Konflikte, solange das Spiel läuft)
 - **Graswiesen:** Mähen bei Reife; Hinweise zu Schwaden/Sammeln/Ballen; kein falsches Säen auf Wiesen
@@ -82,7 +84,7 @@ Funktioniert unter **Windows, macOS und Linux**. Nutzen, wenn ein Feld falsche K
 | macOS | `~/Library/Application Support/FarmingSimulator2025/log.txt` |
 | Linux (Steam) | `~/.local/share/Steam/steamapps/compatdata/2300320/pfx/drive_c/users/steamuser/Documents/My Games/FarmingSimulator2025/log.txt` |
 
-Nach `[FS25_FieldToDoList] DUMP` suchen. Wichtig: `meadowPhase`, `grassResidue`, `grassCrossScan`, `heightReader`, `harvestState`.
+Nach `[FS25_FieldToDoList] DUMP` suchen. Wichtig: `meadowPhase`, `grassResidue`, `baleCoverage`, `weedCoverage`, `harvestState`.
 
 Beispiel:
 
@@ -102,12 +104,22 @@ Beiträge sind willkommen (Bugfixes, Features, Übersetzungen).
 
 ## Changelog
 
-Siehe [CHANGELOG.md](CHANGELOG.md). **0.1.0.5:** inkrementeller Feld-Scan, Scan-Status-Punkt, gezieltes Zeilen-Update bei Auto-Erledigt, 15 s Rescan, Performance-Caches.
+Siehe [CHANGELOG.md](CHANGELOG.md). **0.1.0.6:** Planfrucht/Hof, Strohballen, Ernte-Spalte getrennt, Ballen-Fixes, Mulchen.
 
-## Bekannte Punkte / WIP
+## Bekannte Grenzen (LIMITATIONS)
 
-- Gras Schwaden → Sammeln/Ballen wird auf manchen Maps noch nachgeschärft (wenn `DensityMapHeightUtil` zur Laufzeit fehlt — Fallback über Engine-Höhenkarte).
-- Auto-Completion ist insgesamt noch in Arbeit und braucht breitere Tests auf realen Spielständen.
+Vollständige Regression: [`docs/REGRESSION.md`](docs/REGRESSION.md). Architektur: [`docs/FIELD_PHASE.md`](docs/FIELD_PHASE.md).
+
+| Bereich | Was funktioniert | Was nicht / manuell |
+| ------- | ---------------- | ------------------- |
+| **Gras nach Mähen** | Ballen pressen/einsammeln (Auto-Erledigen über Feld-Ballen) | Lose Schwaden/Heu am Boden nicht lesbar → Schwaden/Ladewagen nur als manuelle Erinnerung |
+| **Stroh nach Ernte** | Strohballen erkennen, pressen/einsammeln (Auto über STRAW-Ballen) | Loses Stroh am Boden nicht lesbar → „Stroh pressen" schließt nur bei neuen Ballen ab |
+| **Mulchen** | Vorschlag nach Ernte (optional, Schalter im Menü) | Kein lesbarer „gemulcht"-Zustand → nie Auto-Erledigt |
+| **Unkraut** | Striegeln/Spritzen, erledigt bei totem Unkraut (Coverage) | — |
+| **Custom-Felder** | Eigene bearbeitete Grundstücke ohne Engine-Feld-ID (Pseudo-Felder) | Nur wenn Feldmitte Feld-Boden zeigt |
+| **Planfrucht / Hof** | Sä-Frucht + Sä-Monat in Vorschlägen; Hof = kein Feld-Scan | Planfrucht ersetzt nicht die aktuelle Kultur-Spalte |
+
+Debug: `ftdlDump <FeldId>` — Zeile `baleCoverage: total/straw/grass/other` für Ballen-Diagnose.
 
 ## Issues
 

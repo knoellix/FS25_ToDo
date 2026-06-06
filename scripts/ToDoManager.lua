@@ -704,6 +704,11 @@ function ToDoManager:buildFieldTaskText(fieldRecord, actionLabel, action)
         suggestion = string.gsub(suggestion, " / Gruppieren", "")
     end
 
+    -- Planned sow crop goes into the work step, not the current-field fruit column.
+    if action ~= nil and action.actionType == "sow" then
+        return string.format("%s: %s", fieldName, suggestion)
+    end
+
     if fruit ~= nil and fruit ~= "" and fruit ~= "-" then
         return string.format("%s (%s): %s", fieldName, fruit, suggestion)
     end
@@ -782,6 +787,7 @@ function ToDoManager:addTaskFromFieldAction(fieldRecord, action, allowUntrackabl
         autoComplete = action.autoComplete == true,
         fertPass = action.fertPass,
         fertPassTotal = action.fertPassTotal,
+        plannedSowFruitIndex = action.plannedSowFruitIndex,
         completionBaseline = FieldAdvisor ~= nil
             and FieldAdvisor.captureTaskBaseline(
                 engineField,
@@ -799,6 +805,17 @@ function ToDoManager:addTaskFromFieldAction(fieldRecord, action, allowUntrackabl
     self:invalidateFieldAutoCheckCache(fieldRecord.id)
 
     return task, nil
+end
+
+---@param fieldId number|nil
+---@param fruitTypeIndex number|nil
+function ToDoManager:setFieldPlannedSowFruit(fieldId, fruitTypeIndex)
+    if FieldPlannedCrop == nil then
+        return
+    end
+
+    FieldPlannedCrop.set(fieldId, fruitTypeIndex)
+    self:saveSettingsNow()
 end
 
 ---@param fieldRecord table
@@ -864,45 +881,47 @@ function ToDoManager:updateAutoCompletion()
     end
 
     for fieldId, taskIds in pairs(tasksByFieldId) do
-        local field = self.fieldScanner:getEngineFieldById(fieldId)
-        local fieldCache = nil
+        if FieldPlannedCrop == nil or not FieldPlannedCrop.isFarmyard(fieldId) then
+            local field = self.fieldScanner:getEngineFieldById(fieldId)
+            local fieldCache = nil
 
-        if field ~= nil then
-            local posX, posZ = FieldAdvisor.getFieldCenterWorldPosition(field)
-            if posX ~= nil and posZ ~= nil and FieldTaskCompletion ~= nil then
-                fieldCache = FieldTaskCompletion.newFieldCompletionCache(field, posX, posZ)
-                local fieldState = FieldAdvisor.getEnrichedFieldState(field, fieldId, posX, posZ)
-                fieldCache.fieldState = fieldState
-                fieldCache.fingerprint = FieldAdvisor.buildFieldCompletionFingerprint(fieldState)
+            if field ~= nil then
+                local posX, posZ = FieldAdvisor.getFieldCenterWorldPosition(field)
+                if posX ~= nil and posZ ~= nil and FieldTaskCompletion ~= nil then
+                    fieldCache = FieldTaskCompletion.newFieldCompletionCache(field, posX, posZ)
+                    local fieldState = FieldAdvisor.getEnrichedFieldState(field, fieldId, posX, posZ)
+                    fieldCache.fieldState = fieldState
+                    fieldCache.fingerprint = FieldAdvisor.buildFieldCompletionFingerprint(fieldState)
 
-                local previousCheck = self.fieldAutoCheckCache[fieldId]
-                fieldCache.fingerprintMatch = previousCheck ~= nil
-                    and previousCheck.fingerprint == fieldCache.fingerprint
-                if fieldCache.fingerprintMatch and previousCheck.ratios ~= nil then
-                    fieldCache.ratios = previousCheck.ratios
+                    local previousCheck = self.fieldAutoCheckCache[fieldId]
+                    fieldCache.fingerprintMatch = previousCheck ~= nil
+                        and previousCheck.fingerprint == fieldCache.fingerprint
+                    if fieldCache.fingerprintMatch and previousCheck.ratios ~= nil then
+                        fieldCache.ratios = previousCheck.ratios
+                    end
                 end
             end
-        end
 
-        local fieldCompleted = false
-        for _, taskId in ipairs(taskIds) do
-            local task = self.manualTasks[taskId]
-            if task ~= nil and not task.completed and FieldAdvisor.isFieldTaskComplete(task, self.fieldScanner, fieldCache) then
-                self:onTaskMarkedComplete(task)
-                fieldCompleted = true
-                completedCount = completedCount + 1
+            local fieldCompleted = false
+            for _, taskId in ipairs(taskIds) do
+                local task = self.manualTasks[taskId]
+                if task ~= nil and not task.completed and FieldAdvisor.isFieldTaskComplete(task, self.fieldScanner, fieldCache) then
+                    self:onTaskMarkedComplete(task)
+                    fieldCompleted = true
+                    completedCount = completedCount + 1
+                end
             end
-        end
 
-        if fieldCompleted then
-            self:refreshFieldRecordSync(fieldId)
-        end
+            if fieldCompleted then
+                self:refreshFieldRecordSync(fieldId)
+            end
 
-        if fieldCache ~= nil and fieldCache.fingerprint ~= nil then
-            self.fieldAutoCheckCache[fieldId] = {
-                fingerprint = fieldCache.fingerprint,
-                ratios = fieldCache.ratios,
-            }
+            if fieldCache ~= nil and fieldCache.fingerprint ~= nil then
+                self.fieldAutoCheckCache[fieldId] = {
+                    fingerprint = fieldCache.fingerprint,
+                    ratios = fieldCache.ratios,
+                }
+            end
         end
     end
 
@@ -1043,6 +1062,9 @@ function ToDoManager.registerSavegameXMLPaths(schema, basePath)
     schema:register(XMLValueType.INT, basePath .. ".tasks.task(?)#fertPassTotal", "Organic fertilizer pass count")
     schema:register(XMLValueType.STRING, basePath .. ".tasks.task(?)#suggestion", "Field suggestion label")
     schema:register(XMLValueType.BOOL, basePath .. ".tasks.task(?)#autoComplete", "Whether task auto-completes from field state")
+    if FieldPlannedCrop ~= nil and FieldPlannedCrop.registerXMLPaths ~= nil then
+        FieldPlannedCrop.registerXMLPaths(schema, basePath)
+    end
 end
 
 ---@param xmlFile XMLFile
@@ -1109,6 +1131,10 @@ function ToDoManager:loadFromXMLFile(xmlFile, key)
 
     if FieldAdvisorSettings ~= nil then
         FieldAdvisorSettings.loadFromXMLFile(xmlFile, key)
+    end
+
+    if FieldPlannedCrop ~= nil then
+        FieldPlannedCrop.loadFromXMLFile(xmlFile, key)
     end
 
     local index = 0
@@ -1220,6 +1246,10 @@ function ToDoManager:saveToXMLFile(xmlFile, key, usedModNames)
 
     if FieldAdvisorSettings ~= nil then
         FieldAdvisorSettings.saveToXMLFile(xmlFile, key)
+    end
+
+    if FieldPlannedCrop ~= nil then
+        FieldPlannedCrop.saveToXMLFile(xmlFile, key)
     end
 
     local sortedTasks = self:getManualTasks()

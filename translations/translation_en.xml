@@ -23,6 +23,8 @@
 
         <text name="ftdl_col_field" text="Field"/>
         <text name="ftdl_col_fruit" text="Crop"/>
+        <text name="ftdl_col_plan" text="Plan" tag="tooltip:ftdl_col_plan_tip"/>
+        <text name="ftdl_col_plan_tip" text="Click to set planned crop"/>
         <text name="ftdl_fruit_grass" text="Grass"/>
         <text name="ftdl_fruit_partial_grass" text="Grass (part. worked)"/>
         <text name="ftdl_fruit_partial_fallow" text="Fallow (part.)"/>
@@ -43,6 +45,11 @@
         <text name="ftdl_btn_visit" text="Visit"/>
         <text name="ftdl_btn_field_task" text="Field task"/>
         <text name="ftdl_btn_adopt" text="Adopt"/>
+        <text name="ftdl_btn_planned_crop" text="Planned crop"/>
+        <text name="ftdl_dialog_planned_crop_title" text="Planned crop for %s"/>
+        <text name="ftdl_planned_crop_none" text="— none —"/>
+        <text name="ftdl_planned_crop_farmyard" text="Farmyard"/>
+        <text name="ftdl_farmyard_suggestion" text="Farmyard"/>
 
         <text name="ftdl_footer_suggest_prev" text="Suggestion ◀"/>
         <text name="ftdl_footer_suggest_next" text="Suggestion ▶"/>
@@ -90,12 +97,20 @@
         <text name="ftdl_action_grass_bale" text="Bale"/>
         <text name="ftdl_action_grass_silage_bale" text="Silage bale"/>
         <text name="ftdl_action_grass_bale_collect" text="Collect bales"/>
+        <text name="ftdl_action_straw_bale" text="Bale/collect straw"/>
+        <text name="ftdl_action_straw_bale_collect" text="Collect straw bales"/>
         <text name="ftdl_action_withered" text="Withered"/>
         <text name="ftdl_action_stones" text="Stones"/>
         <text name="ftdl_action_cultivate" text="Cultivate"/>
         <text name="ftdl_action_plow" text="Plow"/>
         <text name="ftdl_action_lime" text="Lime"/>
         <text name="ftdl_action_sow" text="Sow"/>
+        <text name="ftdl_action_sow_planned" text="Sow %s"/>
+        <text name="ftdl_action_sow_planned_month" text="Sow %s %s"/>
+        <text name="ftdl_action_sow_planned_resow" text="Re-sow %s"/>
+        <text name="ftdl_action_sow_planned_resow_month" text="Re-sow %s %s"/>
+        <text name="ftdl_action_sow_planned_short" text="Sow %s"/>
+        <text name="ftdl_action_sow_planned_short_month" text="Sow %s %s"/>
         <text name="ftdl_action_roller" text="Roll"/>
         <text name="ftdl_action_mulch" text="Mulch"/>
         <text name="ftdl_action_mulch_after_harvest" text="Mulch (before tillage)"/>

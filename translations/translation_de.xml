@@ -23,6 +23,8 @@
 
         <text name="ftdl_col_field" text="Feld"/>
         <text name="ftdl_col_fruit" text="Kultur"/>
+        <text name="ftdl_col_plan" text="Plan" tag="tooltip:ftdl_col_plan_tip"/>
+        <text name="ftdl_col_plan_tip" text="Klicken zum Setzen der Planfrucht"/>
         <text name="ftdl_fruit_grass" text="Gras"/>
         <text name="ftdl_fruit_partial_grass" text="Gras (teilw. bearb.)"/>
         <text name="ftdl_fruit_partial_fallow" text="Brache (teilw.)"/>
@@ -43,6 +45,11 @@
         <text name="ftdl_btn_visit" text="Besuchen"/>
         <text name="ftdl_btn_field_task" text="Feld-Aufgabe"/>
         <text name="ftdl_btn_adopt" text="übernehmen"/>
+        <text name="ftdl_btn_planned_crop" text="Planfrucht"/>
+        <text name="ftdl_dialog_planned_crop_title" text="Planfrucht für %s"/>
+        <text name="ftdl_planned_crop_none" text="— keine —"/>
+        <text name="ftdl_planned_crop_farmyard" text="Hof"/>
+        <text name="ftdl_farmyard_suggestion" text="Hof"/>
 
         <text name="ftdl_footer_suggest_prev" text="Vorschlag ◀"/>
         <text name="ftdl_footer_suggest_next" text="Vorschlag ▶"/>
@@ -90,12 +97,20 @@
         <text name="ftdl_action_grass_bale" text="Ballen pressen"/>
         <text name="ftdl_action_grass_silage_bale" text="Silageballen pressen"/>
         <text name="ftdl_action_grass_bale_collect" text="Ballen einsammeln"/>
+        <text name="ftdl_action_straw_bale" text="Stroh pressen/bergen"/>
+        <text name="ftdl_action_straw_bale_collect" text="Strohballen einsammeln"/>
         <text name="ftdl_action_withered" text="Verdorrt"/>
         <text name="ftdl_action_stones" text="Steine"/>
         <text name="ftdl_action_cultivate" text="Grubbern"/>
         <text name="ftdl_action_plow" text="Pflügen"/>
         <text name="ftdl_action_lime" text="Kalken"/>
         <text name="ftdl_action_sow" text="Säen"/>
+        <text name="ftdl_action_sow_planned" text="%s säen"/>
+        <text name="ftdl_action_sow_planned_month" text="%s säen %s"/>
+        <text name="ftdl_action_sow_planned_resow" text="%s neu säen"/>
+        <text name="ftdl_action_sow_planned_resow_month" text="%s neu säen %s"/>
+        <text name="ftdl_action_sow_planned_short" text="%s säen"/>
+        <text name="ftdl_action_sow_planned_short_month" text="%s säen %s"/>
         <text name="ftdl_action_roller" text="Walzen"/>
         <text name="ftdl_action_mulch" text="Mulchen"/>
         <text name="ftdl_action_mulch_after_harvest" text="Mulchen (vor Bodenarbeit)"/>

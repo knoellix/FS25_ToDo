@@ -2,6 +2,38 @@
 
 All notable changes to **FS25_FieldToDoList** are documented here.
 
+## [0.1.0.6] — 2026-06-06
+
+### Added
+
+- **Planfrucht pro Feld:** Spalte „Plan“, Button/ Klick **Planfrucht** — manuelle Wahl der Sä-Frucht (inkl. Luzerne/Klee), persistent im Savegame; Säen-Vorschläge und To-Dos mit Fruchtname und **Sä-Monat** (`getIsPlantableInPeriod`).
+- **Hof-Kennzeichnung:** Planfrucht **Hof** für Grundstücke mit Hof/Halle/Tierhaltung — kein Schwergewichts-Scan, kein Auto-Erledigen-Probe-Loop; Vorschlag „Hof“.
+- **Stroh-Logistik:** Strohballen erkennen (FillType STRAW), Aktionen `straw_bale` / `straw_bale_collect` auf Acker-Stoppeln; typ-bewusstes Auto-Erledigen.
+- **Mulchen:** optionaler Arbeitsschritt nach Ernte (Menü-Schalter, manuell).
+- **Eigene Grundstücks-Felder:** Pseudo-Felder für gekauftes Ackerland ohne Engine-Feld-ID (immer aktiv).
+
+### Improved
+
+- **Ernte-Spalte vs. Vorschlag:** Spalte „Ernte“ nur noch Status (Wächst, Nachwuchs, Mähen, Stoppeln …); **Ernte-Monat** (`Ernte Okt`) in der Vorschlags-Spalte, ggf. vor Arbeitsschritten (`Ernte Okt → Striegeln …`).
+- **Ballen-Auto-Erledigen:** `grass_bale_collect` zählt nur Gras-/Silageballen; Scheunen-Ballen nicht mehr dem Feld zugeordnet (Polygon zuerst, keine areaHa-Raten-Box).
+- **Feldübersicht-Layout:** Spalten nach Planfrucht-Einführung korrigiert (pH/N/Wechseln/Vorschlag); Precision-Farming-Spalten überlappen nicht mehr.
+- **Gras-Rest:** Ballen-basierte Logik (Density-Map-Residue-Detektion entfernt); ehrliche manuelle Erinnerungen für Schwaden/Ladewagen.
+- **Unkraut-Advice:** eine Entscheidungsfunktion (`WeedAdvice.deriveWeedAdvice`); Spray nur ab Stufe 3 / 10 % Druck.
+- **Feldphase:** `FieldPhase.deriveFieldPhase` (headless getestet); Konsolidierung Advisor (Gras-Phase, Mulch, Stoppel-Frucht `-`).
+
+### Fixed
+
+- Planfrucht-Dialog: `table: 0x…` Untertitel (OptionDialog zweites Argument `nil`).
+- Ballen einsammeln blieb offen, obwohl nur Gras-Ballen weg waren (gemischte Ballen auf Grasfeldern).
+- Frisch gepflügtes Leerboden zeigte stale Frucht-ID (z. B. Erbsen auf Feld 72).
+- Luzerne/Klee nach Nachwuchs fälschlich als „gemäht“ / erneut Mähen-Vorschlag.
+
+### Known limitations
+
+- Lose Schwaden/Heu und loses Stroh am Boden nicht sensierbar — nur Ballen-Objekte für Auto-Erledigen.
+- Mulchen und Gras-Schwaden/Ladewagen: manuelle Erinnerungen, kein Auto-Erledigen.
+- Seasonal Crop Stress: Spalten optional, nicht voll integriert.
+
 ## [0.1.0.5] — 2026-05-30
 
 ### Added

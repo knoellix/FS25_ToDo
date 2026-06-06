@@ -9,6 +9,16 @@
 FieldScanner = {}
 local FieldScanner_mt = Class(FieldScanner)
 
+-- Pseudo-field ids for owned farmland that has no predefined engine field. Offset well above any
+-- real map field id so ids never collide; pseudoId = OFFSET + farmlandId, reversible.
+FieldScanner.FARMLAND_PSEUDO_ID_OFFSET = 1000000
+
+---@param fieldId number|nil
+---@return boolean
+function FieldScanner.isFarmlandPseudoId(fieldId)
+    return fieldId ~= nil and fieldId >= FieldScanner.FARMLAND_PSEUDO_ID_OFFSET
+end
+
 ---@param mission table
 ---@param modDirectory string
 ---@return FieldScanner
@@ -193,6 +203,11 @@ function FieldScanner:collectOwnedFieldCandidates()
         end
     end
 
+    -- Always include owned, field-less parcels (e.g. a self-plowed field on bought land). Cheap:
+    -- parcels that already carry a predefined field are skipped via farmland.field without probing,
+    -- and this only runs in the overview-scan path (menu open), never in the update/HUD loop.
+    self:appendFarmlandPseudoCandidates(candidates, seenIds)
+
     if g_currentMission ~= nil and g_currentMission.fieldToDoList ~= nil then
         local manager = g_currentMission.fieldToDoList
         if manager.manualTasks ~= nil and manager.fieldScanner == self then
@@ -217,6 +232,151 @@ function FieldScanner:collectOwnedFieldCandidates()
     return candidates
 end
 
+--- Owned farmlands carry no probe data themselves; we sample the field state at the parcel's
+--- indicator center to tell a real (worked/cropped) field from raw grass/forest/yard land.
+---@param posX number|nil
+---@param posZ number|nil
+---@return boolean
+function FieldScanner:farmlandCenterIsFieldGround(posX, posZ)
+    if posX == nil or posZ == nil then
+        return false
+    end
+
+    local state = FieldAdvisor.getLiveFieldState(posX, posZ)
+    if state == nil then
+        return false
+    end
+
+    local groundType = FieldAdvisor.getGroundTypeName(state)
+    if groundType ~= nil and groundType ~= "NONE" then
+        return true
+    end
+
+    local fruitTypeIndex = FieldAdvisor.getFruitTypeIndex(state)
+    if fruitTypeIndex ~= nil and fruitTypeIndex > 0 then
+        return true
+    end
+
+    local growthState = FieldAdvisor.getGrowthState(state)
+    return growthState ~= nil and growthState > 0
+end
+
+--- Minimal Field-like wrapper so the existing scan/advisor path (which probes purely by world
+--- position) can treat an owned, field-less farmland parcel as a field. Only owned parcels with
+--- no predefined engine field and a known indicator position become pseudo-fields.
+---@param farmland table|nil
+---@return table|nil pseudoField
+function FieldScanner:buildFarmlandPseudoField(farmland)
+    if farmland == nil or farmland.id == nil then
+        return nil
+    end
+
+    if farmland.field ~= nil then
+        return nil
+    end
+
+    local posX, posZ = farmland.xWorldPos, farmland.zWorldPos
+    if posX == nil or posZ == nil then
+        return nil
+    end
+
+    local pseudoId = FieldScanner.FARMLAND_PSEUDO_ID_OFFSET + farmland.id
+
+    local name = farmland.name
+    if string.isNilOrWhitespace(name) then
+        name = string.format("Grundstück %d", farmland.id)
+    end
+
+    return {
+        isFarmlandPseudoField = true,
+        farmland = farmland,
+        farmlandId = farmland.id,
+        areaHa = farmland.areaInHa or 0,
+        name = name,
+        getId = function()
+            return pseudoId
+        end,
+        getCenterOfFieldWorldPosition = function()
+            return posX, posZ
+        end,
+    }
+end
+
+---@param farmlandId number|nil
+---@return table|nil pseudoField
+function FieldScanner:buildFarmlandPseudoFieldById(farmlandId)
+    if farmlandId == nil or g_farmlandManager == nil or g_farmlandManager.getFarmlandById == nil then
+        return nil
+    end
+
+    local ok, farmland = pcall(g_farmlandManager.getFarmlandById, g_farmlandManager, farmlandId)
+    if not ok or farmland == nil then
+        return nil
+    end
+
+    return self:buildFarmlandPseudoField(farmland)
+end
+
+---@return number[] farmlandIds
+function FieldScanner:getOwnedFarmlandIds(farmId)
+    if farmId == nil or g_farmlandManager == nil then
+        return {}
+    end
+
+    if g_farmlandManager.getOwnedFarmlandIdsByFarmId ~= nil then
+        local ok, ids = pcall(g_farmlandManager.getOwnedFarmlandIdsByFarmId, g_farmlandManager, farmId)
+        if ok and type(ids) == "table" then
+            return ids
+        end
+    end
+
+    -- Fallback: scan the farmland table and keep ones owned by this farm.
+    local ids = {}
+    if g_farmlandManager.farmlands ~= nil then
+        for id, farmland in pairs(g_farmlandManager.farmlands) do
+            if self:farmlandBelongsToFarm(farmland, farmId) then
+                ids[#ids + 1] = id
+            end
+        end
+    end
+
+    return ids
+end
+
+--- Add owned farmland parcels without a predefined field (and with real field ground at center)
+--- as pseudo-field candidates. Parcels that already carry an engine field are skipped cheaply
+--- via farmland.field; only the remaining few are probed once at their center.
+---@param candidates table[]
+---@param seenIds table<number, boolean>
+function FieldScanner:appendFarmlandPseudoCandidates(candidates, seenIds)
+    if g_farmlandManager == nil then
+        return
+    end
+
+    local farmId = self:getPlayerFarmId()
+    if farmId == nil then
+        return
+    end
+
+    for _, farmlandId in pairs(self:getOwnedFarmlandIds(farmId)) do
+        local pseudoId = FieldScanner.FARMLAND_PSEUDO_ID_OFFSET + farmlandId
+        if not seenIds[pseudoId] then
+            local pseudoField = self:buildFarmlandPseudoFieldById(farmlandId)
+            if pseudoField ~= nil then
+                local posX, posZ = pseudoField.getCenterOfFieldWorldPosition()
+                if self:farmlandCenterIsFieldGround(posX, posZ) then
+                    candidates[#candidates + 1] = {
+                        field = pseudoField,
+                        forceInclude = true,
+                        id = pseudoId,
+                    }
+                    seenIds[pseudoId] = true
+                end
+            end
+        end
+    end
+end
+
 ---@param candidate table
 ---@return table|nil
 function FieldScanner:buildPlaceholderFieldRecord(candidate)
@@ -233,12 +393,17 @@ function FieldScanner:buildPlaceholderFieldRecord(candidate)
         fieldName = string.format("Feld %d", fieldId)
     end
 
+    if FieldPlannedCrop ~= nil and FieldPlannedCrop.isFarmyard(fieldId) then
+        return FieldPlannedCrop.buildFarmyardFieldRecord(fieldId, fieldName, posX, posZ, field.areaHa)
+    end
+
     return {
         id = fieldId,
         name = fieldName,
         worldX = posX,
         worldZ = posZ,
         fruit = "...",
+        plannedSow = "...",
         growthState = "...",
         expectedHarvest = "...",
         weed = "...",
@@ -287,13 +452,18 @@ function FieldScanner:normalizeField(field, forceInclude)
     end
 
     local fieldId = field.getId ~= nil and field:getId() or 0
-    local fieldState = FieldAdvisor.getEnrichedFieldState(field, fieldId, posX, posZ)
-    local labels = FieldAdvisor.buildFieldLabels(field, fieldState, posX, posZ)
 
     local fieldName = field.name
     if string.isNilOrWhitespace(fieldName) then
         fieldName = string.format("Feld %d", fieldId)
     end
+
+    if FieldPlannedCrop ~= nil and FieldPlannedCrop.isFarmyard(fieldId) then
+        return FieldPlannedCrop.buildFarmyardFieldRecord(fieldId, fieldName, posX, posZ, field.areaHa)
+    end
+
+    local fieldState = FieldAdvisor.getEnrichedFieldState(field, fieldId, posX, posZ)
+    local labels = FieldAdvisor.buildFieldLabels(field, fieldState, posX, posZ)
 
     local scsFieldId = nil
     if SeasonalCropStressReader ~= nil then
@@ -308,6 +478,7 @@ function FieldScanner:normalizeField(field, forceInclude)
         worldX = posX,
         worldZ = posZ,
         fruit = labels.fruit or "-",
+        plannedSow = FieldPlannedCrop ~= nil and FieldPlannedCrop.getDisplayLabel(fieldId) or "-",
         growthState = labels.growthState or "-",
         expectedHarvest = labels.expectedHarvest or "-",
         cropPhase = labels.cropPhase,
@@ -333,7 +504,15 @@ end
 ---@param fieldId number
 ---@return table|nil
 function FieldScanner:getEngineFieldById(fieldId)
-    if fieldId == nil or g_fieldManager == nil then
+    if fieldId == nil then
+        return nil
+    end
+
+    if FieldScanner.isFarmlandPseudoId(fieldId) then
+        return self:buildFarmlandPseudoFieldById(fieldId - FieldScanner.FARMLAND_PSEUDO_ID_OFFSET)
+    end
+
+    if g_fieldManager == nil then
         return nil
     end
 

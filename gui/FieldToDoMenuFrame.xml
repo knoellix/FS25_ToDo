@@ -72,19 +72,20 @@
 
                     <GuiElement profile="ftdlListHeaderRow" position="0px -40px">
                         <Text profile="ftdlColHeader" id="hdr_fieldName" position="4px 0px" size="44px 24px" text="$l10n_ftdl_col_field"/>
-                        <Text profile="ftdlColHeader" id="hdr_fruit" position="50px 0px" size="68px 24px" text="$l10n_ftdl_col_fruit"/>
-                        <Text profile="ftdlColHeader" id="hdr_growth" position="120px 0px" size="22px 24px" text="$l10n_ftdl_col_growth"/>
-                        <Text profile="ftdlColHeader" id="hdr_harvest" position="144px 0px" size="64px 24px" text="$l10n_ftdl_col_harvest"/>
-                        <Text profile="ftdlColHeader" id="hdr_weed" position="210px 0px" size="44px 24px" text="$l10n_ftdl_col_weed"/>
-                        <Text profile="ftdlColHeader" id="hdr_stones" position="256px 0px" size="48px 24px" text="$l10n_ftdl_col_stones"/>
-                        <Text profile="ftdlColHeader" id="hdr_lime" position="306px 0px" size="34px 24px" text="$l10n_ftdl_col_lime"/>
-                        <Text profile="ftdlColHeader" id="hdr_roller" position="342px 0px" size="38px 24px" text="$l10n_ftdl_col_roller"/>
-                        <Text profile="ftdlColHeader" id="hdr_ph" position="382px 0px" size="34px 24px" text="pH" visible="false"/>
-                        <Text profile="ftdlColHeader" id="hdr_nitrogen" position="418px 0px" size="34px 24px" text="N" visible="false"/>
-                        <Text profile="ftdlColHeader" id="hdr_moisture" position="454px 0px" size="40px 24px" text="$l10n_ftdl_col_moisture" visible="false"/>
-                        <Text profile="ftdlColHeader" id="hdr_stress" position="496px 0px" size="40px 24px" text="$l10n_ftdl_col_stress" visible="false"/>
-                        <Text profile="ftdlColHeader" id="hdr_cycleSuggestion" position="536px 0px" size="52px 24px" text="$l10n_ftdl_col_cycle"/>
-                        <Text profile="ftdlColHeader" id="hdr_suggestion" position="592px 0px" size="320px 24px" text="$l10n_ftdl_col_suggestion"/>
+                        <Text profile="ftdlColHeader" id="hdr_fruit" position="50px 0px" size="64px 24px" text="$l10n_ftdl_col_fruit"/>
+                        <Text profile="ftdlColHeader" id="hdr_plannedSow" position="116px 0px" size="50px 24px" text="$l10n_ftdl_col_plan"/>
+                        <Text profile="ftdlColHeader" id="hdr_growth" position="170px 0px" size="22px 24px" text="$l10n_ftdl_col_growth"/>
+                        <Text profile="ftdlColHeader" id="hdr_harvest" position="194px 0px" size="64px 24px" text="$l10n_ftdl_col_harvest"/>
+                        <Text profile="ftdlColHeader" id="hdr_weed" position="260px 0px" size="44px 24px" text="$l10n_ftdl_col_weed"/>
+                        <Text profile="ftdlColHeader" id="hdr_stones" position="306px 0px" size="48px 24px" text="$l10n_ftdl_col_stones"/>
+                        <Text profile="ftdlColHeader" id="hdr_lime" position="356px 0px" size="34px 24px" text="$l10n_ftdl_col_lime"/>
+                        <Text profile="ftdlColHeader" id="hdr_roller" position="392px 0px" size="38px 24px" text="$l10n_ftdl_col_roller"/>
+                        <Text profile="ftdlColHeader" id="hdr_ph" position="432px 0px" size="34px 24px" text="pH" visible="false"/>
+                        <Text profile="ftdlColHeader" id="hdr_nitrogen" position="468px 0px" size="34px 24px" text="N" visible="false"/>
+                        <Text profile="ftdlColHeader" id="hdr_moisture" position="504px 0px" size="40px 24px" text="$l10n_ftdl_col_moisture" visible="false"/>
+                        <Text profile="ftdlColHeader" id="hdr_stress" position="546px 0px" size="40px 24px" text="$l10n_ftdl_col_stress" visible="false"/>
+                        <Text profile="ftdlColHeader" id="hdr_cycleSuggestion" position="586px 0px" size="52px 24px" text="$l10n_ftdl_col_cycle"/>
+                        <Text profile="ftdlColHeader" id="hdr_suggestion" position="642px 0px" size="278px 24px" text="$l10n_ftdl_col_suggestion"/>
                     </GuiElement>
 
                     <GuiElement profile="ftdlListWrapper" position="0px -72px" width="920px" height="460px">
@@ -95,20 +96,22 @@
                             <ListItem profile="ftdlListRow" name="fieldRowTemplate" onClick="onClickFieldRow">
                                 <Bitmap profile="ftdlRowBg" name="alternating"/>
                                 <Text profile="ftdlCellSmall" name="fieldName" size="44px 30px" textLayoutMode="scrolling"/>
-                                <Text profile="ftdlCellSmallLeft" name="fruit" position="50px 0px" size="68px 30px" textLayoutMode="scrolling"/>
-                                <Text profile="ftdlCellSmall" name="growth" position="120px 0px" size="22px 30px"/>
-                                <Text profile="ftdlCellSmallLeft" name="harvest" position="144px 0px" size="64px 30px" textLayoutMode="scrolling"/>
-                                <Text profile="ftdlCellSmall" name="weed" position="210px 0px" size="44px 30px" textLayoutMode="scrolling"/>
-                                <Text profile="ftdlCellSmall" name="stones" position="256px 0px" size="48px 30px" textLayoutMode="scrolling"/>
-                                <Text profile="ftdlCellSmall" name="lime" position="306px 0px" size="34px 30px" textLayoutMode="scrolling"/>
-                                <Text profile="ftdlCellSmall" name="roller" position="342px 0px" size="38px 30px" textLayoutMode="scrolling"/>
-                                <Text profile="ftdlCellSmall" name="ph" position="382px 0px" size="34px 30px" visible="false"/>
-                                <Text profile="ftdlCellSmall" name="nitrogen" position="418px 0px" size="34px 30px" visible="false"/>
-                                <Text profile="ftdlCellSmall" name="moisture" position="454px 0px" size="40px 30px" visible="false"/>
-                                <Text profile="ftdlCellSmall" name="stress" position="496px 0px" size="40px 30px" visible="false"/>
-                                <Button profile="ftdlRowCycleHit" name="cycleSuggestion" position="536px 0px" onClick="onClickCycleFieldSuggestionInRow"/>
-                                <Text profile="ftdlCellSmall" name="cycleSuggestionLabel" position="536px 0px" size="40px 30px" text="&gt;"/>
-                                <Text profile="ftdlCellSmallLeft" name="suggestion" position="592px 0px" size="320px 30px" textLayoutMode="scrolling"/>
+                                <Text profile="ftdlCellSmallLeft" name="fruit" position="50px 0px" size="64px 30px" textLayoutMode="scrolling"/>
+                                <Text profile="ftdlCellSmallLeft" name="plannedSow" position="116px 0px" size="50px 30px" textLayoutMode="scrolling"/>
+                                <Text profile="ftdlCellSmall" name="growth" position="170px 0px" size="22px 30px"/>
+                                <Text profile="ftdlCellSmallLeft" name="harvest" position="194px 0px" size="64px 30px" textLayoutMode="scrolling"/>
+                                <Text profile="ftdlCellSmall" name="weed" position="260px 0px" size="44px 30px" textLayoutMode="scrolling"/>
+                                <Text profile="ftdlCellSmall" name="stones" position="306px 0px" size="48px 30px" textLayoutMode="scrolling"/>
+                                <Text profile="ftdlCellSmall" name="lime" position="356px 0px" size="34px 30px" textLayoutMode="scrolling"/>
+                                <Text profile="ftdlCellSmall" name="roller" position="392px 0px" size="38px 30px" textLayoutMode="scrolling"/>
+                                <Button profile="ftdlRowPlanHit" name="plannedSowHit" position="116px 0px" onClick="onClickPlannedSowInRow"/>
+                                <Text profile="ftdlCellSmall" name="ph" position="432px 0px" size="34px 30px" visible="false"/>
+                                <Text profile="ftdlCellSmall" name="nitrogen" position="468px 0px" size="34px 30px" visible="false"/>
+                                <Text profile="ftdlCellSmall" name="moisture" position="504px 0px" size="40px 30px" visible="false"/>
+                                <Text profile="ftdlCellSmall" name="stress" position="546px 0px" size="40px 30px" visible="false"/>
+                                <Button profile="ftdlRowCycleHit" name="cycleSuggestion" position="586px 0px" onClick="onClickCycleFieldSuggestionInRow"/>
+                                <Text profile="ftdlCellSmall" name="cycleSuggestionLabel" position="586px 0px" size="40px 30px" text="&gt;"/>
+                                <Text profile="ftdlCellSmallLeft" name="suggestion" position="642px 0px" size="278px 30px" textLayoutMode="scrolling"/>
                             </ListItem>
                         </SmoothList>
                         <Bitmap profile="fs25_secondaryMenuStartClipper" name="fieldListStart"/>
@@ -146,6 +149,10 @@
                     <Bitmap profile="ftdlMiniBtnBg" position="252px -616px"/>
                     <Text profile="ftdlMiniBtnText" position="252px -616px" text="$l10n_ftdl_btn_adopt"/>
                     <Button profile="ftdlMiniBtnHit" position="252px -616px" onClick="onClickAdoptFieldSuggestion"/>
+
+                    <Bitmap profile="ftdlMiniBtnBgWide" position="378px -616px"/>
+                    <Text profile="ftdlMiniBtnTextSmall" position="378px -616px" size="150px 34px" text="$l10n_ftdl_btn_planned_crop"/>
+                    <Button profile="ftdlMiniBtnHitWide" position="378px -616px" onClick="onClickSetPlannedCrop"/>
                 </GuiElement>
             </ThreePartBitmap>
 
@@ -225,6 +232,11 @@
             <textSize value="14px"/>
             <textAlignment value="left"/>
             <textColor value="$preset_colorWhite_50"/>
+        </Profile>
+
+        <Profile name="ftdlRowPlanHit" extends="emptyPanel" with="anchorStretchingYLeft">
+            <size value="50px 30px"/>
+            <isFocusable value="true"/>
         </Profile>
 
         <Profile name="ftdlRowCycleHit" extends="emptyPanel" with="anchorStretchingYLeft">

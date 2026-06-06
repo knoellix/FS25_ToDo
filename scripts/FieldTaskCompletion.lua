@@ -1,6 +1,9 @@
 --[[
     FieldTaskCompletion.lua
-    Modular auto-complete: vanilla-style field coverage (98%) vs point/grass-specific handlers.
+    Modular auto-complete: vanilla-style field coverage (98%) vs point/grass/straw handlers.
+
+    Point strategy (grass_mow, grass_bale*, straw_bale*): completion from FieldAdvisor context
+    (field-local bales, post-mow signals). No phase re-derivation here — see FieldAdvisor pipeline.
 ]]
 
 FieldTaskCompletion = {}
@@ -65,6 +68,9 @@ FieldTaskCompletion.REGISTRY = {
     grass_bale = { strategy = "point" },
     grass_silage_bale = { strategy = "point" },
     grass_bale_collect = { strategy = "point" },
+    -- Straw logistics (arable stubble): same field-local bale signal as grass, keyed on STRAW bales.
+    straw_bale = { strategy = "point" },
+    straw_bale_collect = { strategy = "point" },
 }
 
 --- Register or override a completion strategy (e.g. mod extensions, new fruit workflows).
@@ -371,6 +377,18 @@ function FieldTaskCompletion.isGrassLogisticsAction(actionType)
         or actionType == "grass_bale"
         or actionType == "grass_silage_bale"
         or actionType == "grass_bale_collect"
+        or actionType == "straw_bale"
+        or actionType == "straw_bale_collect"
+end
+
+---@param actionType string|nil
+---@return boolean
+function FieldTaskCompletion.isBaleAction(actionType)
+    return actionType == "grass_bale"
+        or actionType == "grass_silage_bale"
+        or actionType == "grass_bale_collect"
+        or actionType == "straw_bale"
+        or actionType == "straw_bale_collect"
 end
 
 ---@param actionMeta table|nil
@@ -408,9 +426,12 @@ function FieldTaskCompletion.isGrassLogisticsComplete(actionType, context, actio
     local baseline = actionMeta ~= nil and actionMeta.completionBaseline or nil
     local baselineBales = FieldTaskCompletion.getBaselineBaleCount(actionMeta)
 
-    if actionType == "grass_bale" or actionType == "grass_silage_bale" or actionType == "grass_bale_collect" then
+    if FieldTaskCompletion.isBaleAction(actionType) and field ~= nil and FieldAdvisor.sampleBaleCoverage ~= nil then
         local currentBales = FieldTaskCompletion.getContextBaleCount(context)
-        if currentBales <= baselineBales and field ~= nil and FieldAdvisor.sampleBaleCoverage ~= nil then
+        -- Re-sample for fresh counts when we don't yet see new bales, or for collect steps that
+        -- must confirm bales are gone.
+        if currentBales <= baselineBales
+            or actionType == "grass_bale_collect" or actionType == "straw_bale_collect" then
             local fieldId = context.fieldId
             if fieldId == nil and field.getId ~= nil then
                 fieldId = field:getId()
@@ -423,6 +444,16 @@ function FieldTaskCompletion.isGrassLogisticsComplete(actionType, context, actio
     end
 
     local baleCount = FieldTaskCompletion.getContextBaleCount(context)
+
+    if actionType == "straw_bale" then
+        local strawNow = FieldAdvisor.getTrackedBaleCountForAction(context.baleSummary, actionType)
+        local baselineStraw = baseline ~= nil and tonumber(baseline.baleStrawCount) or 0
+        return strawNow > baselineStraw
+    end
+
+    if actionType == "straw_bale_collect" then
+        return FieldAdvisor.getTrackedBaleCountForAction(context.baleSummary, actionType) <= 0
+    end
 
     if actionType == "grass_mow" then
         local aggregation = nil
@@ -462,7 +493,7 @@ function FieldTaskCompletion.isGrassLogisticsComplete(actionType, context, actio
     end
 
     if actionType == "grass_bale_collect" then
-        return baleCount <= 0
+        return FieldAdvisor.getTrackedBaleCountForAction(context.baleSummary, actionType) <= 0
     end
 
     return false

@@ -226,17 +226,27 @@ function FieldDebugDump.dumpField(fieldId)
         ))
     end
     dumpResidueRawScan(field, fieldState, worldX, worldZ, aggregation)
-    local baleSummary = context ~= nil and context.baleSummary or nil
-    if baleSummary ~= nil then
-        local mapBaleCount = nil
-        if FieldAdvisor.collectMapBaleObjects ~= nil then
-            mapBaleCount = #FieldAdvisor.collectMapBaleObjects()
-        end
+    -- Always sample bales here (independent of the grass/arable gate) so straw bales on any field
+    -- are visible for diagnosis, with the per-fill-type breakdown the auto-complete relies on.
+    if FieldAdvisor.sampleBaleCoverage ~= nil then
+        local mapBales = FieldAdvisor.collectMapBaleObjects ~= nil and FieldAdvisor.collectMapBaleObjects() or {}
+        local baleSummary = FieldAdvisor.sampleBaleCoverage(field, 0)
         out(string.format(
-            "baleCoverage: total=%s mapBales=%s",
-            stringify(baleSummary.total),
-            stringify(mapBaleCount)
+            "baleCoverage: total=%s straw=%s grass=%s other=%s mapBales=%s",
+            stringify(baleSummary.total), stringify(baleSummary.straw),
+            stringify(baleSummary.grass), stringify(baleSummary.other),
+            stringify(#mapBales)
         ))
+        for _, bale in ipairs(mapBales) do
+            local bx, bz = FieldAdvisor.getBaleWorldPosition(bale)
+            if bx ~= nil and FieldAdvisor.isBalePositionInsideField(field, bx, bz, worldX, worldZ) then
+                out(string.format(
+                    "  fieldBale: fillType=%s kind=%s pos=(%.1f,%.1f)",
+                    fillTypeName(FieldAdvisor.getBaleFillTypeIndex(bale)),
+                    stringify(FieldAdvisor.classifyBaleKind(bale)), bx, bz
+                ))
+            end
+        end
     end
     if weedSummary ~= nil then
         out(string.format(
@@ -334,6 +344,58 @@ function FieldDebugDump.dumpFruitTypes()
     return true
 end
 
+--- Lists owned farmlands and flags the ones eligible as pseudo-fields (no predefined field,
+--- indicator position known, center reads as field ground). Diagnoses the opt-in custom-field path.
+---@return boolean
+function FieldDebugDump.dumpOwnedFarmlands()
+    if g_farmlandManager == nil or g_farmlandManager.farmlands == nil then
+        out("g_farmlandManager not ready.")
+        return false
+    end
+
+    local farmId = g_currentMission ~= nil and g_currentMission.getFarmId ~= nil
+        and g_currentMission:getFarmId() or nil
+
+    out(string.format("===== OWNED FARMLANDS (farmId=%s) =====", stringify(farmId)))
+
+    local scanner = g_currentMission ~= nil and g_currentMission.fieldToDoList ~= nil
+        and g_currentMission.fieldToDoList.fieldScanner or nil
+
+    local ownedIds = nil
+    if farmId ~= nil and g_farmlandManager.getOwnedFarmlandIdsByFarmId ~= nil then
+        local ok, ids = pcall(g_farmlandManager.getOwnedFarmlandIdsByFarmId, g_farmlandManager, farmId)
+        if ok and type(ids) == "table" then
+            ownedIds = ids
+        end
+    end
+    if ownedIds == nil then
+        ownedIds = {}
+        for id in pairs(g_farmlandManager.farmlands) do
+            ownedIds[#ownedIds + 1] = id
+        end
+    end
+
+    for _, id in pairs(ownedIds) do
+        local farmland = g_farmlandManager.farmlands[id]
+        if farmland ~= nil then
+            local hasField = farmland.field ~= nil
+            local px, pz = farmland.xWorldPos, farmland.zWorldPos
+            local eligible = "false"
+            if not hasField and px ~= nil and scanner ~= nil and scanner.farmlandCenterIsFieldGround ~= nil then
+                eligible = stringify(scanner:farmlandCenterIsFieldGround(px, pz))
+            end
+            out(string.format(
+                "farmland id=%s name=%s areaHa=%s hasField=%s pos=(%s,%s) -> pseudoFieldEligible=%s",
+                stringify(id), stringify(farmland.name), stringify(farmland.areaInHa),
+                stringify(hasField), stringify(px), stringify(pz), eligible
+            ))
+        end
+    end
+
+    out("===== END OWNED FARMLANDS =====")
+    return true
+end
+
 ---@param ownedFields table[]|nil
 function FieldDebugDump.dumpAllOwnedFields(ownedFields)
     if ownedFields == nil or #ownedFields == 0 then
@@ -370,12 +432,20 @@ function FieldDebugDump:consoleFruits()
     return "Fruit type dump failed."
 end
 
+function FieldDebugDump:consoleFarmlands()
+    if FieldDebugDump.dumpOwnedFarmlands() then
+        return "Owned farmlands dumped to log.txt (search '[FS25_FieldToDoList] DUMP')."
+    end
+    return "Farmland dump failed — see log.txt."
+end
+
 function FieldDebugDump.register()
     if addConsoleCommand == nil then
         return
     end
     addConsoleCommand("ftdlDump", "Dump one field's runtime data: ftdlDump <fieldId>", "consoleDump", FieldDebugDump)
     addConsoleCommand("ftdlFruits", "List fruit types with harvest growth states", "consoleFruits", FieldDebugDump)
+    addConsoleCommand("ftdlFarmlands", "List owned farmlands and pseudo-field eligibility", "consoleFarmlands", FieldDebugDump)
 end
 
 function FieldDebugDump.unregister()
@@ -384,5 +454,6 @@ function FieldDebugDump.unregister()
     end
     removeConsoleCommand("ftdlDump")
     removeConsoleCommand("ftdlFruits")
+    removeConsoleCommand("ftdlFarmlands")
     FieldDebugDump.lastDumpedFieldId = nil
 end

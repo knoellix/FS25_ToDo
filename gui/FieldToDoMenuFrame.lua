@@ -34,6 +34,8 @@ function FieldToDoMenuFrame.new()
     self.deletingTaskId = nil
     self.pendingFieldForPicker = nil
     self.pendingFieldTaskActions = nil
+    self.pendingFieldForPlannedCrop = nil
+    self.pendingPlannedCropEntries = nil
     self.listRefreshTimer = 0
     self.showPrecisionFarming = false
     self.showCropStress = false
@@ -672,6 +674,21 @@ function FieldToDoMenuFrame:populateCellForItemInSection(list, section, index, c
 
         cell:getAttribute("fieldName"):setText(field.name)
         cell:getAttribute("fruit"):setText(field.fruit)
+        local plannedElement = cell:getAttribute("plannedSow")
+        if plannedElement ~= nil then
+            plannedElement:setText(field.plannedSow or "-")
+        end
+
+        local plannedHit = cell:getAttribute("plannedSowHit")
+        if plannedHit ~= nil then
+            plannedHit.ftdlFieldId = field.id
+            if plannedHit.setToolTipText ~= nil then
+                plannedHit:setToolTipText(FieldToDoL10n.getText(
+                    "ftdl_btn_planned_crop",
+                    "Planfrucht"
+                ))
+            end
+        end
         cell:getAttribute("growth"):setText(field.growthState)
         cell:getAttribute("harvest"):setText(field.expectedHarvest or "-")
         cell:getAttribute("weed"):setText(field.weed or "-")
@@ -1056,6 +1073,165 @@ function FieldToDoMenuFrame:onClickAdoptFieldSuggestion()
 
     self.selectedTaskId = task.id
     self:refreshManualTaskList(false, true)
+end
+
+---@param field table|nil
+function FieldToDoMenuFrame:openPlannedCropPicker(field)
+    if field == nil then
+        InfoDialog.show(FieldToDoL10n.getText(
+            "ftdl_info_select_field_overview",
+            "Bitte zuerst eine Feldzeile in der Feldübersicht anklicken."
+        ))
+        return
+    end
+
+    if FieldPlannedCrop == nil or FieldPlannedCrop.buildPickerOptions == nil then
+        return
+    end
+
+    local entries, texts = FieldPlannedCrop.buildPickerOptions()
+    if entries == nil or texts == nil or #texts == 0 then
+        return
+    end
+
+    local defaultIndex = 1
+    local currentValue = FieldPlannedCrop.getRaw(field.id)
+    if currentValue ~= nil then
+        for index, entry in ipairs(entries) do
+            if entry.fruitTypeIndex == currentValue then
+                defaultIndex = index
+                break
+            end
+        end
+    end
+
+    self.pendingFieldForPlannedCrop = field
+    self.pendingPlannedCropEntries = entries
+
+    local title = FieldToDoL10n.getText(
+        "ftdl_dialog_planned_crop_title",
+        "Planfrucht für %s",
+        field.name
+    )
+
+    if OptionDialog == nil or OptionDialog.show == nil then
+        self.pendingFieldForPlannedCrop = nil
+        self.pendingPlannedCropEntries = nil
+        return
+    end
+
+    -- Second arg must be nil — passing self renders as "table: 0x..." subtitle in FS25.
+    local boundCallback = function(...)
+        return self:onPlannedCropPicked(...)
+    end
+    OptionDialog.show(boundCallback, nil, title, texts, defaultIndex)
+end
+
+function FieldToDoMenuFrame:onClickSetPlannedCrop()
+    self:openPlannedCropPicker(self:getSelectedField())
+end
+
+function FieldToDoMenuFrame:onClickPlannedSowInRow(element)
+    local fieldId = self:resolveFieldIdFromGuiElement(element)
+    local field = self:getFieldById(fieldId)
+    if field == nil then
+        field = self:getSelectedField()
+    end
+
+    if field == nil then
+        return
+    end
+
+    self.selectedFieldId = field.id
+    self:openPlannedCropPicker(field)
+end
+
+---@param ... any
+function FieldToDoMenuFrame:onPlannedCropPicked(...)
+    local field = self.pendingFieldForPlannedCrop
+    local entries = self.pendingPlannedCropEntries
+
+    if field == nil or entries == nil or #entries == 0 then
+        return
+    end
+
+    local selectedIndex = nil
+    local selectedText = nil
+    local accepted = true
+    for i = 1, select("#", ...) do
+        local value = select(i, ...)
+        if type(value) == "number" then
+            selectedIndex = math.floor(value)
+        elseif type(value) == "string" then
+            selectedText = value
+        elseif type(value) == "boolean" then
+            accepted = value
+        elseif type(value) == "table" then
+            selectedIndex = selectedIndex
+                or tonumber(value.selectedIndex)
+                or tonumber(value.selectedOption)
+                or tonumber(value.index)
+                or tonumber(value.state)
+
+            if value.accepted ~= nil then
+                accepted = value.accepted == true
+            elseif value.clickOk ~= nil then
+                accepted = value.clickOk == true
+            end
+        end
+    end
+
+    if selectedIndex == nil and not string.isNilOrWhitespace(selectedText) then
+        for index, entry in ipairs(entries) do
+            if entry.label == selectedText then
+                selectedIndex = index
+                break
+            end
+        end
+    end
+
+    if not accepted then
+        self.pendingFieldForPlannedCrop = nil
+        self.pendingPlannedCropEntries = nil
+        return
+    end
+
+    if selectedIndex == nil then
+        return
+    end
+
+    if selectedIndex < 1 then
+        selectedIndex = selectedIndex + 1
+    end
+
+    local entry = entries[selectedIndex]
+    if entry == nil then
+        return
+    end
+
+    self.pendingFieldForPlannedCrop = nil
+    self.pendingPlannedCropEntries = nil
+
+    local manager = self:getManager()
+    if manager == nil or manager.setFieldPlannedSowFruit == nil then
+        return
+    end
+
+    manager:setFieldPlannedSowFruit(field.id, entry.fruitTypeIndex)
+
+    if self.fieldSuggestionIndexByFieldId ~= nil then
+        self.fieldSuggestionIndexByFieldId[field.id] = nil
+    end
+
+    if manager.refreshFieldRecordSync ~= nil then
+        manager:refreshFieldRecordSync(field.id)
+    end
+
+    self.ownedFields = manager:getOwnedFields()
+
+    if self.fieldList ~= nil then
+        self.fieldList:reloadData()
+    end
 end
 
 function FieldToDoMenuFrame:resetFieldSuggestionIndices()

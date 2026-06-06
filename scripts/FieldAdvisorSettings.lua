@@ -12,7 +12,7 @@ FieldAdvisorSettings.PRESETS = {
         labelKey = "ftdl_preset_standard",
         label = "Pflügen → Kalk → Säen → Düngen",
         order = {
-            "harvest", "mulch", "stones", "cultivate", "plow", "roller", "lime", "pf_ph", "sow", "pf_n",
+            "harvest", "mulch", "straw_bale", "straw_bale_collect", "stones", "cultivate", "plow", "roller", "lime", "pf_ph", "sow", "pf_n",
             "weed_hoe", "weed_combat", "weed_watch", "scs_moisture", "scs_stress_high", "scs_stress_watch",
             "grass_swath", "grass_collect", "grass_bale", "grass_silage_bale", "grass_bale_collect", "grass_mow",
             "harvest_info", "growing", "none",
@@ -22,7 +22,7 @@ FieldAdvisorSettings.PRESETS = {
         labelKey = "ftdl_preset_lime_before_plow",
         label = "Kalk → Pflügen → Säen → Düngen",
         order = {
-            "harvest", "mulch", "stones", "cultivate", "lime", "plow", "roller", "pf_ph", "sow", "pf_n",
+            "harvest", "mulch", "straw_bale", "straw_bale_collect", "stones", "cultivate", "lime", "plow", "roller", "pf_ph", "sow", "pf_n",
             "weed_hoe", "weed_combat", "weed_watch", "scs_moisture", "scs_stress_high", "scs_stress_watch",
             "grass_swath", "grass_collect", "grass_bale", "grass_silage_bale", "grass_bale_collect", "grass_mow",
             "harvest_info", "growing", "none",
@@ -32,7 +32,7 @@ FieldAdvisorSettings.PRESETS = {
         labelKey = "ftdl_preset_fert_before_sow",
         label = "Düngen → Pflügen → Kalk → Säen",
         order = {
-            "harvest", "mulch", "stones", "cultivate", "plow", "roller", "pf_ph", "pf_n", "lime", "sow",
+            "harvest", "mulch", "straw_bale", "straw_bale_collect", "stones", "cultivate", "plow", "roller", "pf_ph", "pf_n", "lime", "sow",
             "weed_hoe", "weed_combat", "weed_watch", "scs_moisture", "scs_stress_high", "scs_stress_watch",
             "grass_swath", "grass_collect", "grass_bale", "grass_silage_bale", "grass_bale_collect", "grass_mow",
             "harvest_info", "growing", "none",
@@ -42,7 +42,7 @@ FieldAdvisorSettings.PRESETS = {
         labelKey = "ftdl_preset_sow_before_fert",
         label = "Pflügen → Kalk → Säen → N-Düngen",
         order = {
-            "harvest", "mulch", "stones", "cultivate", "plow", "roller", "lime", "sow", "pf_ph", "pf_n",
+            "harvest", "mulch", "straw_bale", "straw_bale_collect", "stones", "cultivate", "plow", "roller", "lime", "sow", "pf_ph", "pf_n",
             "weed_hoe", "weed_combat", "weed_watch", "scs_moisture", "scs_stress_high", "scs_stress_watch",
             "grass_swath", "grass_collect", "grass_bale", "grass_silage_bale", "grass_bale_collect", "grass_mow",
             "harvest_info", "growing", "none",
@@ -52,7 +52,7 @@ FieldAdvisorSettings.PRESETS = {
         labelKey = "ftdl_preset_soil_then_fert",
         label = "Bodenarbeit → Säen → Düngen",
         order = {
-            "harvest", "mulch", "stones", "cultivate", "lime", "plow", "roller", "pf_ph", "sow", "pf_n",
+            "harvest", "mulch", "straw_bale", "straw_bale_collect", "stones", "cultivate", "lime", "plow", "roller", "pf_ph", "sow", "pf_n",
             "weed_hoe", "weed_combat", "weed_watch", "scs_moisture", "scs_stress_high", "scs_stress_watch",
             "grass_swath", "grass_collect", "grass_bale", "grass_silage_bale", "grass_bale_collect", "grass_mow",
             "harvest_info", "growing", "none",

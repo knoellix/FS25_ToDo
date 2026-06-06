@@ -4,7 +4,7 @@
 
 **Author:** Christian Möllmann ([knoellix](https://github.com/knoellix))  
 **License:** [GNU GPL v3](LICENSE)  
-**Version:** `0.1.0.5` (pre-release)
+**Version:** `0.1.0.6`
 
 ## Features
 
@@ -15,7 +15,9 @@
 - **List order:** `Hoch` / `Runter` mini buttons (`^` / `v`) move the selected task (no drag-and-drop in the Giants UI)
 - **Done behavior:** completed tasks are grouped below open tasks; newly completed go to the top of the done group; max 10 completed (oldest pruned)
 - **Selection UX:** after move, the moved task stays selected; after delete, selection is cleared
-- **Harvest hints:** field suggestion column shows month labels instead of ambiguous month counts
+- **Planned crop:** set per field (**Plan** column / **Planned crop** button) — sow suggestions with crop name and sow month; **Farmyard** skips field scans
+- **Harvest column:** status only (Growing, Regrowth, Mow …); **harvest month** in the suggestion column
+- **Straw bales:** press/collect on cereal stubble (type-aware auto-complete)
 - **Field overview:** multi-probe classification (crop, growth, harvest month, grass logistics) — not a single center sample
 - **Grass logistics:** post-mow chain (swath → collect / bale → bale collect) from live residue signals
 - **Save data:** `fieldToDoList.xml` in the savegame folder (tasks debounced ~2 s after edits; settings saved immediately)
@@ -87,7 +89,7 @@ Works on **Windows, macOS, and Linux**. Use when a field shows wrong crop, harve
 | macOS | `~/Library/Application Support/FarmingSimulator2025/log.txt` |
 | Linux (Steam) | `~/.local/share/Steam/steamapps/compatdata/2300320/pfx/drive_c/users/steamuser/Documents/My Games/FarmingSimulator2025/log.txt` |
 
-Search for `[FS25_FieldToDoList] DUMP`. Useful lines: `meadowPhase`, `grassResidue`, `grassCrossScan`, `heightReader`, `harvestState`, `aggregation`.
+Search for `[FS25_FieldToDoList] DUMP`. Useful lines: `meadowPhase`, `grassResidue`, `baleCoverage`, `weedCoverage`, `harvestState`, `aggregation`.
 
 Example:
 
@@ -114,12 +116,22 @@ Use issue templates for bug reports, feature requests, and translations:
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
-**0.1.0.5** — incremental field scan and scan status; multi-probe field advisor (crop, growth, harvest, grass logistics); windrow/residue detection; menu and task-list performance; targeted row refresh and 15 s passive rescan.
+**0.1.0.6** — planned crop / farmyard, straw bales, harvest column split, bale auto-complete fixes, mulching step.
 
-## Current Work In Progress
+## Known limitations
 
-- Auto-completion still needs broader real-save testing (especially organic multi-pass and mod fruits).
-- Optional mod columns (Seasonal Crop Stress) remain partial.
+Full regression checklist: [`docs/REGRESSION.md`](docs/REGRESSION.md). Architecture: [`docs/FIELD_PHASE.md`](docs/FIELD_PHASE.md).
+
+| Area | Works | Manual / not detectable |
+| ---- | ----- | ----------------------- |
+| **Grass after mowing** | Bale press/collect (auto via field bales) | Loose swath/hay on ground not readable → swath/loader steps are reminders only |
+| **Straw after harvest** | Straw bale detect, press/collect (auto via STRAW bales) | Loose straw not readable → press step completes only when bales appear |
+| **Mulching** | Suggestion after harvest (optional menu toggle) | No readable mulched state → never auto-completed |
+| **Weeds** | Hoe/spray, done when dead (coverage) | — |
+| **Custom fields** | Owned farmland without engine field ID (pseudo-fields) | Only when field center shows field ground |
+| **Planned crop / farmyard** | Sow month in suggestions; farmyard = no field scan | Planned crop does not replace the current crop column |
+
+Debug: `ftdlDump <fieldId>` — line `baleCoverage: total/straw/grass/other` for bale diagnosis.
 
 ## License
 
