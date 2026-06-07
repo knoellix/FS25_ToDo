@@ -210,15 +210,22 @@ end
 ---@return table[]
 function FieldTaskCompletion.collectSamplePoints(field, centerX, centerZ, gridSteps)
     local points = {}
-    points[#points + 1] = { x = centerX, z = centerZ }
 
-    local areaHa = tonumber(field ~= nil and field.areaHa) or 0
-    if areaHa <= 0 then
+    if field == nil or FieldAdvisor == nil then
         return points
     end
 
-    local areaM2 = areaHa * 10000
-    local halfExtent = math.max(8, math.sqrt(areaM2) * 0.45)
+    if FieldAdvisor.isPositionInsideField(field, centerX, centerZ) then
+        points[#points + 1] = { x = centerX, z = centerZ }
+    end
+
+    local extentX = FieldAdvisor.measureFieldAxisHalfExtent(field, centerX, centerZ, 1, 0)
+    local extentZ = FieldAdvisor.measureFieldAxisHalfExtent(field, centerX, centerZ, 0, 1)
+    local halfExtent = math.max(extentX, extentZ)
+    if halfExtent <= 0 then
+        return points
+    end
+
     local steps = math.max(1, tonumber(gridSteps) or FieldTaskCompletion.getSampleGridSteps())
 
     for ix = -steps, steps do
@@ -226,7 +233,7 @@ function FieldTaskCompletion.collectSamplePoints(field, centerX, centerZ, gridSt
             if not (ix == 0 and iz == 0) then
                 local sampleX = centerX + (ix / steps) * halfExtent
                 local sampleZ = centerZ + (iz / steps) * halfExtent
-                if FieldAdvisor.isPositionInsideFieldOrUnknown(field, sampleX, sampleZ) then
+                if FieldAdvisor.isPositionInsideField(field, sampleX, sampleZ) then
                     points[#points + 1] = { x = sampleX, z = sampleZ }
                 end
             end

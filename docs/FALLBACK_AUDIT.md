@@ -31,20 +31,13 @@ Zweck: Transparent machen, **wo noch Heuristiken** laufen — und **was verboten
 
 ## Noch offen — Priorität zum Abbau
 
-### P1 — Feldgrenzen (`isPositionInsideFieldOrUnknown`)
+### P1 — Feldgrenzen — **erledigt (2026-06-07)**
 
-**Problem:** `nil` vom Polygon-Test wird als **inside** gewertet → Proben außerhalb des Feldes, unscharfe Aggregation, verwaschene Logs.
+**War:** `isPositionInsideFieldOrUnknown` — `nil` ⇒ inside; `measureFieldAxisHalfExtent` / `getFieldSampleHalfExtent` / `collectSamplePoints` nutzten areaHa-Raten.
 
-| Aufrufer | Datei | Zweck |
-|----------|-------|--------|
-| `aggregateFieldProbes` / Probe-Gitter | FieldAdvisor | Übersichts-Scan |
-| `deriveGrassResidueSummary` / `deriveStrawResidueSummary` Kreuzproben | FieldAdvisor | Windrow-Liter |
-| `measureFieldAxisHalfExtent` | FieldAdvisor | Feldgröße (areaHa-Raten wenn Walk = 0) |
-| `sampleWeedCoverage` / Completion-Proben | FieldTaskCompletion | Unkraut / Auto-Erledigen |
+**Jetzt:** `isPositionInsideFieldOrUnknown` **gelöscht**. Ein Gate: `isPositionInsideField` (nur `testPositionInsideField == true`). Feldgröße für Proben nur noch über Polygon-Walk (`measureFieldAxisHalfExtent`), kein areaHa-Raten-Fallback.
 
-**Ziel:** Nur `isPositionInsideField` (strict: `false` oder `true`, `nil` ⇒ Probe **überspringen**). Kein areaHa-Raten in `measureFieldAxisHalfExtent` für Entscheidungen.
-
-**Entscheidende künftige Funktion:** `isProbePositionOnField(field, x, z)` — ein Gate für alle Scan-Pfade.
+**Entscheidende Funktion:** `isPositionInsideField`.
 
 ---
 
@@ -102,8 +95,8 @@ Mehrstufige Auflösung (`resolveFruitTypeIndex`, `inferGrassFruitTypeIndexFromFi
 
 ---
 
-## Nächster konkreter Schritt (Vorschlag)
+## Nächster konkreter Schritt
 
-**P1:** `isPositionInsideFieldOrUnknown` aus Probe-/Residue-Pfaden entfernen (strict only) — ein Commit, ein Testlauf, `ftdlDump` aller Felder diffen gegen `expected_before`.
+**P2:** `resolveEngineFieldAtWorldPosition` — `engineFieldSource` im Dump loggen (keine stille API-Kette).
 
-Kein neues Feature, bis P1+P2 im Log nachvollziehbar sind.
+Nach P2: `ftdlDump` aller Felder diffen gegen `expected_before`.

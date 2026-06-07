@@ -15,6 +15,8 @@ Datum  Thema: Regel (kurz, technisch).
 
 ## Einträge
 
+2026-06-07  **Feldgrenzen strict (P1)** — `isPositionInsideFieldOrUnknown` gelöscht. Proben/Residue/Completion nur wenn Engine-Polygon `true` meldet; `nil`/`false` ⇒ Probe weg. Feldgröße für Sample-Gitter: `measureFieldAxisHalfExtent` (Polygon-Walk), kein areaHa-Raten. Entscheidende Funktion: `isPositionInsideField`.
+
 2026-06-07  **Keine Fallback-Kaskaden** — Wenn die Engine an einer Position nichts liefert: **nicht raten** (keine Bbox, kein Nächstes-Zentrum, kein `unknown⇒inside`). Eine Entscheidungsfunktion, eine Datenquelle; Dump zeigt Quelle + Ergebnis. Inventar offener Stellen: `docs/FALLBACK_AUDIT.md`. Ballen: `resolveBaleOwnerFieldId` (Engine-Feld + Owner-Polygon).
 
 2026-06-06  **Gras lose vs. Schwad** — `deriveGrassResidueSummary` + `classifyGrassMaterialLayout`: gleiche Liter-API (`callFillLevelAtArea`), aber **Layout** entlang E–W/N–S-Kreuz (Übergänge/Abdeckung). Uniform viele heiße Proben ⇒ `loose` (gemäht, noch nicht geschwadet) ⇒ Kette ab Schwaden; rowige Linien ⇒ `swath` ⇒ Sammeln/Ballen; Ballen ⇒ `BALED`. Stroh bleibt liter-only. Entscheidende Funktion: `classifyGrassMaterialLayout` (nur von `deriveGrassResidueSummary` aufgerufen).

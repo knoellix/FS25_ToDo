@@ -94,7 +94,7 @@ Quelle: `FieldAdvisor.lua` (202 Funktionen), Aufrufer aus `scripts/`+`gui/`. Zei
 
 > **Status 2026-06-07:** `deriveGrassResidueSummary` + `classifyGrassMaterialLayout`: gleiche Liter-API wie Stroh; Layout ⇒ `loose` | `swath` | `none`; Ballen ⇒ `BALED`.
 > **`addGrassWorkActions` cut:** `loose`/`none` → Kette ab Schwaden; `swath` → Sammeln/Ballen; Ballen → einsammeln.
-> Offen: Probe-Gate nutzt noch `isPositionInsideFieldOrUnknown` — siehe `FALLBACK_AUDIT.md` P1.
+> Probe-Gate: `isPositionInsideField` only (P1 erledigt 2026-06-07, `FALLBACK_AUDIT.md`).
 > Alte Density-Map-Fusion (~1380 Zeilen) bleibt gelöscht.
 
 | Funktion | Status |

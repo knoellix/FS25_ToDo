@@ -1081,7 +1081,7 @@ function FieldAdvisor.aggregateFieldProbes(field, fieldId, centerState, worldX, 
         end
 
         for _, point in ipairs(points) do
-            if FieldAdvisor.isPositionInsideFieldOrUnknown(field, point.x, point.z) then
+            if FieldAdvisor.isPositionInsideField(field, point.x, point.z) then
                 local isCenter = point.x == worldX and point.z == worldZ
                 if not isCenter then
                     local sampleState = FieldAdvisor.getEnrichedFieldState(field, fieldId, point.x, point.z)
@@ -1966,7 +1966,7 @@ function FieldAdvisor.sampleWeedCoverage(field, fieldId, worldX, worldZ, aggrega
         and aggregation.dominantSituation == FieldAdvisor.PROBE_SITUATION.GRASS
 
     for _, point in ipairs(points) do
-        if FieldAdvisor.isPositionInsideFieldOrUnknown(field, point.x, point.z) then
+        if FieldAdvisor.isPositionInsideField(field, point.x, point.z) then
             local sampleState = FieldAdvisor.getEnrichedFieldState(field, fieldId, point.x, point.z)
             if skipGrassProbes
                 and FieldAdvisor.classifyProbe(sampleState, field) == FieldAdvisor.PROBE_SITUATION.GRASS then
@@ -2305,7 +2305,7 @@ function FieldAdvisor.measureFieldAxisHalfExtent(field, centerX, centerZ, dirX, 
     local maxDist = 0
     local step = 3
     for dist = step, 320, step do
-        if FieldAdvisor.isPositionInsideFieldOrUnknown(field, centerX + dirX * dist, centerZ + dirZ * dist) then
+        if FieldAdvisor.isPositionInsideField(field, centerX + dirX * dist, centerZ + dirZ * dist) then
             maxDist = dist
         else
             break
@@ -2313,21 +2313,14 @@ function FieldAdvisor.measureFieldAxisHalfExtent(field, centerX, centerZ, dirX, 
     end
 
     for dist = step, 320, step do
-        if FieldAdvisor.isPositionInsideFieldOrUnknown(field, centerX - dirX * dist, centerZ - dirZ * dist) then
+        if FieldAdvisor.isPositionInsideField(field, centerX - dirX * dist, centerZ - dirZ * dist) then
             maxDist = math.max(maxDist, dist)
         else
             break
         end
     end
 
-    if maxDist <= 0 then
-        local areaHa = tonumber(field.areaHa) or 0
-        if areaHa > 0 then
-            maxDist = math.max(8, math.sqrt(areaHa * 10000) * 0.48)
-        end
-    end
-
-    return math.max(6, maxDist)
+    return maxDist
 end
 
 --- Standing meadow/grass crop (not post-mow logistics).
@@ -2762,7 +2755,7 @@ function FieldAdvisor.deriveGrassResidueSummary(field, fieldId, worldX, worldZ, 
     for step = -lineSteps, lineSteps do
         local t = step / lineSteps
         local xEw = worldX + t * halfExtent
-        if FieldAdvisor.isPositionInsideFieldOrUnknown(field, xEw, worldZ) then
+        if FieldAdvisor.isPositionInsideField(field, xEw, worldZ) then
             ewSamples[#ewSamples + 1] = FieldAdvisor.callFillLevelAtArea(
                 windrowFillIndex,
                 xEw - halfSize, worldZ - halfSize,
@@ -2772,7 +2765,7 @@ function FieldAdvisor.deriveGrassResidueSummary(field, fieldId, worldX, worldZ, 
         end
 
         local zNs = worldZ + t * halfExtent
-        if FieldAdvisor.isPositionInsideFieldOrUnknown(field, worldX, zNs) then
+        if FieldAdvisor.isPositionInsideField(field, worldX, zNs) then
             nsSamples[#nsSamples + 1] = FieldAdvisor.callFillLevelAtArea(
                 windrowFillIndex,
                 worldX - halfSize, zNs - halfSize,
@@ -2847,11 +2840,14 @@ end
 ---@param field table|nil
 ---@return number
 function FieldAdvisor.getFieldSampleHalfExtent(field)
-    local areaHa = tonumber(field ~= nil and field.areaHa) or 0
-    if areaHa <= 0 then
-        return 12
+    local centerX, centerZ = FieldAdvisor.getFieldCenterWorldPosition(field)
+    if centerX == nil or centerZ == nil then
+        return 0
     end
-    return math.max(8, math.sqrt(areaHa * 10000) * 0.45)
+
+    local extentX = FieldAdvisor.measureFieldAxisHalfExtent(field, centerX, centerZ, 1, 0)
+    local extentZ = FieldAdvisor.measureFieldAxisHalfExtent(field, centerX, centerZ, 0, 1)
+    return math.max(extentX, extentZ)
 end
 
 --- Single decision for straw windrows: STRAW liters from DensityMapHeightUtil.getFillLevelAtArea only.
@@ -2919,7 +2915,7 @@ function FieldAdvisor.deriveStrawResidueSummary(field, fieldId, worldX, worldZ, 
     for step = -lineSteps, lineSteps do
         local t = step / lineSteps
         local xEw = worldX + t * halfExtent
-        if FieldAdvisor.isPositionInsideFieldOrUnknown(field, xEw, worldZ) then
+        if FieldAdvisor.isPositionInsideField(field, xEw, worldZ) then
             local liters = FieldAdvisor.callFillLevelAtArea(
                 strawFillIndex,
                 xEw - halfSize, worldZ - halfSize,
@@ -2932,7 +2928,7 @@ function FieldAdvisor.deriveStrawResidueSummary(field, fieldId, worldX, worldZ, 
         end
 
         local zNs = worldZ + t * halfExtent
-        if FieldAdvisor.isPositionInsideFieldOrUnknown(field, worldX, zNs) then
+        if FieldAdvisor.isPositionInsideField(field, worldX, zNs) then
             local liters = FieldAdvisor.callFillLevelAtArea(
                 strawFillIndex,
                 worldX - halfSize, zNs - halfSize,
@@ -5315,7 +5311,7 @@ function FieldAdvisor.fieldHasPartialSoilWork(field, fieldId, fieldState, worldX
     local workedCount = 0
 
     for _, point in ipairs(points) do
-        if FieldAdvisor.isPositionInsideFieldOrUnknown(field, point.x, point.z) then
+        if FieldAdvisor.isPositionInsideField(field, point.x, point.z) then
             local sampleState = FieldAdvisor.getEnrichedFieldState(field, fieldId, point.x, point.z)
             local situation = FieldAdvisor.classifyProbe(sampleState, field)
             if situation == FieldAdvisor.PROBE_SITUATION.GRASS then
@@ -6867,26 +6863,14 @@ function FieldAdvisor.testPositionInsideField(field, x, z)
     return nil
 end
 
---- Strict inside test for bales — unknown positions are treated as outside.
+--- Single field-boundary gate: engine polygon must return true (nil/false => outside).
+--- Used for probes, residue cross-samples, completion grids, and bale assignment polygon check.
 ---@param field table|nil
 ---@param x number
 ---@param z number
 ---@return boolean
 function FieldAdvisor.isPositionInsideField(field, x, z)
     return FieldAdvisor.testPositionInsideField(field, x, z) == true
-end
-
---- Permissive inside test for field-local scans — unknown keeps legacy behaviour when polygon test is unavailable.
----@param field table|nil
----@param x number
----@param z number
----@return boolean
-function FieldAdvisor.isPositionInsideFieldOrUnknown(field, x, z)
-    local inside = FieldAdvisor.testPositionInsideField(field, x, z)
-    if inside == nil then
-        return true
-    end
-    return inside
 end
 
 ---@param field table|nil
