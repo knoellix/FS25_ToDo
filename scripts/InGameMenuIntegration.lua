@@ -2,6 +2,9 @@
     InGameMenuIntegration.lua
     Registers the field overview / To-Do page in the ESC in-game menu.
     Registration runs after mission load (CropStress pattern), not at mod parse time.
+
+    Forwards updateMenuFrame -> FieldToDoMenuFrame:onFrameUpdate while the tab is visible
+    (vanilla InGameMenu does not tick custom tab pages). syncFieldListFromScan after scan batches.
 ]]
 
 FieldToDoInGameMenuIntegration = {}

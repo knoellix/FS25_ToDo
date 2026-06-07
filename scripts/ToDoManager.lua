@@ -1,6 +1,11 @@
 --[[
     ToDoManager.lua
     Manual task storage, savegame I/O hooks, and mod lifecycle.
+
+    Two update paths (do not merge):
+      Overview scan — incremental owned-fields fill-in while menu tab is open (tickOwnedFieldsScan).
+      Auto-complete — updateAutoCompletion ~1 s; only fields with open trackable tasks; on complete
+        refresh that row via refreshFieldRecordSync (not a full cache invalidate).
 ]]
 
 ---@class ToDoManager
@@ -581,6 +586,7 @@ function ToDoManager:runOwnedFieldsScanImmediate()
     end
 end
 
+--- Re-probe one overview row after auto-complete (or task adopt on a pending placeholder).
 ---@param fieldId number|nil
 ---@return table|nil
 function ToDoManager:refreshFieldRecordSync(fieldId)
@@ -738,7 +744,7 @@ end
 
 ---@param fieldRecord table
 ---@param action table|nil
----@param allowUntrackable boolean|nil
+---@param allowUntrackable boolean|nil manual reminders (grass_swath/collect) bypass not_trackable gate
 ---@return table|nil task
 ---@return string|nil errorKey
 function ToDoManager:addTaskFromFieldAction(fieldRecord, action, allowUntrackable)
@@ -1388,6 +1394,9 @@ local function onStartMission(mission)
         if FieldSavegameReader ~= nil then
             FieldSavegameReader.invalidate()
             FieldSavegameReader.deferReadsUntilGameplay()
+        end
+        if FieldAdvisor ~= nil and FieldAdvisor.invalidateDensityMapHeightUtil ~= nil then
+            FieldAdvisor.invalidateDensityMapHeightUtil()
         end
     end
 

@@ -1,6 +1,9 @@
 --[[
     FieldScanner.lua
-    Data acquisition layer: reads owned field fruit types, growth stages, and conditions.
+    Data acquisition layer: owned-field list, incremental overview rows, and label assembly.
+
+    collectOwnedFieldCandidates + normalizeField feed the menu scan; buildPlaceholderFieldRecord
+    paints "..." until each batch completes. Full synchronous scan: ToDoManager:getOwnedFields(true).
 ]]
 
 ---@class FieldScanner

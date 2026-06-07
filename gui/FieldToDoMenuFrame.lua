@@ -1,6 +1,10 @@
 --[[
     FieldToDoMenuFrame.lua
     In-game menu page: manual To-Do list (left) and owned field overview (right).
+
+    Custom tab pages do not receive frame updates from the engine alone — InGameMenuIntegration
+    calls onFrameUpdate while this page is visible. During scan progress use fieldList:reloadData
+    (reloadVisibleItems does not reliably replace "..." placeholders).
 ]]
 
 ---@class FieldToDoMenuFrame : TabbedMenuFrameElement
@@ -293,6 +297,7 @@ function FieldToDoMenuFrame:onOpen()
     self:onFrameOpen()
 end
 
+--- Pull scan snapshot; reload field list when ToDoManager marks scan dirty.
 function FieldToDoMenuFrame:syncOwnedFieldsFromScan()
     local manager = self:getManager()
     if manager == nil then
@@ -429,6 +434,7 @@ function FieldToDoMenuFrame:getManager()
     return g_currentMission.fieldToDoList
 end
 
+--- invalidateFieldsCache=false: repaint only when scan dirty (no cache reset — avoids restarting scan).
 function FieldToDoMenuFrame:refreshLists(invalidateFieldsCache)
     local manager = self:getManager()
     if manager ~= nil and manager.setOwnedFieldsScanActive ~= nil then
@@ -551,7 +557,7 @@ function FieldToDoMenuFrame:syncTaskListSelection()
         return
     end
 
-  -- FS25 SmoothList: selectedIndex is 1-based; set selection before repainting cells.
+    -- FS25 SmoothList: selectedIndex is 1-based; set selection before repainting cells.
     local wasIgnoring = self.ignoreTaskSelectionChanged == true
 
     if not wasIgnoring then
@@ -646,8 +652,7 @@ function FieldToDoMenuFrame:populateCellForItemInSection(list, section, index, c
         if textElement ~= nil then
             local displayText = task.text
             if not task.completed then
-                -- Tag whether the engine auto-completes this task or it must be ticked manually
-                -- (e.g. swath / loader-collect cannot be sensed; see docs/DECISIONS.md).
+                -- (auto) = engine tracks completion; (manuell) = reminder only (e.g. grass_swath/collect).
                 local tag = task.autoComplete == true
                     and FieldToDoL10n.getText("ftdl_task_tag_auto", "auto")
                     or FieldToDoL10n.getText("ftdl_task_tag_manual", "manuell")
@@ -1016,8 +1021,7 @@ function FieldToDoMenuFrame:onClickAdoptFieldSuggestion()
     end
 
     local actionType = action.actionType
-    -- Swath / loader-collect cannot be sensed in this runtime; they are adopted as manual
-    -- reminder tasks rather than rejected as "not trackable" (see docs/DECISIONS.md).
+    -- grass_swath/collect: adopt as manual reminder (allowUntrackable), not rejected as not_trackable.
     local isManualGrassLogistics = actionType == "grass_swath" or actionType == "grass_collect"
 
     -- For a non-actionable info primary, swap to a real trackable action when available,
@@ -1779,7 +1783,7 @@ function FieldToDoMenuFrame:moveSelectedTask(delta)
     end
 
     local taskId = self.selectedTaskId
-  -- Always move by stored task id, not by stale list row index.
+    -- Always move by stored task id, not by stale list row index.
     if not manager:moveTask(taskId, delta) then
         InfoDialog.show(FieldToDoL10n.getText(
             "ftdl_info_move_blocked",

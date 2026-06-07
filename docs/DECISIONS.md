@@ -15,12 +15,20 @@ Datum  Thema: Regel (kurz, technisch).
 
 ## Einträge
 
+2026-06-07  **Keine Fallback-Kaskaden** — Wenn die Engine an einer Position nichts liefert: **nicht raten** (keine Bbox, kein Nächstes-Zentrum, kein `unknown⇒inside`). Eine Entscheidungsfunktion, eine Datenquelle; Dump zeigt Quelle + Ergebnis. Inventar offener Stellen: `docs/FALLBACK_AUDIT.md`. Ballen: `resolveBaleOwnerFieldId` (Engine-Feld + Owner-Polygon).
+
+2026-06-06  **Gras lose vs. Schwad** — `deriveGrassResidueSummary` + `classifyGrassMaterialLayout`: gleiche Liter-API (`callFillLevelAtArea`), aber **Layout** entlang E–W/N–S-Kreuz (Übergänge/Abdeckung). Uniform viele heiße Proben ⇒ `loose` (gemäht, noch nicht geschwadet) ⇒ Kette ab Schwaden; rowige Linien ⇒ `swath` ⇒ Sammeln/Ballen; Ballen ⇒ `BALED`. Stroh bleibt liter-only. Entscheidende Funktion: `classifyGrassMaterialLayout` (nur von `deriveGrassResidueSummary` aufgerufen).
+
+2026-06-06  **Stroh-Schwaden = eine Quelle** — `hasWindrow` nur aus `DensityMapHeightUtil.getFillLevelAtArea(FillType.STRAW, …)` (via `callFillLevelAtArea`, Kreuzproben). Kein Typ/Höhe/Stoppel-Fallback. API-Vergleich nur im Debug: `ftdlStrawScan`. Ballen auf dem Feld = separater Zustand (`strawBaleCount`), nicht Windrow-Ersatz. Entscheidende Funktion: `deriveStrawResidueSummary`.
+
 2026-06-06  **Ernte-Spalte = Status, Ernte-Monat = Vorschlag** — Spalte „Ernte“ zeigt nur Zustand (Wächst, Nachwuchs, Mähen, Stoppeln, Jetzt …), **kein** „Ernte Okt“. Ernte-Fenster über `harvest_info`-Aktion in der Vorschlags-Spalte (ggf. vor Arbeitsschritten: „Ernte Okt → Striegeln …“). Entscheidende Funktion: `getExpectedHarvestLabel` + `formatSuggestionColumn`.
 
 2026-06-06  **Planfrucht pro Feld (manuell, persistent)** — Spieler wählt pro Feld eine geplante Sä-Frucht (alle Früchte inkl. Luzerne/Klee/Alfalfa) oder **„Hof“**; bleibt im Savegame bis geändert. **Regel:** Nur Vorschlag/To-Do-Text bei Säen-Schritten — ersetzt nicht die Spalte „Kultur“. Mit Planfrucht: Säen-Vorschlag inkl. **nächstem Sä-Monat** (`getIsPlantableInPeriod` → `getSowWindowHint`, z. B. „Weizen säen Mär“). **Hof** (`FARMYARD_VALUE = -1`): kein Schwergewichts-Scan, kein Auto-Erledigen-Probe-Loop. Speicherung: `FieldPlannedCrop.byFieldId` im Sidecar. UI: Spalte „Plan“ klickbar + Button „Planfrucht“; `OptionDialog.show(callback, nil, …)`.
             Entscheidende Funktion: `FieldAdvisor.formatPlannedSowLabel` + `FieldPlannedCrop.isFarmyard`. Quelle: User-Spec Option A + Hof-Grundstücke.
 
-2026-06-04  **Ballen-Zuordnung: Scheune ≠ Feld** — `isBalePositionInsideField` prüfte zuerst `getFieldIdAtWorldPosition` und zählte Ballen vor der Scheune mit, obwohl sie nur ~300 m vom Feldzentrum entfernt waren (Feld 6: 25 gezählt, real 1 auf dem Acker). **Lösung:** Polygon `testPositionInsideField` zuerst (`false` ⇒ nicht auf dem Feld); Engine-Feld-ID nur noch ohne Polygon und nur innerhalb gemessener Feld-Ausdehnung (`getFieldBaleAssignmentHalfExtents` ohne areaHa-Raten-Fallback). Entscheidende Funktion: `isBalePositionInsideField`.
+2026-06-07  **Ballen-Zuordnung: nur Engine, kein Fallback** — `resolveBaleOwnerFieldId`: `getFieldAtWorldPosition` / `getFieldIdAtWorldPosition` / Farmland→Feld am Ballen; danach **Polygon des Owner-Feldobjekts** (`testPositionInsideField` — `false` verwirft, z. B. Scheune auf gleicher Farmland-ID). Planfrucht Hof ausgeschlossen. Keine Bbox, kein Nächstes-Zentrum. `isBalePositionInsideField` = Owner-ID == Ziel-Feld. Entscheidende Funktion: `resolveBaleOwnerFieldId`.
+
+2026-06-04  **Ballen-Zuordnung (Historie)** — Erstes Problem: Scheunen-Ballen ~300 m weg mitgezählt (Feld 6). Ursprünglicher Fix: Polygon zuerst — führte 2026-06-07 zu Unterzählung auf dem Acker; siehe Eintrag oben.
 
 2026-06-04  **Ballen einsammeln: typ-bewusstes Auto-Erledigen** — `grass_bale_collect` zählte **alle** Feld-Ballen (`total`), nicht nur Heu/Silage (`grass`). Auf Grasfeldern mit gemischten Ballen (z. B. Feld 6: 13 Silage + 12 Stroh) blieb die Aufgabe offen, sobald nur die Gras-Ballen weg waren. **Lösung:** eine Zählregel pro Aktion in `getTrackedBaleCountForAction` (grass_* → `grass`, straw_* → `straw`); `deriveGrassResidueSummary` und `isGrassBalingWorkComplete` ebenfalls nur `grass`; Baseline `baleGrassCount`. Entscheidende Funktion: `FieldAdvisor.getTrackedBaleCountForAction`.
 

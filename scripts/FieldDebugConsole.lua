@@ -75,6 +75,7 @@ function FieldDebugConsole.getHelpText()
     return table.concat({
         "ftdlHelp — this help",
         "ftdlDump <fieldId> — dump one field to log.txt",
+        "ftdlStrawScan <fieldId> [x z] — probe all straw/windrow APIs (search STRAW_SCAN in log.txt)",
         "ftdlFruits — list fruit types to log.txt",
         "ftdlAll — dump all owned fields to log.txt",
         "Other lines are passed to executeConsoleCommand when available.",
@@ -104,6 +105,10 @@ function FieldDebugConsole.executeLine(line)
 
     if command == "ftdlfruits" and FieldDebugDump ~= nil and FieldDebugDump.consoleFruits ~= nil then
         return FieldDebugDump:consoleFruits()
+    end
+
+    if command == "ftdlstrawscan" and FieldDebugDump ~= nil and FieldDebugDump.consoleStrawScan ~= nil then
+        return FieldDebugDump:consoleStrawScan(args)
     end
 
     if command == "ftdlall" and FieldDebugDump ~= nil then
@@ -139,7 +144,7 @@ function FieldDebugConsole.executeLine(line)
     end
 
     return string.format(
-        "Unknown command '%s'. Try: ftdlHelp, ftdlDump <id>, ftdlFruits, ftdlAll",
+        "Unknown command '%s'. Try: ftdlHelp, ftdlDump <id>, ftdlStrawScan <id>, ftdlFruits, ftdlAll",
         command
     )
 end

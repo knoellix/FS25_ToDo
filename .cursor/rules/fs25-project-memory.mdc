@@ -8,133 +8,78 @@ alwaysApply: true
 ## Release and Build
 
 - Keep `modDesc.xml` version unchanged unless the user explicitly requests a release bump.
-- Preferred local build command: `python3 tools/generate_assets.py && ./build.sh`.
-- After mod updates, do a full FS25 restart.
+- Build: `python3 tools/generate_assets.py && ./build.sh`. After mod updates: **full FS25 restart**.
 
 ## Maintainer shell (fish)
 
-- **Maintainer uses fish**, not bash — do **not** suggest bash-only syntax (`$(cat <<'EOF' … EOF)`, `source <(…)`).
-- For git commits, prefer a **single `-m "…"`** line or fish-safe multi-line strings; example:
+- Maintainer uses **fish** — no bash-only heredocs/`source <(…)` in copy-paste without noting fish adaptation (`CONTRIBUTING.md`).
+- Git commits: single `-m "…"` or fish-safe multi-line string.
 
-```fish
-git commit -m "Release 0.1.0.4: short summary.
+## Lua / Runtime Safety
 
-Optional second paragraph in the same string."
-```
+- **No `goto` / labels** — Lua 5.1 runtime; file may fail to load.
+- **No runtime `fields.xml` reads** (`FieldSavegameReader.ENABLE_DISK_READ = false`).
+- No repeated file reads or SCS `buildFieldMap` loops in menu paths; defer startup reads (`deferReadsUntilGameplay`).
+- `FSDensityMapUtil` global often **nil** — fruit/weed via `FieldState`; do not depend on it in menu paths.
 
-- Copy-paste blocks in docs/PR instructions may show bash; note that fish users must adapt redirection/heredocs themselves (see `CONTRIBUTING.md`).
+## DensityMapHeightUtil (windrow / straw liters)
 
-## Lua / Scripting (FS25)
+- **Vanilla windrow source:** `DensityMapHeightUtil.getFillLevelAtArea(fillType, x0,z0, x1,z1, x2,z2)` — **6 coords** (parallelogram), not 4.
+- **Mod access:** resolve via `type(DensityMapHeightUtil) == "table"` first — `rawget(_G, "DensityMapHeightUtil")` is often **nil** though the class exists at runtime.
+- Cache util only when found; **`invalidateDensityMapHeightUtil()` on save load** (`ToDoManager.onStartMission`).
+- **Not usable for production windrows:** `getDensityTypeIndexAtWorldPos`, `getDensityHeightAtWorldPos` (nil/noise in mod runtime). API experiments: **`ftdlStrawScan <fieldId>`** only.
 
-- **Do not use `goto` / labels** (`::label::`) in mod Lua — the Giants runtime is Lua 5.1-style and does not support them; the script file may fail to load and break entire features (e.g. empty field list).
-- Use normal control flow instead: `if`/`else`, nested loops, helper functions, or `continue`-style `if` blocks inside loops.
+## Straw logistics (Stroh)
 
-## Save and Runtime Safety
+- **One deciding function:** `deriveStrawResidueSummary` — STRAW liters only (`callFillLevelAtArea`, center + E–W/N–S cross). `hasWindrow = crossFillMax >= fillMinLiters`. No type/height/stubble/phase fallback.
+- **Context / UI:** `fieldHasStrawLogisticsContext` — strohgebende Frucht (`STRAW_PRODUCING_FRUITS`) **and** (`hasWindrow` **or** straw bales on field). Stubble alone or spreader-off field → no press suggestion.
+- **Actions:** `addStrawLogisticsActions` — windrows → `straw_bale`; bales only → `straw_bale_collect`. Listed **before** mulch in `post_harvest`.
+- **Bales:** `classifyBaleKind` / field polygon; **Hof** excluded (`isBalePositionOnFarmyardPlot`) — yard bales ≠ field straw.
+- Details: `docs/DECISIONS.md` (Stroh-Schwaden entry).
 
-- Do not read `savegame*/fields.xml` at runtime (`FieldSavegameReader.ENABLE_DISK_READ = false` — io.open can truncate the file while the game still owns it).
-- If save overlay is ever re-enabled, only via `FieldSavegameReader` with strict one-shot cache and save/load guards.
-- Avoid repeated/looped file reads in menu/update paths; prefer live `FieldState` / engine data.
-- Avoid SCS field-map loops in menu/update paths (`buildFieldMap`/`enumerateFields`).
-- Keep deferred startup reads (`deferReadsUntilGameplay`) to avoid load deadlocks.
+## Grass residue (meadow)
 
-## Performance (Field Overview Scan)
+- **One source:** `deriveGrassResidueSummary` — windrow liters (`resolveGrassWindrowFillIndex` + `callFillLevelAtArea`, same path as straw). `SWATH` / `BALED` / `NONE`; loose not distinguished.
+- **cut:** `SWATH` → collect/bale/silage; no liters → full chain from swath; bales → collect only.
 
-- **Two update paths (do not merge):**
-  - **Overview scan** — all owned fields for the ESC table (incremental, heavier). Runs on menu open and optional periodic full rescan.
-  - **Task auto-complete** — only fields with open trackable field tasks (`updateAutoCompletion`, ~1 s). Uses live probes + fingerprint cache; independent of the overview queue.
-- When auto-complete marks a field task done, **refresh that field row only** via `refreshFieldRecordSync(fieldId)` — do not wait for the 5 s rescan or a full cache invalidate.
-- Field overview uses **incremental scan** (`ToDoManager` + `FieldScanner.collectOwnedFieldCandidates()`), not a synchronous full `scanOwnedFields()` on every menu refresh.
-- **Overview grid** uses `OVERVIEW_SAMPLE_GRID_STEPS` (3); **completion / auto-complete** keeps full grid (5). Do not raise overview grid without measuring.
-- **Probe aggregation** may use short TTL cache (`PROBE_AGGREGATION_CACHE_TTL_MS`); refresh center/harvest from live center probe on cache hit.
-- **Scan pacing:** `OWNED_FIELDS_SCAN_BATCH_SIZE` (5), `OWNED_FIELDS_SCAN_INTERVAL_MS` (40), `OWNED_FIELDS_CACHE_MS` (4000). Advance via `ToDoManager:tickOwnedFieldsScan(dt, 2)` while the menu tab is open (`setOwnedFieldsScanActive(true)` on open, `false` on close) — up to **2 batches per frame** (~10 fields per tick at default). UI sync runs from **`InGameMenu.update`** (and mission-update fallback) calling `FieldToDoMenuFrame:onFrameUpdate` — custom tab pages do not receive frame updates from the engine alone.
-- **UI refresh during scan:** on batch progress call `fieldList:reloadData()` — **`reloadVisibleItems()` does not reliably update** cell text when `...` placeholders become real values.
-- **`deferredListReload` must call `refreshLists(false)`** — never invalidate the owned-fields cache on the 500 ms poll (that reset the scan every tick and blocked gradual fill-in).
-- **Passive refresh while menu open:** full invalidate at most every `OWNED_FIELDS_MENU_RESCAN_MS` (15 s default) — enough for fields without open tasks. Fields with auto-complete tasks refresh via `refreshFieldRecordSync` on completion.
-- **No vanilla “field worked” event** — plow/mow while menu open on a field *without* a task waits for the periodic rescan or menu re-open. Engine hooks: `MessageType.FINISHED_GROWTH_PERIOD` (daily growth) and `MessageType.FARMLAND_OWNER_CHANGED` → `markOwnedFieldsOverviewStale()` (immediate rescan if tab open).
-- First paint: all owned field rows appear immediately with placeholders (`pendingScan`, columns `...`); values replace placeholders batch by batch.
-- **Scan indicator:** yellow blinking dot (●) next to „Feldübersicht“ while scan runs; solid green when complete. Tooltip shows progress (`ftdl_scan_status_scanning`).
-- Scan start/complete: one `FieldToDoLog.info` line each (visible in `log.txt`).
-- Task adopt on pending row: `refreshFieldRecordSync(fieldId)` before `addTaskFromFieldAction`.
-- Debug / `ftdlAll`: `getOwnedFields(true)` for synchronous full scan only.
-- **Auto-complete:** group tasks by `fieldId`; reuse completion ratios via fingerprint cache; always refresh coverage (plow/sow) polygon queries even when fingerprint matches.
+## Field overview scan (performance)
 
-## UI and To-Do Behavior
+- **Two paths — do not merge:** (1) overview incremental scan on menu open, (2) task auto-complete ~1 s for fields with open trackable tasks only.
+- On auto-complete done: `refreshFieldRecordSync(fieldId)` — not full rescan wait.
+- Grid: overview **3** steps, completion **5**. Pacing: batch 5 / 40 ms; up to 2 batches/frame while tab open. `reloadData()` on batch progress (not `reloadVisibleItems()`).
+- `deferredListReload` → `refreshLists(false)` — never invalidate owned-fields cache on 500 ms poll.
+- Hooks: `FINISHED_GROWTH_PERIOD`, `FARMLAND_OWNER_CHANGED` → `markOwnedFieldsOverviewStale()`.
+- First paint: all rows + `...` placeholders; yellow ● while scanning, green when done.
 
-- To-do ordering is based on `sortIndex` (user order), not work-order presets.
-- Keep moved task selected after Up/Down; clear selection after delete.
-- Guard SmoothList reload selection (`ignoreTaskSelectionChanged`) and sync by task id, not row index.
-- Keep mini up/down buttons as arrow icons (↑/↓) with localized tooltips (`Hoch` / `Runter`); no drag-and-drop.
+## UI / To-Do / HUD
 
-## HUD and Logging
+- Order by `sortIndex`; guard list selection by task id (`ignoreTaskSelectionChanged`).
+- Open above completed; completed cap 10; `moveTask` stays within open/completed group.
+- HUD: manual tasks only, max 5. Logging via `FieldToDoLog` / `Logging`, not `print()`.
 
-- HUD shows manual tasks only (`getManualTasksForDisplay()`), max 5 open tasks.
-- Keep HUD simple (plain panel, no settings line in HUD).
-- In `InGameMenuIntegration`, use `Logging.info`/`Logging.warning`; avoid `print()`.
+## Advisor (classification, harvest, weed)
 
-## Consolidation (mandatory before more Advisor fixes)
+- Multi-probe aggregation (`aggregateFieldProbes`); **Ernte month** from **center** (`aggregation.harvestState`), not max-growth edges.
+- Dual-window maize: `isFruitPrimaryHarvestInPeriod` + grain-ready (`minHarvestingGrowthState`), not first silage window alone.
+- Bare worked soil (`PLOWED`/`CULTIVATED`/`SEEDBED`, growth 0): crop display `-`, no grass fallback.
+- Plow done: `PLOWED` + `needsPlowing == false` (ignore stale `plowLevel` alone).
+- Grass cut: no re-mow; specific grass names (Luzerne etc.) even with partial soil work.
+- Weed: `WeedAdvice.deriveWeedAdvice`; coverage wins when `weedSummary.total > 0`; dead min state 6; spray only at state ≥3 or live ≥10%.
+- Bale counts field-local only.
 
-- Follow `docs/CONSOLIDATION_AND_NAMING_PLAN.md`: audit → merge duplicate logic → regression → read-through comments → naming.
-- One decision = one function. New functions are fine when they CONSOLIDATE (one function that knows all rules of a decision, replacing several old ones — callers moved, old ones deleted). NOT fine when they add a parallel `is*`/`has*`/`should*` next to logic that already answers the same question.
-- Every bug fix: name the ONE deciding function; adjust it (or replace several with one bundling function), do not stack a second helper beside it.
-- New logic belongs inside the responsible decision function / pipeline stage — not as a special branch in `buildFieldContext` / `resolveActionCandidates` that bypasses it.
-- Mantra: one function that knows all the rules of a decision, not four that contradict each other.
-- Done only after 5-field regression in `docs/REGRESSION.md` (see consolidation plan).
+## Consolidation
 
-## Task and Advisor Rules
+- One decision = one function (`docs/CONSOLIDATION_AND_NAMING_PLAN.md`). No parallel `is*`/`has*` beside existing decision logic.
+- Regression: `docs/REGRESSION.md` (5-field + straw chain when touching advisor).
 
-- Open tasks render above completed tasks.
-- Completed tasks capped at 10; newest completed goes to top of completed group.
-- `moveTask` must not cross open/completed boundaries.
-- While `isWithered`, keep plow and roller incomplete in auto-complete checks.
-- For organic mode display, use `getWorkOrderDisplayLabel()` (not preset label).
-- Field classification must be multi-layered (`arable` / `grass` / `bare_soil` / `unknown`) and based on **multiple in-field probes**, not a single center sample.
-- Prefer probe aggregation + dominant situation in overview labels/suggestions (`aggregateFieldProbes` + representative state), with center probe as tie-breaker.
-  - **Harvest month uses the field center probe** (`aggregation.harvestState` = center) — not max-growth edges (maize silage → Jul) and not min-growth edge strips (growth 0 / missing fruit → „Wächst“ with no prognosis).
-- Never use a blind default-grass fallback on bare worked soil: on `PLOWED`/`CULTIVATED`/`SEEDBED` without active crop, show crop as `-` and do not collapse to grass.
-- Specific grass crops (Luzerne/Klee/Alfalfa): keep localized fruit name even when `fieldHasPartialSoilWork` — do not collapse to generic „Gras (teilw. bearb.)“ when probes resolved a non-generic index.
-- Plow recommendation must align with completion logic: `PLOWED` + `needsPlowing == false` means plowing done (ignore stale `plowLevel > 0` alone).
-- Grass/meadow post-mow handling: if `isCut`, do **not** suggest mow again; show regrowth / harvest-window and follow-up logistics (swath/collect/bale).
-- For harvest readiness (vanilla + mod fruits), rely on `FruitTypeDesc` growth APIs (`getIsHarvestable`, `getIsHarvestReady`, `getIsCut`, `getIsGrowing`, `getIsWithered`) with min/max harvesting-state fallback.
-- **Harvest month (Ernte-Spalte / Vorschlag):**
-  - FS25 season period (1..12) ≠ calendar month — map via `getCalendarMonthForSeasonPeriod` (period 5=Jul, 8=Okt, …).
-  - Dual-window crops (maize): `getIsHarvestableInPeriod` is true from **July** (silage/forage, growth ~5) and again in **autumn** (grain, growth 7 `getIsHarvestReady`). UI must use **`isFruitPrimaryHarvestInPeriod`** (projected growth + `getIsHarvestReady`), not the first harvestable period alone.
-  - ETA steps target **`minHarvestingGrowthState`** when `getIsHarvestReady` exists (grain-ready), not `maxHarvestingGrowthState` (may include dead/withered).
-  - Always pass **`aggregation.harvestState`** (via `resolveHarvestFieldState`) into harvest-window helpers — not `representativeState`.
-- Grass residue flow must distinguish `loose` vs `swath` vs `baled` vs `none` from live map data (`DensityMapHeightUtil` + windrow fill levels), not a single generic grass-rest state.
-- **Grass residue detection (`detectGrassResidue` + `fuseGrassResidueSignals`):**
-  - Scan: cross (E–W, N–S) + diagonal bars through field center (~85 probe points active).
-  - Signals: windrow liters (`DensityMapHeightUtil`), engine height (`getDensityHeightAtWorldPos`), fill-type at point (`getDensityTypeIndexAtWorldPos`), `stubbleShredLevel`, field bales.
-  - Fusion: **never default to `loose`** without positive material; cut + no signal → `none` (Nachwuchs only). `swath` from sparse line hits, windrow fill-type, or shred. `loose` only from dense scattered coverage.
-  - When `DensityMapHeightUtil` is unavailable: use engine height/fill-type fallbacks; do not treat unavailable map as empty loose pile.
-- Post-mow suggestions must follow residue state:
-  - `loose` -> `grass_swath`
-  - `swath` -> show all three options (`grass_collect`/Ladewagen, `grass_bale`, `grass_silage_bale`)
-  - `baled` -> `grass_bale_collect`.
-- Auto-completion for grass logistics must use the same residue/bale signals as suggestions (no separate heuristic branch).
-- Bale follow-up is field-local: count only bales physically inside the field polygon.
-- Weed done rule: if dead/sprayed weeds exist on field probes and live weed coverage is <= 5%, treat weed tasks as done (no new weed combat/watch suggestion).
-- **Weed detection details:**
-  - `WEED_STATE_DEAD_MIN = 6` (FS25 `weed.xml`: states 0–5 alive/sprayed-visible, **6+ dead** — state 6 „small dead“ is not live).
-  - When `weedSummary.total > 0`, **coverage wins** for display, suggestions, auto-complete, and progress — do not let center `isWeedDeadOrSprayed` override live coverage (or vice versa).
-  - `sampleWeedCoverage`: count dead vs live **mutually exclusive** per probe (`isWeedProbeDead` first, then live only if not dead).
-  - `FieldTaskCompletion` weed tasks: if coverage exists, complete only via `isWeedTaskDoneByCoverage`.
-  - Do not treat regrown live weed (states 1–5) as dead just because old `sprayLevel` remains; only early sprayed states (1–2) + low `weedFactor`, or states 4–5 with herbicide residue, count as treated/dead.
-  - Weed suggestions: `weed_hoe` (Striegeln) for any actionable live weed; `weed_combat` (Spritzen) additionally when `weedState >= 3` or live pressure >= 10%.
+## Debug (manual only)
 
-## Debug
+- **F9** / LCtrl+F9: `ftdlHelp`, `ftdlDump <id>`, `ftdlStrawScan <id> [x z]`, `ftdlAll`, `ftdlFruits`.
+- Log: `[FS25_FieldToDoList] DUMP` / `STRAW_SCAN`. No auto-dump on menu open or load.
+- Straw UI check: `strawResidue: hasWindrow fillApiReady centerFill crossFillMax` in dump; API matrix in `STRAW_SCAN`.
 
-- Manual only: **F9** (or LCtrl+F9) → `FieldDebugConsole` / `ftdlDump <id>`, `ftdlAll`, `ftdlHelp`. **No auto-dump** on menu open, save load, or row click.
-- Log tag: `[FS25_FieldToDoList] DUMP` in `log.txt`.
-- Useful dump lines: `weedCoverage`, `harvestState` vs `representativeState`, `getHarvestWindowHint`, `harvestProjection`.
-- `FSDensityMapUtil` may be **nil as global** at runtime — fruit/weed still work via `FieldState` probes; do not rely on density-map globals in menu paths.
-- If dump and UI disagree on Ernte month: compare center/harvestState growth vs representative (max-growth) probe.
+## Validation snapshots
 
-## Validation Focus (Field Overview)
-
-- Regression-check every advisor refactor with representative saves:
-  - freshly plowed empty field must not render as grass (e.g. Field 14 class of bug),
-  - mown lucerne/alfalfa must not suggest mow again (show regrowth/next window); label must stay **Luzerne**, not „Gras (teilw. bearb.)“,
-  - harvest-ready cereals (e.g. wheat) must be flagged harvest-ready in overview,
-  - grass logistics chain must be consistent (`loose` -> `swath` -> collect/bale -> bale_collect),
-  - **Körnermais** early season (center growth=1, April): Ernte **Okt**, not Jul (silage window),
-  - **sprayed wheat** with dead weed probes (e.g. Field 9): Unkraut **tot**, no combat/watch suggestion when live coverage <= 5%.
+- Plowed empty ≠ grass (Field 14 class); lucerne cut ≠ re-mow; harvest-ready cereals flagged; dead weed ≤5% live → no combat.
+- Körnermais Apr growth 1 → Ernte **Okt**, not Jul.
+- **Stroh:** visible swaths → `hasWindrow=true` → „Stroh pressen“ before mulch; yard bales not counted on field.

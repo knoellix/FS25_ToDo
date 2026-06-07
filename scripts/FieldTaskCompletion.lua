@@ -47,9 +47,9 @@ FieldTaskCompletion.REGISTRY = {
         strategy = "sample",
         coverageOnly = true,
     },
-    -- Grass logistics: only bale-producing/-removing steps have a reliable object signal.
-    -- Swath and loader-collect leave loose/windrow material that this runtime cannot read
-    -- (DensityMapHeightUtil.getFillLevelAtArea absent) -> not auto-trackable (see docs/DECISIONS.md).
+    -- Grass logistics: suggestions read windrow liters (deriveGrassResidueSummary); auto-complete
+    -- only tracks object signals (mow cut state, bales appear/vanish). Swath/collect have no
+    -- completion baseline -> manual reminder (FieldWorkCatalog autoComplete=false).
     grass_mow = { strategy = "point" },
     -- Mulching has no readable field state in this runtime -> manual reminder, never auto-done.
     mulch = { strategy = "none" },
@@ -481,8 +481,7 @@ function FieldTaskCompletion.isGrassLogisticsComplete(actionType, context, actio
             or FieldAdvisor.isGrassCut(fieldState, field, aggregation)
     end
 
-    -- grass_swath / grass_collect have no reliable in-game signal (no density-map fill API)
-    -- and are intentionally manual (FieldWorkCatalog autoComplete=false); they never reach here.
+    -- grass_swath / grass_collect: strategy "none" in REGISTRY — never routed here (manual only).
 
     if actionType == "grass_bale" or actionType == "grass_silage_bale" then
         return FieldAdvisor.isGrassBalingWorkComplete(

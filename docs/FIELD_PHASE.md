@@ -30,8 +30,8 @@ Status: **festgelegt** (Phase 1.5). Phase 2 implementiert genau diesen Kontrakt 
 | `ground` | string | `getGroundTypeName` (z. B. `HARVEST_READY`, `PLOWED`, `GRASS_CUT`) |
 | `flags` | table | `evaluateFruitGrowth`: `{cut, harvestable, harvestReady, withered}` |
 | `shred` | number | `stubbleShredLevel` (>0 ⇒ frisch gemäht/gehäckselt) |
-| `residue` | `"none"`/`"baled"` (Gras) | `deriveGrassResidueSummary` — ballen-basiert; loose/swath **nicht** sensierbar (B1) |
-| `residueReliable` | bool | immer `false` für loose/swath; Ballen-Zählung separat über `sampleBaleCoverage` |
+| `residue` | `"none"`/`"swath"`/`"baled"` (Gras) | `deriveGrassResidueSummary` — Windrow-Liter + Feld-Ballen (2026-06-06) |
+| `residueReliable` | bool | `true` wenn Liter-API bereit oder Ballen gezählt; `loose` nicht produziert |
 
 ---
 
@@ -47,7 +47,7 @@ Status: **festgelegt** (Phase 1.5). Phase 2 implementiert genau diesen Kontrakt 
 | `grass_standing` | Gras, wächst | Erntefenster |
 | `grass_harvestable` | Gras, mähbar | Mähen |
 | `grass_cut` | Gras gemäht, Rest unklar/`none` | Nachwuchs-Hinweis |
-| `grass_residue` | Gras-Rest (nur Ballen zuverlässig) | Ballen holen; sonst manuelle Kette (Schwaden/Sammeln/Ballen) |
+| `grass_residue` | Gras-Rest (Schwad-Liter oder Ballen) | SWATH → Sammeln/Ballen; BALED → einsammeln; sonst Kette ab Schwaden |
 | `unknown` | nicht klassifizierbar | „Alles ok“ |
 
 ---
@@ -78,7 +78,7 @@ Status: **festgelegt** (Phase 1.5). Phase 2 implementiert genau diesen Kontrakt 
 7. sonst → **`unknown`**
 
 > `flags` kommen aus **`getGrassMeadowPhase`** (dem einen Gras-Entscheider), nicht roh aus `evaluateFruitGrowth`: `cut = meadowPhase=="cut"`, `harvestable/harvestReady = meadowPhase=="harvestable"`. Kein zusätzliches `postMow`/`fieldHasPartialSoilWork` aufschlagen (sonst Feld-76-Bug).
-> W2/W3: Bei `residueReliable == false` (Dichtekarte fehlt) **kein** `grass_residue` aus Höhen-Rauschen → Feld 6 landet ehrlich bei `grass_cut` (Nachwuchs-Hinweis) statt erfundenem loose/swath.
+> W2/W3: Bei `residueReliable == false` **kein** `grass_residue` aus Höhen-Rauschen; ohne Liter-API → `grass_cut` + manuelle Kette. Mit Liter-API → `swath` aus Windrow-Fill.
 > **Regel 4 vor 5 (wichtig):** Ein wieder mähreif **nachgewachsener** Bestand (Klee/Luzerne, `growth=minHarvest`, `harvestReady`) ist `grass_harvestable` → „mähen", **auch wenn** noch `shred > 0` vom letzten Schnitt liegt. `isGrassPostMowState` setzt `meadowPhase` in diesem Fall **nicht** auf `cut`. Nur frisch geschnitten (`GRASS_CUT`/`isCut`/Shred ohne Nachwuchs) bleibt `grass_cut`.
 
 ---
@@ -130,3 +130,21 @@ Eine reine Funktion (`scripts/WeedAdvice.lua`), Eingabe = normalisierte `facts` 
    - `hoe`: jedes aktionable Live-Unkraut — `watch`, oder `needsCombat` mit `spray`/State `1..2`.
 
 Tests: `tests/weed_fixtures.lua` (inkl. W4/W5). Auto-Erledigen weiter über `isWeedTaskDoneByCoverage` (Coverage), konsistent mit `done`.
+
+---
+
+## Öffentliche API (Naming, Phase 5)
+
+| Entscheidung | Kanon | Fassade / Readout |
+|--------------|-------|-------------------|
+| Feldphase | `FieldPhase.deriveFieldPhase(facts)` | `FieldAdvisor.getCropPhase` → Legacy-String für UI |
+| Gras-Meadow | `FieldAdvisor.getGrassMeadowPhase` | `isGrassHarvestable` / `isGrassCut` = Readouts |
+| Gras-Rest | `FieldAdvisor.deriveGrassResidueSummary` | — |
+| Stroh-Rest | `FieldAdvisor.deriveStrawResidueSummary` | — |
+| Unkraut | `WeedAdvice.deriveWeedAdvice` | `fieldNeedsWeed*` / `fieldShouldSuggestWeedSpray` |
+| Vorschläge | `FieldAdvisor.resolveActionCandidates` | `PHASE_ACTION_BUILDERS[phase]` |
+| Auto-Erledigen | `FieldTaskCompletion.isTaskComplete` | `FieldAdvisor.isFieldTaskComplete` |
+
+**Nicht für Phase nutzen** (nur Completion/Labels): `hasActiveCrop`, `isFieldSown`, `isFieldUnsown`.
+
+**State-Begriffe pro Scope:** `fieldState` = Engine-Probe; `harvestState` = center/harvest-Spalte; `probeState` = Repräsentant in `buildFieldContext`; `aggregation.harvestState` = Ernte-Monat.

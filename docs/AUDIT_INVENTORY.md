@@ -5,8 +5,9 @@ Vorlage und Tabellen: siehe `CONSOLIDATION_AND_NAMING_PLAN.md` § Phase 1.
 ## Vollständigkeit (keine Abkürzung — Standard)
 
 - [x] **Audit:** jede Datei unter `scripts/`, `gui/`, relevante `translations/`, `tools/` — jede `function`, jeder widersprüchliche Zweig.
-- [ ] **Kommentare:** jede Zeile Kommentar in diesen Dateien **lesen** (Block für Block), siehe `COMMENT_PASS_LOG.md` — **in Arbeit** (Block 1/4 FieldAdvisor).
-- [ ] **Namen:** alle öffentlichen Funktionen und unklare Variablen in denselben Dateien — **ausstehend** (Phase 5).
+- [x] **Kommentare FieldAdvisor.lua:** Block 1–4/4 gelesen (`COMMENT_PASS_LOG.md` 2026-06-06).
+- [x] **Kommentare:** `FieldAdvisor` 4/4 + gesamte `scripts/` + `gui/FieldToDoMenuFrame` 3/3 + `translations/` — **2026-06-06** (`COMMENT_PASS_LOG.md`).
+- [x] **Namen:** Glossar + Kanon/Fassade dokumentiert; `shouldTrackArableWeed` → `isArableWeedSamplingContext` (2026-06-06). Einklappen `hasActiveCrop`/`isFieldSown`/`isFieldUnsown` → Phase 2-Rest, nicht Naming.
 
 Das ist **nicht** „nur Gras“ oder „nur FieldAdvisor“. FieldAdvisor zuerst (größtes Risiko), Rest **pflichtig** in derselben Kampagne.
 
@@ -89,19 +90,17 @@ Quelle: `FieldAdvisor.lua` (202 Funktionen), Aufrufer aus `scripts/`+`gui/`. Zei
 | `isGrassStandingCropPhase` | Verfeinerung (bekommt meadowPhase als Eingabe) | bleibt |
 | `isGenericGrassStandingCrop` | bewusst **ohne** Kanon (Rekursion in Frucht-Auflösung vermeiden) | bleibt (begründet) |
 
-### E) Gras-Rest (los / Schwad / Ballen) — **ausgemistet**
+### E) Gras-Rest (los / Schwad / Ballen) — **Liter + Layout + Ballen (2026-06-07)**
 
-> **Status 2026-06-04:** B1-Befund (Density-Map fehlt) bestätigt → Rest ist **nicht sensierbar**.
-> Konsequenz: die gesamte Density-Map-Residue-Detektion **gelöscht** (~1380 Zeilen + 18 tote Tuning-Konstanten).
-> Einzige Quelle ist jetzt **`deriveGrassResidueSummary(baleSummary)`** (rein, ballen-basiert):
-> Ballen auf dem Feld ⇒ `BALED`, sonst `NONE`. `loose`/`swath` werden nicht mehr erzeugt.
-> Vorschlag (`addGrassWorkActions`): bei `cut` ohne Ballen ganze Kette (Schwaden→Sammeln→Ballen→Silageballen,
-> `grass_swath`/`grass_collect` = manuell), mit Ballen nur `grass_bale_collect`. Auto-Complete nur über Ballenzahl.
+> **Status 2026-06-07:** `deriveGrassResidueSummary` + `classifyGrassMaterialLayout`: gleiche Liter-API wie Stroh; Layout ⇒ `loose` | `swath` | `none`; Ballen ⇒ `BALED`.
+> **`addGrassWorkActions` cut:** `loose`/`none` → Kette ab Schwaden; `swath` → Sammeln/Ballen; Ballen → einsammeln.
+> Offen: Probe-Gate nutzt noch `isPositionInsideFieldOrUnknown` — siehe `FALLBACK_AUDIT.md` P1.
+> Alte Density-Map-Fusion (~1380 Zeilen) bleibt gelöscht.
 
 | Funktion | Status |
 |----------|--------|
-| `deriveGrassResidueSummary` | **Kanon** (ballen-basiert) |
-| `isGrassBalingWorkComplete` | bleibt, jetzt rein ballen-basiert |
+| `deriveGrassResidueSummary` | **Kanon** (Liter + Ballen: `BALED` > `SWATH` > `NONE`) |
+| `isGrassBalingWorkComplete` | bleibt, rein ballen-basiert (auto-complete) |
 | `detectGrassResidue`, `fuseGrassResidueSignals`, `refineGrassResidueSummary`, `sampleGrassResidueCoverage` | **gelöscht** |
 | `shouldTreatGrassResidueAsSwath`, `isUniformCutFieldIdleResidue`, `hasGrassSwathMaterialRemaining` | **gelöscht** |
 | `isGrassCollectEffectivelyDone`, `isGrassSwathWorkComplete`, `hasGrassWindrowLineEvidence`, `isGrassWindrowPileRemnant`, `applyFieldBaleResidueOverlay` | **gelöscht** |
@@ -158,8 +157,8 @@ Quelle: `FieldAdvisor.lua` (202 Funktionen), Aufrufer aus `scripts/`+`gui/`. Zei
 | # | Symptom | Funktion A | Funktion B | Gewünscht | Bleibt (Kanon) |
 |---|---------|------------|------------|-----------|----------------|
 | W1 | Stoppel als „Wächst“ (Roggen/Triticale, growth>max) | `hasActiveCrop`/`isFieldSown` (growth>0 ⇒ aktiv) | `isArableHarvestedStubble` (growth>max ⇒ Stoppel) | growth>maxHarvest ⇒ post_harvest | `deriveFieldPhase` (nutzt Stoppelregel) |
-| W2 | Feld 6 loose/swath aus Höhen-Rauschen | `isUniformCutFieldIdleResidue` | `hasGrassSwathMaterialRemaining` | DensityMapUtil fehlt ⇒ kein verlässlicher Rest | `deriveGrassResiduePhase` |
-| W3 | `buildFieldContext`-Reihenfolge: collect-done vor swath | `isGrassCollectEffectivelyDone` | `shouldTreatGrassResidueAsSwath` | erst Rest bestimmen, dann „fertig“ | `deriveGrassResiduePhase` |
+| W2 | Feld 6 Schwad aus Höhen-Rauschen | (gelöscht) | (gelöscht) | Liter-API statt Höhe | `deriveGrassResidueSummary` |
+| W3 | Rest vor „fertig“ | (gelöscht) | (gelöscht) | eine Summary, dann Actions | `deriveGrassResidueSummary` |
 | W4 | Feld 72 „tot“ aber needsWatch+Hoe | `isWeedTaskDoneByCoverage` (done) | `fieldNeedsWeedWatch`/`Hoe` (aktiv) | doneByCoverage ⇒ keine Aktion | `deriveWeedAdvice` |
 | W5 | Feld 16 6% live: Combat **und** Hoe | `fieldShouldSuggestWeedSpray` | `fieldNeedsWeedHoe` | kleine Ratio ⇒ höchstens Hoe | `deriveWeedAdvice` |
 | W6 | dominant BARE_SOIL vs. center ARABLE-Stoppel | `getCropPhase` BARE-Zweig | Stoppelregel | Stoppel vor empty | `deriveFieldPhase` |
@@ -175,5 +174,53 @@ Quelle: `FieldAdvisor.lua` (202 Funktionen), Aufrufer aus `scripts/`+`gui/`. Zei
 
 1. **`deriveFieldPhase`** (A+B) — größter, klarster Gewinn; behebt W1/W6.
 2. **`deriveWeedAdvice`** (F) — abgegrenzt, gut testbar; behebt W4/W5.
-3. **`deriveGrassResiduePhase`** (E) — zuletzt, weil Datenlage (B1) erst ehrlich gemacht werden muss; behebt W2/W3.
-4. **`resolveActionCandidates`** auf `phase → actions[]` umstellen; Completion nur aus Phase.
+3. ✅ **`deriveGrassResidueSummary`** (E) — Liter + Ballen (2026-06-06); W2/W3 obsolet.
+4. ✅ **`resolveActionCandidates`** — `PHASE_ACTION_BUILDERS`-Dispatch erledigt.
+
+---
+
+## Naming-Glossar (Phase 5)
+
+### Entscheider (`derive*` / `classify*`)
+
+| Name | Modul | Frage |
+|------|-------|-------|
+| `deriveFieldPhase` | FieldPhase | In welcher Arbeitsphase ist das Feld? |
+| `deriveGrassResidueSummary` | FieldAdvisor | Gras nach Mähen: none/swath/baled? |
+| `deriveStrawResidueSummary` | FieldAdvisor | Stroh-Schwaden auf Stoppel? |
+| `deriveWeedAdvice` | WeedAdvice | Unkraut: done/hoe/watch/spray? |
+| `classifyProbe` | FieldAdvisor | Eine Probe: arable/grass/bare/unknown? |
+| `resolveActionCandidates` | FieldAdvisor | Welche Arbeitsschritte vorschlagen? |
+
+### Fassaden (UI/Legacy-String)
+
+| Name | Delegiert an |
+|------|----------------|
+| `getCropPhase` | `buildFieldPhaseFacts` → `deriveFieldPhase` → `mapFieldPhaseToCropPhase` |
+| `fieldNeedsWeedHoe` / `Combat` / `Watch` / `fieldShouldSuggestWeedSpray` | `deriveWeedAdvice` |
+| `isFieldTaskComplete` | `FieldTaskCompletion.isTaskComplete` |
+
+### Readouts (`is*` — kein Phasen-Entscheid)
+
+| Name | Zweck | Nicht nutzen für |
+|------|-------|------------------|
+| `hasActiveCrop` | cultivate-Completion | Feldphase |
+| `isFieldSown` | sow-Completion | Feldphase |
+| `isFieldUnsown` | Ernte-Spalte „-“ | Feldphase |
+| `isArableHarvestedStubble` | Stoppel-Erkennung (facts) | alleinige Phase |
+| `isGrassHarvestable` / `isGrassCut` | Meadow-Readouts | Meadow-Phase |
+| `isArableWeedSamplingContext` | Unkraut-Proben nur auf Acker | Unkraut-Advice |
+
+### Variablen (ein Begriff pro Scope)
+
+| Variable | Bedeutung |
+|----------|-----------|
+| `fieldState` | Live-`FieldState` an einer Weltposition |
+| `harvestState` | Center-Probe für Ernte-Spalte/Monat (`resolveHarvestFieldState`) |
+| `probeState` | Repräsentant in `buildFieldContext` (oft = center) |
+| `representativeState` | Dominante/max-growth-Probe in Aggregation |
+| `aggregation.harvestState` | Immer Center — für Ernte-Fenster, nicht representative |
+| `grassResidueSummary` / `strawResidueSummary` | Ausgabe der jeweiligen `derive*ResidueSummary` |
+| `baleSummary` | `{total, straw, grass, other}` aus `sampleBaleCoverage` |
+| `weedSummary` | Coverage aus `sampleWeedCoverage` |
+| `pfSample` / `scsSample` | Precision Farming / Crop Stress Mod-Daten |

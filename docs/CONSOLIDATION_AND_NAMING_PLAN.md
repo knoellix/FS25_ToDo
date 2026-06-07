@@ -174,7 +174,7 @@ Jeder Eintrag: **Symptom → zwei Funktionen → gewünschtes Verhalten → welc
 
 1. ✅ **`deriveFieldPhase(field, aggregation)`** — einzige Quelle für `getCropPhase`-Ergebnis.
 2. ✅ **Meadow-Phase verifiziert** — `getGrassMeadowPhase` ist der einzige Entscheider; `isGrassHarvestable`/`isGrassCut` sind Readouts, `isGenericGrassStandingCrop` bewusst getrennt (Rekursion). Kein Merge (würde brechen), Rollen per Kommentar fixiert.
-3. ✅ **Bewusster Schnitt** statt `deriveGrassResiduePhase`: Rest nicht sensierbar → Density-Map-Detektion gelöscht (~1380 Zeilen), Kanon = ballen-basierte `deriveGrassResidueSummary`.
+3. ✅ **Bewusster Schnitt** statt `deriveGrassResiduePhase`: alte Density-Map-Fusion gelöscht (~1380 Zeilen); Kanon = `deriveGrassResidueSummary` (Liter + Ballen, 2026-06-06).
 4. ✅ **`deriveWeedAdvice`** — eine Stelle für Spritzen/Striegeln/keins.
 5. ✅ **`buildFieldContext`** — geprüft: füllt nur Proben/State/Strukturen, trifft **keine** Phasenentscheidung (Gras-Gate nur als Ballen-Sampling-Gate). Schlank seit Residue-Schnitt.
 6. ✅ **`resolveActionCandidates`** — Phase einmal ableiten, dann `PHASE_ACTION_BUILDERS[phase]`-Dispatch; keine `elseif`-Ketten für dieselbe Phase.

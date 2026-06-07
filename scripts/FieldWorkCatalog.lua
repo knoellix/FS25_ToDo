@@ -18,15 +18,13 @@ FieldWorkCatalog.PICKER_ACTIONS = {
     { actionType = "weed_combat", l10nKey = "ftdl_action_weed_combat", fallback = "Spritzen", autoComplete = true },
     { actionType = "stones", l10nKey = "ftdl_action_stones", fallback = "Steine", autoComplete = true },
     { actionType = "grass_mow", l10nKey = "ftdl_action_grass_mow", fallback = "Mähen", autoComplete = true },
-    -- Swath / loader collect leave no object signal and the density-map fill API is absent
-    -- in this runtime (see docs/DECISIONS.md) -> not auto-completable, manual reminder only.
+    -- Swath / loader collect: windrow liters drive suggestions only; no auto-complete baseline.
     { actionType = "grass_swath", l10nKey = "ftdl_action_grass_swath", fallback = "Schwaden", autoComplete = false },
     { actionType = "grass_collect", l10nKey = "ftdl_action_grass_collect", fallback = "Heu sammeln (Ladewagen)", autoComplete = false },
     { actionType = "grass_bale", l10nKey = "ftdl_action_grass_bale", fallback = "Ballen pressen", autoComplete = true },
     { actionType = "grass_silage_bale", l10nKey = "ftdl_action_grass_silage_bale", fallback = "Silageballen pressen", autoComplete = true },
     { actionType = "grass_bale_collect", l10nKey = "ftdl_action_grass_bale_collect", fallback = "Ballen einsammeln", autoComplete = true },
-    -- Straw logistics for arable stubble: pressing/collecting auto-complete via field-local bales
-    -- (fill type STRAW). Loose straw swaths are not sensable, so the press step relies on bales.
+    -- Straw logistics: suggestions use STRAW windrow liters; auto-complete uses field-local STRAW bales.
     { actionType = "straw_bale", l10nKey = "ftdl_action_straw_bale", fallback = "Stroh pressen/bergen", autoComplete = true },
     { actionType = "straw_bale_collect", l10nKey = "ftdl_action_straw_bale_collect", fallback = "Strohballen einsammeln", autoComplete = true },
     { actionType = "harvest", l10nKey = "ftdl_action_harvest", fallback = "Ernten", autoComplete = true },

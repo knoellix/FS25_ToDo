@@ -27,6 +27,7 @@ local RESIDUE_WORK = {
 local STUBBLE_GROUND = {
     STUBBLE = true,
     HARVEST_READY = true,
+    HARVEST_READY_OTHER = true,
 }
 
 local function num(value)

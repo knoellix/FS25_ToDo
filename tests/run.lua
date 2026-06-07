@@ -76,5 +76,44 @@ else
   end
 end
 
+-- Grass loose vs swath layout (classifyGrassMaterialLayout).
+dofile(repoRoot .. "/scripts/FieldAdvisor.lua")
+if type(FieldAdvisor) == "table" and type(FieldAdvisor.classifyGrassMaterialLayout) == "function" then
+  io.write("\n")
+  local grassCases = {
+    {
+      name = "grass_layout_uniform_loose",
+      ew = { 40, 45, 50, 48, 42, 44, 46 },
+      ns = { 38, 41, 43, 45, 40, 39, 42 },
+      fillMin = 10,
+      expected = "loose",
+    },
+    {
+      name = "grass_layout_rowed_swath",
+      ew = { 0, 0, 0, 120, 130, 0, 0, 0 },
+      ns = { 2, 1, 0, 0, 0, 0, 1, 2 },
+      fillMin = 10,
+      expected = "swath",
+    },
+    {
+      name = "grass_layout_no_material",
+      ew = { 0, 0, 0, 0 },
+      ns = { 0, 0, 0, 0 },
+      fillMin = 10,
+      expected = "none",
+    },
+  }
+  for _, c in ipairs(grassCases) do
+    local got = FieldAdvisor.classifyGrassMaterialLayout(c.ew, c.ns, c.fillMin)
+    if got == c.expected then
+      pass = pass + 1
+      io.write(string.format(GREEN .. "PASS" .. RESET .. " %-44s -> %s\n", c.name, tostring(got)))
+    else
+      fail = fail + 1
+      io.write(string.format(RED .. "FAIL" .. RESET .. " %-44s expected %s got %s\n", c.name, c.expected, tostring(got)))
+    end
+  end
+end
+
 io.write(string.format("\n%d passed, %d failed, %d total\n", pass, fail, pass + fail))
 os.exit(fail == 0 and 0 or 1)
