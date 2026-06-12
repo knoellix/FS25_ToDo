@@ -56,6 +56,11 @@ function FieldPhase.isArableStubble(facts)
         if flags.harvestable == true or flags.harvestReady == true then
             return false
         end
+        -- FS25 uses HARVEST_READY for standing cereals/beans before the final growth stage (Field 3 soybean).
+        if facts.hasFruit == true and maxHarvest > 0
+            and num(facts.growth) > 0 and num(facts.growth) <= maxHarvest then
+            return false
+        end
         return true
     end
 

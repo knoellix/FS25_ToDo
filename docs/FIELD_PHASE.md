@@ -61,7 +61,7 @@ Status: **festgelegt** (Phase 1.5). Phase 2 implementiert genau diesen Kontrakt 
 3. **Stoppel** → **`post_harvest`**, wenn eine davon:
    - `growth > maxHarvest` und `maxHarvest > 0`
    - `flags.cut`
-   - `ground ∈ {STUBBLE, HARVEST_READY}` **und nicht** (`flags.harvestable` oder `flags.harvestReady`)
+   - `ground ∈ {STUBBLE, HARVEST_READY}` **und nicht** (`flags.harvestable` oder `flags.harvestReady`) **und nicht** (`hasFruit` und `0 < growth <= maxHarvest`) — FS25 nutzt `HARVEST_READY` auch für stehende Bohnen/Getreide vor der Endreife (Feld 3)
 4. `hasFruit` und `growth > 0` → **`standing`**
 5. sonst → **`empty`**
 

@@ -47,6 +47,10 @@ FieldAdvisor._fruitTypeIndexByNameCache = {}
 FieldAdvisor.OVERVIEW_SAMPLE_GRID_STEPS = 3
 FieldAdvisor.PROBE_AGGREGATION_CACHE_TTL_MS = 3000
 FieldAdvisor.PROBE_EARLY_EXIT_MIN_SAMPLES = 5
+-- Overview/completion probe grid only (residue cross-bars use full measured extent).
+FieldAdvisor.PROBE_SAMPLE_MAX_HALF_EXTENT = 96
+-- Keep probe samples this far inside the engine field edge (per axis).
+FieldAdvisor.PROBE_EDGE_INSET = 5
 FieldAdvisor._grassFruitNameList = nil
 
 FieldAdvisor.JOB_COMPLETION_THRESHOLD = FieldTaskCompletion ~= nil
@@ -863,6 +867,14 @@ function FieldAdvisor.resolveDominantSituationFromCounts(counts, centerSituation
         end
     end
 
+    -- Edge/headland probes often classify unknown; center crop read must not lose (Field 2 maize).
+    if dominantSituation == FieldAdvisor.PROBE_SITUATION.UNKNOWN
+        and centerSituation ~= FieldAdvisor.PROBE_SITUATION.UNKNOWN
+        and centerSituation ~= FieldAdvisor.PROBE_SITUATION.BARE_SOIL
+        and (counts[centerSituation] or 0) >= 1 then
+        dominantSituation = centerSituation
+    end
+
     return dominantSituation
 end
 
@@ -1081,7 +1093,7 @@ function FieldAdvisor.aggregateFieldProbes(field, fieldId, centerState, worldX, 
         end
 
         for _, point in ipairs(points) do
-            if FieldAdvisor.isPositionInsideField(field, point.x, point.z) then
+            if FieldAdvisor.isSamplePositionOnField(field, point.x, point.z) then
                 local isCenter = point.x == worldX and point.z == worldZ
                 if not isCenter then
                     local sampleState = FieldAdvisor.getEnrichedFieldState(field, fieldId, point.x, point.z)
@@ -1966,7 +1978,7 @@ function FieldAdvisor.sampleWeedCoverage(field, fieldId, worldX, worldZ, aggrega
         and aggregation.dominantSituation == FieldAdvisor.PROBE_SITUATION.GRASS
 
     for _, point in ipairs(points) do
-        if FieldAdvisor.isPositionInsideField(field, point.x, point.z) then
+        if FieldAdvisor.isSamplePositionOnField(field, point.x, point.z) then
             local sampleState = FieldAdvisor.getEnrichedFieldState(field, fieldId, point.x, point.z)
             if skipGrassProbes
                 and FieldAdvisor.classifyProbe(sampleState, field) == FieldAdvisor.PROBE_SITUATION.GRASS then
@@ -2305,7 +2317,7 @@ function FieldAdvisor.measureFieldAxisHalfExtent(field, centerX, centerZ, dirX, 
     local maxDist = 0
     local step = 3
     for dist = step, 320, step do
-        if FieldAdvisor.isPositionInsideField(field, centerX + dirX * dist, centerZ + dirZ * dist) then
+        if FieldAdvisor.isSamplePositionOnField(field, centerX + dirX * dist, centerZ + dirZ * dist) then
             maxDist = dist
         else
             break
@@ -2313,7 +2325,7 @@ function FieldAdvisor.measureFieldAxisHalfExtent(field, centerX, centerZ, dirX, 
     end
 
     for dist = step, 320, step do
-        if FieldAdvisor.isPositionInsideField(field, centerX - dirX * dist, centerZ - dirZ * dist) then
+        if FieldAdvisor.isSamplePositionOnField(field, centerX - dirX * dist, centerZ - dirZ * dist) then
             maxDist = math.max(maxDist, dist)
         else
             break
@@ -2755,7 +2767,7 @@ function FieldAdvisor.deriveGrassResidueSummary(field, fieldId, worldX, worldZ, 
     for step = -lineSteps, lineSteps do
         local t = step / lineSteps
         local xEw = worldX + t * halfExtent
-        if FieldAdvisor.isPositionInsideField(field, xEw, worldZ) then
+        if FieldAdvisor.isSamplePositionOnField(field, xEw, worldZ) then
             ewSamples[#ewSamples + 1] = FieldAdvisor.callFillLevelAtArea(
                 windrowFillIndex,
                 xEw - halfSize, worldZ - halfSize,
@@ -2765,7 +2777,7 @@ function FieldAdvisor.deriveGrassResidueSummary(field, fieldId, worldX, worldZ, 
         end
 
         local zNs = worldZ + t * halfExtent
-        if FieldAdvisor.isPositionInsideField(field, worldX, zNs) then
+        if FieldAdvisor.isSamplePositionOnField(field, worldX, zNs) then
             nsSamples[#nsSamples + 1] = FieldAdvisor.callFillLevelAtArea(
                 windrowFillIndex,
                 worldX - halfSize, zNs - halfSize,
@@ -2837,6 +2849,48 @@ function FieldAdvisor.resolveStrawFillTypeIndex()
     return nil
 end
 
+---@param field table|nil
+---@return number
+--- Per-axis half-extent for overview/completion probe grids (inset + cap; residue uses getFieldSampleHalfExtent).
+---@param field table|nil
+---@param centerX number|nil
+---@param centerZ number|nil
+---@return number halfX
+---@return number halfZ
+function FieldAdvisor.getProbeSampleHalfExtents(field, centerX, centerZ)
+    if centerX == nil or centerZ == nil then
+        centerX, centerZ = FieldAdvisor.getFieldCenterWorldPosition(field)
+    end
+    if centerX == nil or centerZ == nil then
+        return 0, 0
+    end
+
+    local extentX = FieldAdvisor.measureFieldAxisHalfExtent(field, centerX, centerZ, 1, 0)
+    local extentZ = FieldAdvisor.measureFieldAxisHalfExtent(field, centerX, centerZ, 0, 1)
+    local inset = math.max(0, tonumber(FieldAdvisor.PROBE_EDGE_INSET) or 0)
+    local cap = math.max(0, tonumber(FieldAdvisor.PROBE_SAMPLE_MAX_HALF_EXTENT) or 0)
+
+    local halfX = math.max(0, extentX - inset)
+    local halfZ = math.max(0, extentZ - inset)
+    if cap > 0 then
+        halfX = math.min(halfX, cap)
+        halfZ = math.min(halfZ, cap)
+    end
+
+    return halfX, halfZ
+end
+
+--- Max axis half-extent (dump compat); prefer getProbeSampleHalfExtents for rectangular grids.
+---@param field table|nil
+---@param centerX number|nil
+---@param centerZ number|nil
+---@return number
+function FieldAdvisor.getProbeSampleHalfExtent(field, centerX, centerZ)
+    local halfX, halfZ = FieldAdvisor.getProbeSampleHalfExtents(field, centerX, centerZ)
+    return math.max(halfX, halfZ)
+end
+
+--- Half-extent for grass/straw cross-bar liter samples (full measured field reach).
 ---@param field table|nil
 ---@return number
 function FieldAdvisor.getFieldSampleHalfExtent(field)
@@ -2915,7 +2969,7 @@ function FieldAdvisor.deriveStrawResidueSummary(field, fieldId, worldX, worldZ, 
     for step = -lineSteps, lineSteps do
         local t = step / lineSteps
         local xEw = worldX + t * halfExtent
-        if FieldAdvisor.isPositionInsideField(field, xEw, worldZ) then
+        if FieldAdvisor.isSamplePositionOnField(field, xEw, worldZ) then
             local liters = FieldAdvisor.callFillLevelAtArea(
                 strawFillIndex,
                 xEw - halfSize, worldZ - halfSize,
@@ -2928,7 +2982,7 @@ function FieldAdvisor.deriveStrawResidueSummary(field, fieldId, worldX, worldZ, 
         end
 
         local zNs = worldZ + t * halfExtent
-        if FieldAdvisor.isPositionInsideField(field, worldX, zNs) then
+        if FieldAdvisor.isSamplePositionOnField(field, worldX, zNs) then
             local liters = FieldAdvisor.callFillLevelAtArea(
                 strawFillIndex,
                 worldX - halfSize, zNs - halfSize,
@@ -3126,7 +3180,16 @@ function FieldAdvisor.classifyBaleKind(bale)
         return "other"
     end
 
-    local kind = FieldAdvisor.BALE_KIND_BY_FILLTYPE_NAME[string.upper(tostring(fillType.name))] or "other"
+    local name = string.upper(tostring(fillType.name))
+    local kind = FieldAdvisor.BALE_KIND_BY_FILLTYPE_NAME[name]
+    if kind == nil then
+        -- Crop windrow bales (ALFALFA_WINDROW, LUCERNE_WINDROW, …) are grass logistics, not "other".
+        if string.match(name, "_WINDROW$") then
+            kind = "grass"
+        else
+            kind = "other"
+        end
+    end
     FieldAdvisor._baleKindByIndex = FieldAdvisor._baleKindByIndex or {}
     FieldAdvisor._baleKindByIndex[idx] = kind
     return kind
@@ -4747,6 +4810,9 @@ function FieldAdvisor.isArableHarvestedStubble(field, fieldState, fruitTypeIndex
         if growth.isHarvestReady or growth.isHarvestable then
             return false
         end
+        if maxHarvest > 0 and growthState > 0 and growthState <= maxHarvest then
+            return false
+        end
         return true
     end
 
@@ -5311,7 +5377,7 @@ function FieldAdvisor.fieldHasPartialSoilWork(field, fieldId, fieldState, worldX
     local workedCount = 0
 
     for _, point in ipairs(points) do
-        if FieldAdvisor.isPositionInsideField(field, point.x, point.z) then
+        if FieldAdvisor.isSamplePositionOnField(field, point.x, point.z) then
             local sampleState = FieldAdvisor.getEnrichedFieldState(field, fieldId, point.x, point.z)
             local situation = FieldAdvisor.classifyProbe(sampleState, field)
             if situation == FieldAdvisor.PROBE_SITUATION.GRASS then
@@ -5610,6 +5676,14 @@ function FieldAdvisor.getExpectedHarvestLabel(field, fieldState, aggregation, gr
     end
 
     if FieldAdvisor.hasActiveCrop(harvestState) then
+        local displayFruit = FieldAdvisor.resolveDisplayArableFruitIndex(field, aggregation, harvestState)
+        if displayFruit == nil or displayFruit <= 0 then
+            displayFruit = arableFruit
+        end
+        local harvestWindow = FieldAdvisor.getHarvestWindowHint(displayFruit, harvestState)
+        if harvestWindow ~= nil and harvestWindow ~= "" and harvestWindow ~= "-" then
+            return harvestWindow
+        end
         return FieldAdvisor.text("ftdl_action_growing", "Wächst")
     end
 
@@ -6742,9 +6816,20 @@ end
 
 ---@param baseLabel string|nil
 ---@param actions table[]|nil
+---@param expectedHarvest string|nil month hint from getExpectedHarvestLabel when no harvest_info action
 ---@return string|nil
-function FieldAdvisor.prefixHarvestInfoSuggestion(baseLabel, actions)
+function FieldAdvisor.prefixHarvestInfoSuggestion(baseLabel, actions, expectedHarvest)
     local harvestInfo = FieldAdvisor.getHarvestInfoSuggestionLabel(actions)
+    if harvestInfo == nil then
+        local growingLabel = FieldAdvisor.text("ftdl_action_growing", "Wächst")
+        if expectedHarvest ~= nil and expectedHarvest ~= "" and expectedHarvest ~= "-"
+            and expectedHarvest ~= growingLabel then
+            harvestInfo = FieldAdvisor.formatHarvestWindowLabel(expectedHarvest)
+            if harvestInfo == "-" then
+                harvestInfo = nil
+            end
+        end
+    end
     if harvestInfo == nil then
         return baseLabel
     end
@@ -6786,13 +6871,13 @@ function FieldAdvisor.formatSuggestionColumn(actions, expectedHarvest)
         4
     )
     if workOrderPreview ~= nil and #logisticsActions > 0 then
-        return FieldAdvisor.prefixHarvestInfoSuggestion(workOrderPreview, actions)
+        return FieldAdvisor.prefixHarvestInfoSuggestion(workOrderPreview, actions, expectedHarvest)
             or workOrderPreview
     end
 
     workOrderPreview = FieldAdvisor.formatWorkOrderSuggestionPreview(actions, 4)
     if workOrderPreview ~= nil then
-        return FieldAdvisor.prefixHarvestInfoSuggestion(workOrderPreview, actions)
+        return FieldAdvisor.prefixHarvestInfoSuggestion(workOrderPreview, actions, expectedHarvest)
             or workOrderPreview
     end
 
@@ -6811,22 +6896,25 @@ function FieldAdvisor.formatSuggestionColumn(actions, expectedHarvest)
             return harvestInfo
         end
 
-        if expectedHarvest ~= nil and expectedHarvest ~= "" and expectedHarvest ~= "-" then
-            return expectedHarvest
+        local growingLabel = FieldAdvisor.text("ftdl_action_growing", "Wächst")
+        if expectedHarvest ~= nil and expectedHarvest ~= "" and expectedHarvest ~= "-"
+            and expectedHarvest ~= growingLabel then
+            return FieldAdvisor.formatHarvestWindowLabel(expectedHarvest)
         end
 
-        return FieldAdvisor.text("ftdl_action_growing", "Wächst")
+        return growingLabel
     end
 
     local primary = displayLabels[1]
     if #displayLabels > 1 then
         return FieldAdvisor.prefixHarvestInfoSuggestion(
             FieldAdvisor.text("ftdl_action_preview_more", "%s (+%d)", primary, #displayLabels - 1),
-            actions
+            actions,
+            expectedHarvest
         ) or FieldAdvisor.text("ftdl_action_preview_more", "%s (+%d)", primary, #displayLabels - 1)
     end
 
-    return FieldAdvisor.prefixHarvestInfoSuggestion(primary, actions) or primary
+    return FieldAdvisor.prefixHarvestInfoSuggestion(primary, actions, expectedHarvest) or primary
 end
 
 ---@param field table|nil
@@ -6863,14 +6951,41 @@ function FieldAdvisor.testPositionInsideField(field, x, z)
     return nil
 end
 
---- Single field-boundary gate: engine polygon must return true (nil/false => outside).
---- Used for probes, residue cross-samples, completion grids, and bale assignment polygon check.
+--- Strict polygon only (false/nil => outside). Bale owner check uses this on the owner field object.
 ---@param field table|nil
 ---@param x number
 ---@param z number
 ---@return boolean
 function FieldAdvisor.isPositionInsideField(field, x, z)
     return FieldAdvisor.testPositionInsideField(field, x, z) == true
+end
+
+--- Single gate for field-local probes/residue/completion samples (not bales).
+--- Polygon true => inside; polygon false => outside; polygon nil => engine field id at (x,z) must match.
+---@param field table|nil
+---@param x number|nil
+---@param z number|nil
+---@return boolean
+function FieldAdvisor.isSamplePositionOnField(field, x, z)
+    if field == nil or x == nil or z == nil then
+        return false
+    end
+
+    local targetFieldId = field.getId ~= nil and tonumber(field:getId()) or nil
+    if targetFieldId == nil then
+        return false
+    end
+
+    local inside = FieldAdvisor.testPositionInsideField(field, x, z)
+    if inside == true then
+        return true
+    end
+    if inside == false then
+        return false
+    end
+
+    local sampleFieldId = FieldAdvisor.resolveEngineFieldIdAtWorldPosition(x, z)
+    return sampleFieldId ~= nil and sampleFieldId == targetFieldId
 end
 
 ---@param field table|nil

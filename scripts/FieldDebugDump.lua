@@ -560,12 +560,15 @@ local function dumpResidueRawScan(field, fieldId, fieldState, worldX, worldZ, ag
         local grassSummary = FieldAdvisor.deriveGrassResidueSummary(
             field, fieldId, worldX, worldZ, baleSummary, grassFruit
         )
+        local sampleHalf = FieldAdvisor.getFieldSampleHalfExtent ~= nil
+            and FieldAdvisor.getFieldSampleHalfExtent(field) or 0
         out(string.format(
-            "grassResidue: state=%s source=%s hasWindrow=%s fillApiReady=%s centerFill=%.3f crossFillMax=%.3f fillMin=%.3f ewTrans=%s ewAbove=%.2f nsTrans=%s nsAbove=%.2f grassBales=%s",
+            "grassResidue: state=%s source=%s hasWindrow=%s fillApiReady=%s sampleHalf=%.1f centerFill=%.3f crossFillMax=%.3f fillMin=%.3f ewTrans=%s ewAbove=%.2f nsTrans=%s nsAbove=%.2f grassBales=%s",
             stringify(grassSummary.residueState),
             stringify(grassSummary.residueSource),
             stringify(grassSummary.hasWindrow),
             stringify(grassSummary.fillApiReady),
+            sampleHalf,
             grassSummary.centerFillLiters or 0,
             grassSummary.crossFillMax or 0,
             grassSummary.fillMinLiters or 0,
@@ -664,6 +667,17 @@ function FieldDebugDump.dumpField(fieldId)
     out(string.format("inferGrassFruitTypeIndexFromField -> %s", fruitLabel(FieldAdvisor.inferGrassFruitTypeIndexFromField(field))))
 
     dumpDensityMapFruit(worldX, worldZ)
+    if FieldAdvisor.getProbeSampleHalfExtents ~= nil then
+        local halfX, halfZ = FieldAdvisor.getProbeSampleHalfExtents(field, worldX, worldZ)
+        out(string.format(
+            "probeGrid: halfX=%.1f halfZ=%.1f inset=%.1f cap=%.1f overviewSteps=%d",
+            halfX,
+            halfZ,
+            tonumber(FieldAdvisor.PROBE_EDGE_INSET) or 0,
+            tonumber(FieldAdvisor.PROBE_SAMPLE_MAX_HALF_EXTENT) or 0,
+            tonumber(FieldAdvisor.OVERVIEW_SAMPLE_GRID_STEPS) or 0
+        ))
+    end
     if FieldTaskCompletion ~= nil and FieldTaskCompletion.collectSamplePoints ~= nil then
         local points = FieldTaskCompletion.collectSamplePoints(field, worldX, worldZ)
         local shown = 0

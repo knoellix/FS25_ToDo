@@ -35,9 +35,9 @@ Zweck: Transparent machen, **wo noch Heuristiken** laufen — und **was verboten
 
 **War:** `isPositionInsideFieldOrUnknown` — `nil` ⇒ inside; `measureFieldAxisHalfExtent` / `getFieldSampleHalfExtent` / `collectSamplePoints` nutzten areaHa-Raten.
 
-**Jetzt:** `isPositionInsideFieldOrUnknown` **gelöscht**. Ein Gate: `isPositionInsideField` (nur `testPositionInsideField == true`). Feldgröße für Proben nur noch über Polygon-Walk (`measureFieldAxisHalfExtent`), kein areaHa-Raten-Fallback.
+**Jetzt:** `isPositionInsideFieldOrUnknown` **gelöscht**. Proben-Gate: `isSamplePositionOnField` — Polygon `true`; `false` ⇒ weg; `nil` ⇒ Engine-Feld-ID an der Probe-Position (kein Raten). Extent-Walk nutzt dasselbe Gate. Ballen: `resolveBaleOwnerFieldId` (strict Owner-Polygon).
 
-**Entscheidende Funktion:** `isPositionInsideField`.
+**Entscheidende Funktion:** `isSamplePositionOnField` (Proben); `isPositionInsideField` (nur strict Polygon für Ballen).
 
 ---
 

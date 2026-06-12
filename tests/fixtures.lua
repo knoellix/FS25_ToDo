@@ -15,6 +15,14 @@ case{ name = "field_1_soybean_growing",
             shred = 1, residue = "none", residueReliable = false },
   expected = "standing" }
 
+-- Field 3 (2026-06-07): SOYBEAN growth=5 on HARVEST_READY must not read as post-harvest stubble.
+case{ name = "field_3_soybean_harvest_ready_ground",
+  facts = { dominant = "arable", isGrassCrop = false, hasFruit = true,
+            growth = 5, maxHarvest = 7, ground = "HARVEST_READY",
+            flags = { cut = false, harvestable = false, harvestReady = false, withered = false },
+            shred = 0, residue = "none", residueReliable = false },
+  expected = "standing" }
+
 case{ name = "field_6_grass_cut_unreliable_residue",
   facts = { dominant = "grass", isGrassCrop = true, hasFruit = true,
             growth = 5, maxHarvest = 4, ground = "GRASS_CUT",

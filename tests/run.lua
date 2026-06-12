@@ -115,5 +115,32 @@ if type(FieldAdvisor) == "table" and type(FieldAdvisor.classifyGrassMaterialLayo
   end
 end
 
+if type(FieldAdvisor) == "table" and type(FieldAdvisor.classifyBaleKind) == "function" then
+  io.write("\n")
+  local baleCases = {
+    { name = "bale_kind_straw", fillName = "STRAW", expected = "straw" },
+    { name = "bale_kind_alfalfa_windrow", fillName = "ALFALFA_WINDROW", expected = "grass" },
+    { name = "bale_kind_grass_windrow", fillName = "GRASS_WINDROW", expected = "grass" },
+  }
+  for _, c in ipairs(baleCases) do
+    FieldAdvisor._baleKindByIndex = {}
+    local oldManager = g_fillTypeManager
+    g_fillTypeManager = {
+      getFillTypeByIndex = function(_, idx)
+        return { name = c.fillName }
+      end,
+    }
+    local got = FieldAdvisor.classifyBaleKind({ fillType = 191 })
+    g_fillTypeManager = oldManager
+    if got == c.expected then
+      pass = pass + 1
+      io.write(string.format(GREEN .. "PASS" .. RESET .. " %-44s -> %s\n", c.name, tostring(got)))
+    else
+      fail = fail + 1
+      io.write(string.format(RED .. "FAIL" .. RESET .. " %-44s expected %s got %s\n", c.name, c.expected, tostring(got)))
+    end
+  end
+end
+
 io.write(string.format("\n%d passed, %d failed, %d total\n", pass, fail, pass + fail))
 os.exit(fail == 0 and 0 or 1)

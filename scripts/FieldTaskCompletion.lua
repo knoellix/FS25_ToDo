@@ -215,14 +215,20 @@ function FieldTaskCompletion.collectSamplePoints(field, centerX, centerZ, gridSt
         return points
     end
 
-    if FieldAdvisor.isPositionInsideField(field, centerX, centerZ) then
+    if FieldAdvisor.isSamplePositionOnField(field, centerX, centerZ) then
         points[#points + 1] = { x = centerX, z = centerZ }
     end
 
-    local extentX = FieldAdvisor.measureFieldAxisHalfExtent(field, centerX, centerZ, 1, 0)
-    local extentZ = FieldAdvisor.measureFieldAxisHalfExtent(field, centerX, centerZ, 0, 1)
-    local halfExtent = math.max(extentX, extentZ)
-    if halfExtent <= 0 then
+    local halfExtentX = 0
+    local halfExtentZ = 0
+    if FieldAdvisor.getProbeSampleHalfExtents ~= nil then
+        halfExtentX, halfExtentZ = FieldAdvisor.getProbeSampleHalfExtents(field, centerX, centerZ)
+    elseif FieldAdvisor.getProbeSampleHalfExtent ~= nil then
+        local halfExtent = FieldAdvisor.getProbeSampleHalfExtent(field, centerX, centerZ)
+        halfExtentX = halfExtent
+        halfExtentZ = halfExtent
+    end
+    if halfExtentX <= 0 and halfExtentZ <= 0 then
         return points
     end
 
@@ -230,10 +236,12 @@ function FieldTaskCompletion.collectSamplePoints(field, centerX, centerZ, gridSt
 
     for ix = -steps, steps do
         for iz = -steps, steps do
-            if not (ix == 0 and iz == 0) then
-                local sampleX = centerX + (ix / steps) * halfExtent
-                local sampleZ = centerZ + (iz / steps) * halfExtent
-                if FieldAdvisor.isPositionInsideField(field, sampleX, sampleZ) then
+            if not (ix == 0 and iz == 0)
+                and (ix == 0 or halfExtentX > 0)
+                and (iz == 0 or halfExtentZ > 0) then
+                local sampleX = centerX + (ix / steps) * halfExtentX
+                local sampleZ = centerZ + (iz / steps) * halfExtentZ
+                if FieldAdvisor.isSamplePositionOnField(field, sampleX, sampleZ) then
                     points[#points + 1] = { x = sampleX, z = sampleZ }
                 end
             end

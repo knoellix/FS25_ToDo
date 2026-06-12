@@ -15,7 +15,19 @@ Datum  Thema: Regel (kurz, technisch).
 
 ## Einträge
 
-2026-06-07  **Feldgrenzen strict (P1)** — `isPositionInsideFieldOrUnknown` gelöscht. Proben/Residue/Completion nur wenn Engine-Polygon `true` meldet; `nil`/`false` ⇒ Probe weg. Feldgröße für Sample-Gitter: `measureFieldAxisHalfExtent` (Polygon-Walk), kein areaHa-Raten. Entscheidende Funktion: `isPositionInsideField`.
+2026-06-07  **Ballen-Klassifikation: *_WINDROW = grass** — `classifyBaleKind`: `ALFALFA_WINDROW` u. a. Kultur-Schwadenballen zählen als `grass` (Feld 5: 75 Ballen waren `other` → `grass_bale` auto-complete tot). `STRAW` bleibt `straw`.
+
+2026-06-07  **Ernte-Spalte / Vorschlag: Fenster statt pauschal „Wächst“** — `getExpectedHarvestLabel` nutzt `getHarvestWindowHint` für wachsende Ackerfrucht (Feld 2/3 → `Okt`). `formatSuggestionColumn` zeigt `Ernte Okt` wenn kein `harvest_info`-Action-Eintrag, aber Monat bekannt.
+
+2026-06-07  **Stoppel vs. wachsend auf HARVEST_READY** — `FieldPhase.isArableStubble` / `isArableHarvestedStubble`: `HARVEST_READY` ohne `harvestable` ist **kein** Stoppel wenn `0 < growth <= maxHarvest` (Feld 3 Soja → `standing`, nicht Mulchen).
+
+2026-06-07  **Probe-Gitter: 5 m Inset + rechteckig** — `getProbeSampleHalfExtents`: pro Achse `measureFieldAxisHalfExtent − PROBE_EDGE_INSET` (5 m), dann Cap 96 m. `collectSamplePoints` nutzt `halfX`/`halfZ` getrennt (schmale lange Felder: nur Z-Achse statt Quadrat). Residue-Kreuzstäbe unverändert (`getFieldSampleHalfExtent`).
+
+2026-06-07  **Dominante Situation: Mitte schlägt Rand-unknown** — `resolveDominantSituationFromCounts`: wenn Mehrheit `unknown` (Kopf-/Randproben), aber Center klar `arable`/`grass` ⇒ dominant = Center (Feld 2 Mais). Probe-Gitter-Extent gedeckelt (`PROBE_SAMPLE_MAX_HALF_EXTENT`), Residue-Kreuzstäbe ungedeckelt.
+
+2026-06-07  **Proben-Gate (P1b)** — `isSamplePositionOnField`: Polygon `true` ⇒ Probe; `false` ⇒ weg; `nil` ⇒ nur wenn `getFieldIdAtWorldPosition` == Ziel-Feld (Engine, kein OrUnknown/areaHa). Ballen bleiben bei `resolveBaleOwnerFieldId` (Owner-Polygon strict). Entscheidende Funktion: `isSamplePositionOnField`.
+
+2026-06-07  **Feldgrenzen strict (P1)** — `isPositionInsideFieldOrUnknown` gelöscht; `isPositionInsideField` nur noch strict für Ballen-Polygon. Extent-Walk über `isSamplePositionOnField`, kein areaHa-Raten.
 
 2026-06-07  **Keine Fallback-Kaskaden** — Wenn die Engine an einer Position nichts liefert: **nicht raten** (keine Bbox, kein Nächstes-Zentrum, kein `unknown⇒inside`). Eine Entscheidungsfunktion, eine Datenquelle; Dump zeigt Quelle + Ergebnis. Inventar offener Stellen: `docs/FALLBACK_AUDIT.md`. Ballen: `resolveBaleOwnerFieldId` (Engine-Feld + Owner-Polygon).
 
