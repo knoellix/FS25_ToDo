@@ -1,0 +1,180 @@
+name: Release Mod
+
+# Build and publish when a version tag is pushed (e.g. v0.1.0.0).
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  FORGEJO_API: https://codeberg.org/api/v1/repos/knoellix/FS25_FieldToDoList
+  GIT_AUTHOR_EMAIL: knoellix@noreply.codeberg.org
+  GIT_COMMITTER_EMAIL: knoellix@noreply.codeberg.org
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config --global user.name "knoellix"
+          git config --global user.email "${GIT_AUTHOR_EMAIL}"
+
+      - name: Extract version from tag
+        id: version
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          v="${REF_NAME#v}"
+          echo "VERSION=${v}" >> "${GITHUB_OUTPUT}"
+          echo "Building FS25_FieldToDoList ${v}"
+
+      - name: Verify modDesc version matches tag
+        env:
+          TAG_VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          mod_version="$(grep -oP '(?<=<version>)[^<]+' modDesc.xml | head -n1)"
+          if [[ "${mod_version}" != "${TAG_VERSION}" ]]; then
+            echo "::error::modDesc.xml version (${mod_version}) does not match tag (${TAG_VERSION})."
+            echo "Bump <version> in modDesc.xml before creating the release tag."
+            exit 1
+          fi
+          echo "modDesc.xml version OK: ${mod_version}"
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick librsvg2-bin zip
+
+      - name: Build mod zip
+        env:
+          SKIP_INSTALL: "1"
+        run: bash ./build.sh
+
+      - name: Verify zip output
+        run: |
+          zip_path=".build/FS25_FieldToDoList.zip"
+          if [[ ! -f "${zip_path}" ]]; then
+            echo "::error::Mod zip not found at ${zip_path}"
+            exit 1
+          fi
+
+          echo "==> Zip contents"
+          unzip -l "${zip_path}"
+
+          forbidden="$(unzip -Z1 "${zip_path}" | grep -E '\.svg$' || true)"
+          if [[ -n "${forbidden}" ]]; then
+            echo "::error::Release zip must not contain SVG sources:"
+            echo "${forbidden}"
+            exit 1
+          fi
+
+          required=(
+            modDesc.xml
+            icon.dds
+            gui/menuIcon.dds
+            gui/icons/add.dds
+            gui/icons/edit.dds
+            gui/icons/done.dds
+            gui/icons/delete.dds
+            gui/FieldToDoMenuFrame.xml
+            gui/FieldToDoMenuFrame.lua
+          )
+          missing=0
+          for entry in "${required[@]}"; do
+            if ! unzip -Z1 "${zip_path}" | grep -Fxq "${entry}"; then
+              echo "::error::Missing required zip entry: ${entry}"
+              missing=1
+            fi
+          done
+          if [[ "${missing}" -ne 0 ]]; then
+            exit 1
+          fi
+
+          file_count="$(unzip -Z1 "${zip_path}" | wc -l)"
+          echo "Release zip OK (${file_count} files, no dev-only assets)"
+          ls -lh "${zip_path}"
+
+      - name: Create Codeberg release and upload mod zip
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          zip_path=".build/FS25_FieldToDoList.zip"
+          release_title="Field To-Do List v${VERSION}"
+          auth="Authorization: token ${GITHUB_TOKEN}"
+
+          python3 <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.error
+          import urllib.request
+
+          api = os.environ["FORGEJO_API"]
+          tag = os.environ["TAG_NAME"]
+          title = f"Field To-Do List v{os.environ['VERSION']}"
+          zip_path = ".build/FS25_FieldToDoList.zip"
+          token = os.environ["GITHUB_TOKEN"]
+          asset_name = "FS25_FieldToDoList.zip"
+
+          def request(method, url, data=None, content_type=None, allow_404=False):
+              hdrs = {"Authorization": f"token {token}"}
+              if content_type:
+                  hdrs["Content-Type"] = content_type
+              req = urllib.request.Request(url, data=data, headers=hdrs, method=method)
+              try:
+                  with urllib.request.urlopen(req) as resp:
+                      return resp.status, resp.read()
+              except urllib.error.HTTPError as exc:
+                  if allow_404 and exc.code == 404:
+                      return 404, b""
+                  body = exc.read()
+                  print(body.decode("utf-8", errors="replace"), file=sys.stderr)
+                  raise SystemExit(f"HTTP {exc.code} for {method} {url}") from exc
+
+          status, body = request("GET", f"{api}/releases/tags/{tag}", allow_404=True)
+          if status == 200:
+              release = json.loads(body)
+              print(f"Release {tag} exists (id={release['id']})")
+          else:
+              payload = json.dumps({
+                  "tag_name": tag,
+                  "target_commitish": "main",
+                  "name": title,
+                  "draft": False,
+                  "prerelease": False,
+              }).encode("utf-8")
+              status, body = request(
+                  "POST",
+                  f"{api}/releases",
+                  data=payload,
+                  content_type="application/json",
+              )
+              release = json.loads(body)
+              print(f"Created release {tag} (id={release['id']})")
+
+          release_id = release["id"]
+
+          for asset in release.get("assets", []):
+              if asset.get("name") == asset_name:
+                  request("DELETE", f"{api}/releases/{release_id}/assets/{asset['id']}")
+                  print(f"Removed old asset {asset_name}")
+
+          with open(zip_path, "rb") as handle:
+              zip_bytes = handle.read()
+          request(
+              "POST",
+              f"{api}/releases/{release_id}/assets?name={asset_name}",
+              data=zip_bytes,
+              content_type="application/zip",
+          )
+          print(f"Uploaded {asset_name} ({len(zip_bytes)} bytes)")
+          PY

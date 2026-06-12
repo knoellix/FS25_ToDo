@@ -59,8 +59,8 @@ representative at an online or offline event.
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
 reported to the community leaders responsible for enforcement at
-**[knoellix](https://github.com/knoellix)** (GitHub profile / private message)
-or via a [private security advisory](https://github.com/knoellix/FS25_FieldToDoList/security/advisories/new)
+**[knoellix](https://codeberg.org/knoellix)** (Codeberg profile / private message)
+or as described in [SECURITY.md](SECURITY.md)
 if you prefer not to use a public issue.
 
 All complaints will be reviewed and investigated promptly and fairly.

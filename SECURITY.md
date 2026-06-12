@@ -17,8 +17,8 @@ Pre-release builds between tags are supported only on `main` until the next rele
 
 Preferred channels:
 
-1. **[GitHub private security advisory](https://github.com/knoellix/FS25_FieldToDoList/security/advisories/new)** (recommended)
-2. Contact the maintainer via **[GitHub profile](https://github.com/knoellix)** (private message)
+1. **Private message** to the maintainer via [Codeberg profile](https://codeberg.org/knoellix)
+2. If the repository allows confidential issues, open a **private** issue on Codeberg
 
 Include when possible:
 
@@ -35,13 +35,13 @@ You should receive an acknowledgment within a reasonable time. Fixes may ship as
 - Crashes or hangs caused by this mod
 - **Savegame or user-file corruption** (including risky read/write of save data)
 - Unauthorized or unexpected filesystem access from mod scripts
-- Supply-chain issues in release/build workflow (`.github/workflows`, release assets)
+- Supply-chain issues in release/build workflow (`.forgejo/workflows`, release assets)
 
 ## Out of scope
 
 - Bugs in Giants Engine / base game (report to GIANTS)
 - Conflicts with other mods without evidence this mod is the root cause
-- Gameplay balance or field-advisor suggestion accuracy (use normal [bug reports](https://github.com/knoellix/FS25_FieldToDoList/issues/new?template=bug_report.yml))
+- Gameplay balance or field-advisor suggestion accuracy (use normal [bug reports](https://codeberg.org/knoellix/FS25_FieldToDoList/issues/new?template=bug_report.yml))
 - Issues in unsupported old releases when a fix exists in a newer release
 
 ## Project safety notes

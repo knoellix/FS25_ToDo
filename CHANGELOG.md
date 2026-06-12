@@ -117,7 +117,7 @@ All notable changes to **FS25_FieldToDoList** are documented here.
 ### Docs
 
 - `CONTRIBUTING.md`, translation issue template, README updates.
-- Repository renamed to `FS25_FieldToDoList` on GitHub.
+- Repository hosted as `FS25_FieldToDoList` on Codeberg (formerly GitHub).
 
 ### Known limitations
 
@@ -126,13 +126,13 @@ All notable changes to **FS25_FieldToDoList** are documented here.
 
 ## [0.1.0.2] — earlier pre-release
 
-- Previous public pre-release on GitHub.
+- Previous public pre-release (hosted on Codeberg).
 
 ## [0.1.0.1] — earlier pre-release
 
 - Initial public pre-release: ESC to-do list, field overview, HUD, work-order presets, PF/SCS columns (limited), grass-aware suggestions.
 
-[0.1.0.5]: https://github.com/knoellix/FS25_FieldToDoList/compare/v0.1.0.4...v0.1.0.5
-[0.1.0.4]: https://github.com/knoellix/FS25_FieldToDoList/compare/v0.1.0.3...v0.1.0.4
-[0.1.0.3]: https://github.com/knoellix/FS25_FieldToDoList/compare/v0.1.0.2...v0.1.0.3
-[0.1.0.2]: https://github.com/knoellix/FS25_FieldToDoList/releases/tag/v0.1.0.2
+[0.1.0.5]: https://codeberg.org/knoellix/FS25_FieldToDoList/compare/v0.1.0.4...v0.1.0.5
+[0.1.0.4]: https://codeberg.org/knoellix/FS25_FieldToDoList/compare/v0.1.0.3...v0.1.0.4
+[0.1.0.3]: https://codeberg.org/knoellix/FS25_FieldToDoList/compare/v0.1.0.2...v0.1.0.3
+[0.1.0.2]: https://codeberg.org/knoellix/FS25_FieldToDoList/releases/tag/v0.1.0.2
