@@ -186,6 +186,11 @@ end
 -- FieldToDoPermissions contract (MP farm edit gates).
 local permFixtures = dofile(here .. "/permissions_fixtures.lua")
 dofile(repoRoot .. "/scripts/FieldAdvisorSettings.lua")
+assert(type(FieldAdvisorSettings.isWorkersMayEditTodos) == "function")
+assert(FieldAdvisorSettings.isWorkersMayEditTodos() == true)
+FieldAdvisorSettings.setWorkersMayEditTodos(false)
+assert(FieldAdvisorSettings.isWorkersMayEditTodos() == false)
+FieldAdvisorSettings.setWorkersMayEditTodos(true)
 dofile(repoRoot .. "/scripts/FieldToDoPermissions.lua")
 
 if type(FieldToDoPermissions) ~= "table"

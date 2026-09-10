@@ -73,6 +73,30 @@ FieldAdvisorSettings.organicMultiPassEnabled = false
 -- Mulching has no FS25 game-rule gate (unlike stones/weeds/lime/plowing); it is an optional
 -- yield bonus. We expose a mod-side toggle so players who never mulch can hide the suggestion.
 FieldAdvisorSettings.mulchingEnabled = true
+FieldAdvisorSettings.workersMayEditTodos = true
+
+---@return boolean
+function FieldAdvisorSettings.isWorkersMayEditTodos()
+    return FieldAdvisorSettings.workersMayEditTodos ~= false
+end
+
+---@param enabled boolean|nil
+function FieldAdvisorSettings.setWorkersMayEditTodos(enabled)
+    FieldAdvisorSettings.workersMayEditTodos = enabled ~= false
+end
+
+function FieldAdvisorSettings.toggleWorkersMayEditTodos()
+    FieldAdvisorSettings.workersMayEditTodos = not FieldAdvisorSettings.isWorkersMayEditTodos()
+    return FieldAdvisorSettings.workersMayEditTodos
+end
+
+---@return string
+function FieldAdvisorSettings.getWorkersMayEditLabel()
+    if FieldAdvisorSettings.isWorkersMayEditTodos() then
+        return FieldToDoL10n.getText("ftdl_edit_all", "Edit: all")
+    end
+    return FieldToDoL10n.getText("ftdl_edit_managers", "Edit: managers")
+end
 
 ---@return boolean
 function FieldAdvisorSettings.isOrganicMultiPassEnabled()
@@ -251,6 +275,11 @@ function FieldAdvisorSettings.loadFromXMLFile(xmlFile, key)
     -- Absent attribute (older saves) keeps the default-on behaviour; only explicit false hides it.
     local mulching = xmlFile:getValue(key .. "#mulchingEnabled")
     FieldAdvisorSettings.setMulchingEnabled(mulching ~= false)
+
+    local workersEdit = xmlFile:getValue(key .. "#workersMayEditTodos")
+    if workersEdit ~= nil then
+        FieldAdvisorSettings.setWorkersMayEditTodos(workersEdit == true)
+    end
 end
 
 ---@param xmlFile XMLFile|nil
@@ -263,4 +292,5 @@ function FieldAdvisorSettings.saveToXMLFile(xmlFile, key)
     xmlFile:setValue(key .. "#workOrderPreset", FieldAdvisorSettings.getWorkOrderPreset())
     xmlFile:setValue(key .. "#organicMultiPassEnabled", FieldAdvisorSettings.isOrganicMultiPassEnabled())
     xmlFile:setValue(key .. "#mulchingEnabled", FieldAdvisorSettings.isMulchingEnabled())
+    xmlFile:setValue(key .. "#workersMayEditTodos", FieldAdvisorSettings.isWorkersMayEditTodos())
 end

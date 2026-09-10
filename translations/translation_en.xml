@@ -163,5 +163,9 @@
         <text name="ftdl_weed_medium" text="medium"/>
         <text name="ftdl_weed_heavy" text="heavy"/>
         <text name="ftdl_weed_dead" text="dead"/>
+
+        <text name="ftdl_edit_all" text="Edit: all"/>
+        <text name="ftdl_edit_managers" text="Edit: managers"/>
+        <text name="ftdl_edit_denied" text="No permission to change to-dos"/>
     </texts>
 </l10n>
