@@ -15,6 +15,12 @@ Datum  Thema: Regel (kurz, technisch).
 
 ## Einträge
 
+2026-09-10  **MP-Härtung (ohne Event-Sync)** — Tasks tragen `farmId`; UI/Auto-Complete nur lokale Farm; Save merged andere Farmen aus Disk (`syncForeignFarmTasksFromDisk`). FieldVisit nur `g_localPlayer`, kein mission-weites leave/interrupt, kein `setWorldTranslation`. HUD braucht `g_localPlayer`.
+            Entscheidende Funktion: `ToDoManager:taskBelongsToLocalFarm` / `syncForeignFarmTasksFromDisk` / `FieldVisit.getLocalPlayer`.
+
+2026-09-10  **Fallback-Audit P2–P5** — Engine-Feld-Source im Dump; Ernte-ETA nur FruitTypeDesc; Gras-Frucht ohne enrich-Last-Resort; P3 Center bereits Kanon.
+            Entscheidende Funktion: `resolveEngineFieldAtWorldPosition` (3. Return), `estimateNonSeasonalPeriodsUntilHarvest`, `resolveGrassFruitTypeIndex`.
+
 2026-06-07  **Ballen-Klassifikation: *_WINDROW = grass** — `classifyBaleKind`: `ALFALFA_WINDROW` u. a. Kultur-Schwadenballen zählen als `grass` (Feld 5: 75 Ballen waren `other` → `grass_bale` auto-complete tot). `STRAW` bleibt `straw`.
 
 2026-06-07  **Ernte-Spalte / Vorschlag: Fenster statt pauschal „Wächst“** — `getExpectedHarvestLabel` nutzt `getHarvestWindowHint` für wachsende Ackerfrucht (Feld 2/3 → `Okt`). `formatSuggestionColumn` zeigt `Ernte Okt` wenn kein `harvest_info`-Action-Eintrag, aber Monat bekannt.

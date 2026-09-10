@@ -134,6 +134,11 @@ function FieldToDoHudOverlay:canDraw()
         return false
     end
 
+    -- Dedicated server / no local player: never draw HUD.
+    if g_localPlayer == nil then
+        return false
+    end
+
     if g_gui:getIsGuiVisible() then
         return false
     end

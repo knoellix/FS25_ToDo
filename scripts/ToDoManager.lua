@@ -162,7 +162,7 @@ function ToDoManager:collectCompletedTasks()
     local completed = {}
 
     for _, task in pairs(self.manualTasks) do
-        if task.completed == true then
+        if task.completed == true and self:taskBelongsToLocalFarm(task) then
             completed[#completed + 1] = task
         end
     end
@@ -221,12 +221,123 @@ function ToDoManager:delete()
     self.manualTasks = nil
 end
 
+---@return number|nil
+function ToDoManager:getLocalFarmId()
+    local mission = self.mission or g_currentMission
+    if mission == nil or mission.getFarmId == nil then
+        return nil
+    end
+
+    local ok, farmId = pcall(mission.getFarmId, mission)
+    farmId = tonumber(farmId)
+    if ok and farmId ~= nil and farmId > 0 then
+        return farmId
+    end
+
+    return nil
+end
+
+--- True when this peer may write fieldToDoList.xml.
+--- All peers may write; save merges other farms from disk so MP farms do not wipe each other.
+---@return boolean
+function ToDoManager:canPersistSidecar()
+    return true
+end
+
+--- Before writing: replace in-memory tasks of *other* farms with the disk copy so a local
+--- save does not erase another farm's list (listen-server / multi-client).
+---@param savegameDirectory string
+function ToDoManager:syncForeignFarmTasksFromDisk(savegameDirectory)
+    local localFarm = self:getLocalFarmId()
+    if localFarm == nil or string.isNilOrWhitespace(savegameDirectory) then
+        return
+    end
+
+    local filePath = savegameDirectory .. "/" .. ToDoManager.XML_FILENAME
+    if not fileExists(filePath) then
+        return
+    end
+
+    ToDoManager.initXMLSchema()
+    local xmlFile = XMLFile.load("fieldToDoListMerge", filePath, xmlSchema)
+    if xmlFile == nil then
+        return
+    end
+
+    local diskForeign = {}
+    local index = 0
+    while true do
+        local taskKey = string.format("%s.tasks.task(%d)", ToDoManager.XML_KEY, index)
+        local task = self:loadTaskFromXML(xmlFile, taskKey)
+        if task == nil then
+            break
+        end
+
+        local taskFarm = tonumber(task.farmId)
+        if taskFarm ~= nil and taskFarm ~= localFarm then
+            diskForeign[task.id] = task
+        end
+        index = index + 1
+    end
+    xmlFile:delete()
+
+    for taskId, task in pairs(self.manualTasks) do
+        local taskFarm = tonumber(task.farmId)
+        if taskFarm ~= nil and taskFarm ~= localFarm then
+            self.manualTasks[taskId] = nil
+        end
+    end
+
+    for taskId, task in pairs(diskForeign) do
+        self.manualTasks[taskId] = task
+        if task.id >= self.nextTaskId then
+            self.nextTaskId = task.id + 1
+        end
+    end
+end
+
+--- Legacy tasks without farmId stay visible to every farm until rewritten.
+---@param task table|nil
+---@return boolean
+function ToDoManager:taskBelongsToLocalFarm(task)
+    if task == nil then
+        return false
+    end
+
+    local taskFarm = tonumber(task.farmId)
+    if taskFarm == nil then
+        return true
+    end
+
+    local localFarm = self:getLocalFarmId()
+    if localFarm == nil then
+        return true
+    end
+
+    return taskFarm == localFarm
+end
+
+---@return table[] tasks
+function ToDoManager:getAllManualTasks()
+    local tasks = {}
+
+    for _, task in pairs(self.manualTasks) do
+        table.insert(tasks, task)
+    end
+
+    table.sort(tasks, ToDoManager.compareTasksForDisplay)
+
+    return tasks
+end
+
 ---@return table[] tasks
 function ToDoManager:getManualTasks()
     local tasks = {}
 
     for _, task in pairs(self.manualTasks) do
-        table.insert(tasks, task)
+        if self:taskBelongsToLocalFarm(task) then
+            table.insert(tasks, task)
+        end
     end
 
     table.sort(tasks, ToDoManager.compareTasksForDisplay)
@@ -307,6 +418,10 @@ end
 --- Persist tasks and advisor settings without waiting for a full savegame write.
 ---@return boolean
 function ToDoManager:saveSettingsNow()
+    if not self:canPersistSidecar() then
+        return false
+    end
+
     if self:isMissionSaving() then
         self:requestDebouncedSave()
         return false
@@ -685,6 +800,7 @@ function ToDoManager:addManualTask(text)
         completed = false,
         source = "manual",
         autoComplete = false,
+        farmId = self:getLocalFarmId(),
     }
 
     self.manualTasks[task.id] = task
@@ -731,6 +847,7 @@ function ToDoManager:findOpenFieldTask(fieldId, actionType, action)
 
     for _, task in pairs(self.manualTasks) do
         if not task.completed
+            and self:taskBelongsToLocalFarm(task)
             and task.source == "field"
             and task.fieldId == fieldId
             and task.actionType == actionType
@@ -785,6 +902,7 @@ function ToDoManager:addTaskFromFieldAction(fieldRecord, action, allowUntrackabl
         text = self:buildFieldTaskText(fieldRecord, action.label, action),
         completed = false,
         source = "field",
+        farmId = self:getLocalFarmId(),
         fieldId = fieldRecord.id,
         fieldName = fieldRecord.name,
         fruit = fieldRecord.fruit,
@@ -840,6 +958,7 @@ function ToDoManager:addCustomFieldTask(fieldRecord, text, actionType, autoCompl
         text = self:buildFieldTaskText(fieldRecord, text),
         completed = false,
         source = "field",
+        farmId = self:getLocalFarmId(),
         fieldId = fieldRecord.id,
         fieldName = fieldRecord.name,
         fruit = fieldRecord.fruit,
@@ -875,7 +994,10 @@ function ToDoManager:updateAutoCompletion()
     local tasksByFieldId = {}
 
     for taskId, task in pairs(self.manualTasks) do
-        if not task.completed and task.source == "field" and task.autoComplete == true then
+        if not task.completed
+            and self:taskBelongsToLocalFarm(task)
+            and task.source == "field"
+            and task.autoComplete == true then
             local fieldId = tonumber(task.fieldId)
             if fieldId ~= nil then
                 if tasksByFieldId[fieldId] == nil then
@@ -1068,6 +1190,7 @@ function ToDoManager.registerSavegameXMLPaths(schema, basePath)
     schema:register(XMLValueType.INT, basePath .. ".tasks.task(?)#fertPassTotal", "Organic fertilizer pass count")
     schema:register(XMLValueType.STRING, basePath .. ".tasks.task(?)#suggestion", "Field suggestion label")
     schema:register(XMLValueType.BOOL, basePath .. ".tasks.task(?)#autoComplete", "Whether task auto-completes from field state")
+    schema:register(XMLValueType.INT, basePath .. ".tasks.task(?)#farmId", "Owning farm id (multiplayer)")
     if FieldPlannedCrop ~= nil and FieldPlannedCrop.registerXMLPaths ~= nil then
         FieldPlannedCrop.registerXMLPaths(schema, basePath)
     end
@@ -1099,6 +1222,7 @@ function ToDoManager:loadTaskFromXML(xmlFile, taskKey)
         completed = xmlFile:getValue(taskKey .. "#completed") == true,
         source = xmlFile:getValue(taskKey .. "#source") or "manual",
         autoComplete = autoCompleteRaw == true,
+        farmId = tonumber(xmlFile:getValue(taskKey .. "#farmId")),
     }
 
     local fieldId = xmlFile:getValue(taskKey .. "#fieldId")
@@ -1208,6 +1332,9 @@ function ToDoManager:saveTaskToXML(xmlFile, key, task, taskKey)
     xmlFile:setValue(taskKey .. "#completed", task.completed == true)
     xmlFile:setValue(taskKey .. "#source", task.source or "manual")
     xmlFile:setValue(taskKey .. "#autoComplete", task.autoComplete == true)
+    if task.farmId ~= nil then
+        xmlFile:setValue(taskKey .. "#farmId", task.farmId)
+    end
 
     if task.source == "field" then
         if task.fieldId ~= nil then
@@ -1258,7 +1385,7 @@ function ToDoManager:saveToXMLFile(xmlFile, key, usedModNames)
         FieldPlannedCrop.saveToXMLFile(xmlFile, key)
     end
 
-    local sortedTasks = self:getManualTasks()
+    local sortedTasks = self:getAllManualTasks()
     table.sort(sortedTasks, function(a, b)
         return a.id < b.id
     end)
@@ -1300,6 +1427,8 @@ function ToDoManager:saveToSavegameDirectory(savegameDirectory)
     if string.isNilOrWhitespace(savegameDirectory) then
         return false
     end
+
+    self:syncForeignFarmTasksFromDisk(savegameDirectory)
 
     ToDoManager.initXMLSchema()
 

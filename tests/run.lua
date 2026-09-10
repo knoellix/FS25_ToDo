@@ -142,5 +142,46 @@ if type(FieldAdvisor) == "table" and type(FieldAdvisor.classifyBaleKind) == "fun
   end
 end
 
+-- P4: harvest ETA uses FruitTypeDesc only (nil when neither API nor minHarvest).
+if type(FieldAdvisor) == "table" and type(FieldAdvisor.estimateNonSeasonalPeriodsUntilHarvest) == "function" then
+  io.write("\n")
+  local oldHasApi = FieldAdvisor.fruitDescHasHarvestReadyApi
+  local oldIsReady = FieldAdvisor.isGrowthStateHarvestReadyByApi
+  local oldGetFruit = FieldAdvisor.getFruitTypeDesc
+  local oldGrowth = FieldAdvisor.getEffectiveGrowthState
+  local oldActive = FieldAdvisor.hasActiveCrop
+
+  FieldAdvisor.getEffectiveGrowthState = function() return 2 end
+  FieldAdvisor.hasActiveCrop = function() return true end
+  FieldAdvisor.fruitDescHasHarvestReadyApi = function() return false end
+  FieldAdvisor.isGrowthStateHarvestReadyByApi = function() return false end
+  FieldAdvisor.getFruitTypeDesc = function() return {} end -- no minHarvest
+
+  local gotNil = FieldAdvisor.estimateNonSeasonalPeriodsUntilHarvest(1, {}, {})
+  if gotNil == nil then
+    pass = pass + 1
+    io.write(GREEN .. "PASS" .. RESET .. " estimate_harvest_nil_without_desc_api\n")
+  else
+    fail = fail + 1
+    io.write(string.format(RED .. "FAIL" .. RESET .. " estimate_harvest_nil_without_desc_api got %s\n", tostring(gotNil)))
+  end
+
+  FieldAdvisor.getFruitTypeDesc = function() return { minHarvestingGrowthState = 5 } end
+  local gotSteps = FieldAdvisor.estimateNonSeasonalPeriodsUntilHarvest(1, {}, { minHarvestingGrowthState = 5 })
+  if gotSteps == 3 then
+    pass = pass + 1
+    io.write(GREEN .. "PASS" .. RESET .. " estimate_harvest_minHarvest_delta\n")
+  else
+    fail = fail + 1
+    io.write(string.format(RED .. "FAIL" .. RESET .. " estimate_harvest_minHarvest_delta expected 3 got %s\n", tostring(gotSteps)))
+  end
+
+  FieldAdvisor.fruitDescHasHarvestReadyApi = oldHasApi
+  FieldAdvisor.isGrowthStateHarvestReadyByApi = oldIsReady
+  FieldAdvisor.getFruitTypeDesc = oldGetFruit
+  FieldAdvisor.getEffectiveGrowthState = oldGrowth
+  FieldAdvisor.hasActiveCrop = oldActive
+end
+
 io.write(string.format("\n%d passed, %d failed, %d total\n", pass, fail, pass + fail))
 os.exit(fail == 0 and 0 or 1)

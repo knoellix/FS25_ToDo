@@ -1546,10 +1546,9 @@ function FieldAdvisor.resolveGrassFruitTypeIndex(fieldState, field, aggregation,
         return nil
     end
 
-    local fruitTypeIndex = nil
-    if aggregation ~= nil and aggregation.dominantGrassFruit ~= nil then
-        fruitTypeIndex = aggregation.dominantGrassFruit
-    end
+    -- One ordered source chain (no enrich-mutating last resort): aggregation → probe fruit →
+    -- state-name grass → field-level grass probe. refineGrassFruitTypeIndex only narrows.
+    local fruitTypeIndex = aggregation ~= nil and aggregation.dominantGrassFruit or nil
 
     if fruitTypeIndex == nil then
         fruitTypeIndex = FieldAdvisor.resolveFruitTypeIndex(fieldState, field)
@@ -1559,13 +1558,6 @@ function FieldAdvisor.resolveGrassFruitTypeIndex(fieldState, field, aggregation,
     end
     if fruitTypeIndex == nil then
         fruitTypeIndex = FieldAdvisor.inferGrassFruitTypeIndexFromField(field)
-    end
-    if fruitTypeIndex == nil and field ~= nil then
-        FieldAdvisor.enrichFieldStateFromField(field, fieldState)
-        fruitTypeIndex = FieldAdvisor.getFruitTypeIndex(fieldState)
-        if fruitTypeIndex ~= nil and fruitTypeIndex > 0 and not FieldAdvisor.isGrassCrop(fruitTypeIndex) then
-            fruitTypeIndex = nil
-        end
     end
 
     return FieldAdvisor.refineGrassFruitTypeIndex(fieldState, field, fruitTypeIndex, worldX, worldZ)
@@ -2123,14 +2115,17 @@ function FieldAdvisor.clearCoverageCache(fieldId, kind)
     FieldAdvisor._coverageCache[cacheKey] = nil
 end
 
---- Engine field at world position: field object first, then numeric id lookup.
+--- Engine field at world position: field object first, then numeric id, then farmland.
+--- Third return is the source label for dumps (no silent chain): getFieldAtWorldPosition |
+--- getFieldAtPosition | getFieldIdAtWorldPosition | getFieldIDAtWorldPosition | farmland | none.
 ---@param x number|nil
 ---@param z number|nil
 ---@return number|nil fieldId
 ---@return table|nil engineField
+---@return string source
 function FieldAdvisor.resolveEngineFieldAtWorldPosition(x, z)
     if x == nil or z == nil then
-        return nil, nil
+        return nil, nil, "none"
     end
 
     if g_fieldManager ~= nil then
@@ -2143,7 +2138,7 @@ function FieldAdvisor.resolveEngineFieldAtWorldPosition(x, z)
                     local okId, fieldId = pcall(engineField.getId, engineField)
                     fieldId = tonumber(fieldId)
                     if okId and fieldId ~= nil and fieldId > 0 then
-                        return fieldId, engineField
+                        return fieldId, engineField, methodName
                     end
                 end
             end
@@ -2156,7 +2151,7 @@ function FieldAdvisor.resolveEngineFieldAtWorldPosition(x, z)
                 local ok, fieldId = pcall(fn, g_fieldManager, x, z)
                 fieldId = tonumber(fieldId)
                 if ok and fieldId ~= nil and fieldId > 0 then
-                    return fieldId, FieldAdvisor.getEngineFieldById(fieldId)
+                    return fieldId, FieldAdvisor.getEngineFieldById(fieldId), methodName
                 end
             end
         end
@@ -2164,18 +2159,19 @@ function FieldAdvisor.resolveEngineFieldAtWorldPosition(x, z)
 
     local farmlandFieldId = FieldAdvisor.resolveFarmlandFieldIdAtWorldPosition(x, z)
     if farmlandFieldId ~= nil then
-        return farmlandFieldId, FieldAdvisor.getEngineFieldById(farmlandFieldId)
+        return farmlandFieldId, FieldAdvisor.getEngineFieldById(farmlandFieldId), "farmland"
     end
 
-    return nil, nil
+    return nil, nil, "none"
 end
 
 ---@param x number|nil
 ---@param z number|nil
 ---@return number|nil
+---@return string source
 function FieldAdvisor.resolveEngineFieldIdAtWorldPosition(x, z)
-    local fieldId, _ = FieldAdvisor.resolveEngineFieldAtWorldPosition(x, z)
-    return fieldId
+    local fieldId, _, source = FieldAdvisor.resolveEngineFieldAtWorldPosition(x, z)
+    return fieldId, source or "none"
 end
 
 --- Farmland without predefined field id -> pseudo field id (engine parcel data).
@@ -3902,11 +3898,11 @@ function FieldAdvisor.getNextPrimaryHarvestablePeriod(fruitDesc, fruitTypeIndex,
 end
 
 --- Growth steps (≈ periods) until the crop is fully ripe for its primary harvest.
---- Targets first getIsHarvestReady growth state (grain), not the forage window.
+--- FruitTypeDesc only: getIsHarvestReady API and/or minHarvestingGrowthState. No inventing.
 ---@param fruitTypeIndex number|nil
 ---@param fieldState table|nil
 ---@param fruitDesc table|nil
----@return number|nil steps until ripe (0 = ripe now)
+---@return number|nil steps until ripe (0 = ripe now); nil → UI shows "-"
 function FieldAdvisor.estimateNonSeasonalPeriodsUntilHarvest(fruitTypeIndex, fieldState, fruitDesc)
     if fruitTypeIndex == nil or fieldState == nil then
         return nil
@@ -3922,45 +3918,36 @@ function FieldAdvisor.estimateNonSeasonalPeriodsUntilHarvest(fruitTypeIndex, fie
     end
 
     fruitDesc = fruitDesc or FieldAdvisor.getFruitTypeDesc(fruitTypeIndex)
+    if fruitDesc == nil then
+        return nil
+    end
 
-    -- Preferred target: first growth state where getIsHarvestReady is true (grain).
     local target = nil
-    if fruitDesc ~= nil then
-        if FieldAdvisor.fruitDescHasHarvestReadyApi(fruitTypeIndex) then
-            for candidate = state, state + 12 do
-                if FieldAdvisor.isGrowthStateHarvestReadyByApi(fruitTypeIndex, candidate) then
-                    target = candidate
-                    break
-                end
-            end
-        end
-        if target == nil then
-            local minHarvest = tonumber(fruitDesc.minHarvestingGrowthState) or 0
-            if minHarvest > 0 then
-                target = minHarvest
+    if FieldAdvisor.fruitDescHasHarvestReadyApi(fruitTypeIndex) then
+        for candidate = state, state + 12 do
+            if FieldAdvisor.isGrowthStateHarvestReadyByApi(fruitTypeIndex, candidate) then
+                target = candidate
+                break
             end
         end
     end
 
-    if target ~= nil then
-        if state >= target then
-            return 0
+    if target == nil then
+        local minHarvest = tonumber(fruitDesc.minHarvestingGrowthState) or 0
+        if minHarvest > 0 then
+            target = minHarvest
         end
-        return target - state
     end
 
-    -- Fallback: walk growth states until getIsHarvestReady reports ripe.
-    if FieldAdvisor.isGrowthStateHarvestReadyByApi(fruitTypeIndex, state) then
+    if target == nil then
+        return nil
+    end
+
+    if state >= target then
         return 0
     end
 
-    for candidate = state + 1, state + 12 do
-        if FieldAdvisor.isGrowthStateHarvestReadyByApi(fruitTypeIndex, candidate) then
-            return candidate - state
-        end
-    end
-
-    return nil
+    return target - state
 end
 
 ---@param rollerLevel number

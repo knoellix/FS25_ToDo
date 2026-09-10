@@ -4,7 +4,7 @@
 
 **Autor:** Christian Möllmann ([knoellix](https://github.com/knoellix))  
 **Lizenz:** [GNU GPL v3](LICENSE)  
-**Version:** `0.1.0.6`  
+**Version:** `0.1.0.7`  
 **Repository:** [github.com/knoellix/FS25_ToDo](https://github.com/knoellix/FS25_ToDo)
 
 ## Funktionen
@@ -109,7 +109,7 @@ Beiträge sind willkommen (Bugfixes, Features, Übersetzungen).
 
 ## Changelog
 
-Siehe [CHANGELOG.md](CHANGELOG.md). **0.1.0.6:** Planfrucht/Hof, Strohballen, Ernte-Spalte getrennt, Ballen-Fixes, Mulchen.
+Siehe [CHANGELOG.md](CHANGELOG.md). **0.1.0.7:** Multiplayer-Farm-Tasks, Fallback-Audit P2–P5, Ernte-/Ballen-Fixes.
 
 ## Bekannte Grenzen (LIMITATIONS)
 
@@ -123,6 +123,7 @@ Vollständige Regression: [`docs/REGRESSION.md`](docs/REGRESSION.md). Architektu
 | **Unkraut** | Striegeln/Spritzen, erledigt bei totem Unkraut (Coverage) | — |
 | **Custom-Felder** | Eigene bearbeitete Grundstücke ohne Engine-Feld-ID (Pseudo-Felder) | Nur wenn Feldmitte Feld-Boden zeigt |
 | **Planfrucht / Hof** | Sä-Frucht + Sä-Monat in Vorschlägen; Hof = kein Feld-Scan | Planfrucht ersetzt nicht die aktuelle Kultur-Spalte |
+| **Multiplayer** | Tasks mit `farmId`; Liste pro Farm; Save merged andere Farmen von Disk; Visit/HUD nur Local-Player | Kein Live-Event-Sync — parallele Edits derselben Farm können sich überholen |
 
 Debug: `ftdlDump <FeldId>` — Zeile `baleCoverage: total/straw/grass/other` für Ballen-Diagnose.
 

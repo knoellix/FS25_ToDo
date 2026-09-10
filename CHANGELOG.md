@@ -2,6 +2,34 @@
 
 All notable changes to **FS25_FieldToDoList** are documented here.
 
+## [0.1.0.7] — 2026-09-10
+
+### Added
+
+- **Multiplayer hardening:** tasks store `farmId`; ESC/HUD lists and auto-complete are farm-filtered; sidecar save merges other farms from disk so farms do not wipe each other.
+- Dump transparency: `engineFieldLookup` / `engineFieldSource=` for engine field resolution.
+
+### Improved
+
+- **Field visit:** local player only — no mission-wide leave/interrupt; no `setWorldTranslation` teleport fallback.
+- **HUD:** draws only when `g_localPlayer` exists (dedicated-safe).
+- **Harvest ETA:** FruitTypeDesc only (`getIsHarvestReady` / `minHarvestingGrowthState`); otherwise `-`.
+- **Grass fruit display:** dropped enrich-mutating last resort in `resolveGrassFruitTypeIndex`.
+- Fallback audit P2–P5 closed in `docs/FALLBACK_AUDIT.md`.
+- Hosting back on GitHub (`FS25_ToDo`) with Actions release workflow on `ubuntu-latest`.
+
+### Fixed
+
+- Harvest-ready soybeans no longer misclassified as post-harvest mulching.
+- Harvest month shown in suggestion column for growing arable crops.
+- `ALFALFA_WINDROW` / `*_WINDROW` bales count as grass for auto-complete.
+- Probe edge inset + center wins when edge majority is `unknown`.
+
+### Known limitations
+
+- No live Event sync — concurrent edits on the **same** farm can still race (last write wins).
+- Loose grass/straw on ground still not auto-detectable (bale objects only).
+
 ## [0.1.0.6] — 2026-06-06
 
 ### Added
@@ -132,6 +160,8 @@ All notable changes to **FS25_FieldToDoList** are documented here.
 
 - Initial public pre-release: ESC to-do list, field overview, HUD, work-order presets, PF/SCS columns (limited), grass-aware suggestions.
 
+[0.1.0.7]: https://github.com/knoellix/FS25_ToDo/compare/v0.1.0.6...v0.1.0.7
+[0.1.0.6]: https://github.com/knoellix/FS25_ToDo/compare/v0.1.0.5...v0.1.0.6
 [0.1.0.5]: https://github.com/knoellix/FS25_ToDo/compare/v0.1.0.4...v0.1.0.5
 [0.1.0.4]: https://github.com/knoellix/FS25_ToDo/compare/v0.1.0.3...v0.1.0.4
 [0.1.0.3]: https://github.com/knoellix/FS25_ToDo/compare/v0.1.0.2...v0.1.0.3

@@ -634,6 +634,14 @@ function FieldDebugDump.dumpField(fieldId)
 
     out(string.format("===== FIELD %d @ (%.1f, %.1f) =====", fieldId, worldX, worldZ))
 
+    if FieldAdvisor.resolveEngineFieldAtWorldPosition ~= nil then
+        local engId, _, engSource = FieldAdvisor.resolveEngineFieldAtWorldPosition(worldX, worldZ)
+        out(string.format(
+            "engineFieldLookup: id=%s source=%s",
+            stringify(engId), stringify(engSource)
+        ))
+    end
+
     local fieldState = FieldAdvisor.getEnrichedFieldState(field, fieldId, worldX, worldZ)
     out(string.format(
         "FieldState: fruitTypeIndex=%s currentFruitTypeIndex=%s fruitTypeName=%s ground=%s growth=%s lastGrowth=%s weedState=%s weedFactor=%s sprayLevel=%s stubbleShred=%s",
@@ -754,22 +762,24 @@ function FieldDebugDump.dumpField(fieldId)
             local kind = FieldAdvisor.classifyBaleKind(bale)
             local onField = bx ~= nil
                 and FieldAdvisor.isBalePositionInsideField(field, bx, bz, worldX, worldZ)
-            local engineId = FieldAdvisor.resolveEngineFieldIdAtWorldPosition ~= nil
-                and FieldAdvisor.resolveEngineFieldIdAtWorldPosition(bx, bz) or nil
+            local engineId, engineSource = nil, "none"
+            if FieldAdvisor.resolveEngineFieldIdAtWorldPosition ~= nil then
+                engineId, engineSource = FieldAdvisor.resolveEngineFieldIdAtWorldPosition(bx, bz)
+            end
             local ownerId = FieldAdvisor.resolveBaleOwnerFieldId ~= nil
                 and FieldAdvisor.resolveBaleOwnerFieldId(bx, bz) or nil
             if onField then
                 out(string.format(
-                    "  fieldBale: fillType=%s kind=%s engineField=%s ownerField=%s pos=(%.1f,%.1f)",
+                    "  fieldBale: fillType=%s kind=%s engineField=%s engineFieldSource=%s ownerField=%s pos=(%.1f,%.1f)",
                     fillTypeName(FieldAdvisor.getBaleFillTypeIndex(bale)),
-                    stringify(kind), stringify(engineId), stringify(ownerId), bx, bz
+                    stringify(kind), stringify(engineId), stringify(engineSource), stringify(ownerId), bx, bz
                 ))
             elseif logged < 6 and bx ~= nil then
                 logged = logged + 1
                 out(string.format(
-                    "  mapBale(skip): fillType=%s kind=%s engineField=%s ownerField=%s pos=(%.1f,%.1f)",
+                    "  mapBale(skip): fillType=%s kind=%s engineField=%s engineFieldSource=%s ownerField=%s pos=(%.1f,%.1f)",
                     fillTypeName(FieldAdvisor.getBaleFillTypeIndex(bale)),
-                    stringify(kind), stringify(engineId), stringify(ownerId), bx, bz
+                    stringify(kind), stringify(engineId), stringify(engineSource), stringify(ownerId), bx, bz
                 ))
             end
         end

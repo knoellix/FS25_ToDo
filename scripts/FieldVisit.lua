@@ -1,6 +1,7 @@
 --[[
     FieldVisit.lua
     Teleport local player to a field center (map visit QoL).
+    Multiplayer-safe: only g_localPlayer; no mission-wide leaveVehicle/interrupt.
 ]]
 
 FieldVisit = {}
@@ -90,54 +91,65 @@ function FieldVisit.getTerrainY(x, z)
     return y + FieldVisit.TELEPORT_HEIGHT_OFFSET
 end
 
+--- Local controlled player only (never mission.player fallback in MP).
 ---@return table|nil
-function FieldVisit.getControlledVehicle()
-    local mission = g_currentMission
+function FieldVisit.getLocalPlayer()
     local player = g_localPlayer
-    if player == nil and mission ~= nil then
-        player = mission.player
+    if player ~= nil then
+        return player
     end
 
-    if player ~= nil then
-        if player.getCurrentVehicle ~= nil then
-            local ok, vehicle = pcall(player.getCurrentVehicle, player)
-            if ok and vehicle ~= nil then
-                return vehicle
-            end
+    -- Single-player / early load: some builds only expose mission.player.
+    if g_currentMission ~= nil and g_currentMission.player ~= nil then
+        if g_currentMission.getIsServer == nil or g_currentMission:getIsServer() then
+            return g_currentMission.player
         end
+    end
 
-        if player.getControlledVehicle ~= nil then
-            local ok, vehicle = pcall(player.getControlledVehicle, player)
-            if ok and vehicle ~= nil then
-                return vehicle
-            end
+    return nil
+end
+
+---@return table|nil
+function FieldVisit.getControlledVehicle()
+    local player = FieldVisit.getLocalPlayer()
+    if player == nil then
+        return nil
+    end
+
+    if player.getCurrentVehicle ~= nil then
+        local ok, vehicle = pcall(player.getCurrentVehicle, player)
+        if ok and vehicle ~= nil then
+            return vehicle
         end
+    end
 
-        if player.rootNode ~= nil and player.rootNode ~= 0 and getParent ~= nil then
-            local ok, parent = pcall(getParent, player.rootNode)
-            if ok and parent ~= nil and parent ~= 0 and g_currentMission ~= nil and g_currentMission.vehicleSystem ~= nil then
-                local vehicles = g_currentMission.vehicleSystem.vehicles
-                if vehicles ~= nil then
-                    for _, vehicle in pairs(vehicles) do
-                        if vehicle ~= nil and vehicle.rootNode == parent then
-                            return vehicle
-                        end
+    if player.getControlledVehicle ~= nil then
+        local ok, vehicle = pcall(player.getControlledVehicle, player)
+        if ok and vehicle ~= nil then
+            return vehicle
+        end
+    end
+
+    if player.rootNode ~= nil and player.rootNode ~= 0 and getParent ~= nil then
+        local ok, parent = pcall(getParent, player.rootNode)
+        if ok and parent ~= nil and parent ~= 0 and g_currentMission ~= nil and g_currentMission.vehicleSystem ~= nil then
+            local vehicles = g_currentMission.vehicleSystem.vehicles
+            if vehicles ~= nil then
+                for _, vehicle in pairs(vehicles) do
+                    if vehicle ~= nil and vehicle.rootNode == parent then
+                        return vehicle
                     end
                 end
             end
         end
     end
 
-    if mission ~= nil and mission.controlledVehicle ~= nil then
-        return mission.controlledVehicle
-    end
-
     return nil
 end
 
 function FieldVisit.exitVehicleIfNeeded()
-    local mission = g_currentMission
-    if mission == nil then
+    local player = FieldVisit.getLocalPlayer()
+    if player == nil then
         return
     end
 
@@ -146,30 +158,10 @@ function FieldVisit.exitVehicleIfNeeded()
         return
     end
 
+    -- Player-scoped exit only — never mission:leaveVehicle / interruptPlayer (MP-unsafe).
     local exitCalls = {
         function()
-            if mission.removeVehicleFromUser ~= nil then
-                mission:removeVehicleFromUser(vehicle)
-            end
-        end,
-        function()
-            if mission.leaveVehicle ~= nil then
-                mission:leaveVehicle()
-            end
-        end,
-        function()
-            if mission.tryExitVehicle ~= nil then
-                mission:tryExitVehicle()
-            end
-        end,
-        function()
-            if mission.interruptPlayer ~= nil then
-                mission:interruptPlayer()
-            end
-        end,
-        function()
-            local player = g_localPlayer or mission.player
-            if player ~= nil and player.leaveVehicle ~= nil then
+            if player.leaveVehicle ~= nil then
                 player:leaveVehicle()
             end
         end,
@@ -197,11 +189,7 @@ end
 function FieldVisit.teleportPlayerTo(x, y, z)
     FieldVisit.exitVehicleIfNeeded()
 
-    local player = g_localPlayer
-    if player == nil and g_currentMission ~= nil then
-        player = g_currentMission.player
-    end
-
+    local player = FieldVisit.getLocalPlayer()
     if player == nil then
         return false
     end
@@ -227,12 +215,7 @@ function FieldVisit.teleportPlayerTo(x, y, z)
         end
     end
 
-    if player.rootNode ~= nil then
-        local success = pcall(setWorldTranslation, player.rootNode, x, y, z)
-        if success then
-            return true
-        end
-    end
+    -- No setWorldTranslation fallback — can desync clients in multiplayer.
 
     return false
 end
@@ -242,6 +225,10 @@ end
 ---@return boolean
 ---@return string|nil
 function FieldVisit.visitField(field, scanner)
+    if FieldVisit.getLocalPlayer() == nil then
+        return false, "no_local_player"
+    end
+
     local engineField = field
 
     if field ~= nil and field.id ~= nil and scanner ~= nil and scanner.getEngineFieldById ~= nil then
