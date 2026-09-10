@@ -397,7 +397,7 @@ end
 function ToDoManager:moveTask(taskId, delta)
     if FieldToDoSync ~= nil then
         FieldToDoSync.request(FieldToDoSync.OP.MOVE, { taskId = taskId, delta = delta })
-        return false
+        return true
     end
 
     return self:applyMoveTask({ taskId = taskId, delta = delta }, self:getLocalFarmId(), nil) ~= nil
@@ -1643,7 +1643,7 @@ end
 function ToDoManager:updateManualTask(taskId, text)
     if FieldToDoSync ~= nil then
         FieldToDoSync.request(FieldToDoSync.OP.UPDATE_TEXT, { taskId = taskId, text = text })
-        return false
+        return true
     end
 
     return self:applyUpdateTaskText({ taskId = taskId, text = text }, self:getLocalFarmId(), nil) ~= nil
@@ -1654,7 +1654,7 @@ end
 function ToDoManager:deleteManualTask(taskId)
     if FieldToDoSync ~= nil then
         FieldToDoSync.request(FieldToDoSync.OP.DELETE, { taskId = taskId })
-        return false
+        return true
     end
 
     return self:applyDeleteTask({ taskId = taskId }, self:getLocalFarmId(), nil) ~= nil
@@ -1665,7 +1665,7 @@ end
 function ToDoManager:toggleManualTask(taskId)
     if FieldToDoSync ~= nil then
         FieldToDoSync.request(FieldToDoSync.OP.TOGGLE_DONE, { taskId = taskId })
-        return false
+        return true
     end
 
     return self:applyToggleTaskDone({ taskId = taskId }, self:getLocalFarmId(), nil) ~= nil

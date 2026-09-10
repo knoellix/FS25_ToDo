@@ -1061,6 +1061,8 @@ function FieldToDoMenuFrame:onClickAdoptFieldSuggestion()
                 field.name,
                 action.label or "-"
             ))
+        elseif errorKey == nil then
+            self:refreshManualTaskList(false, true)
         else
             InfoDialog.show(FieldToDoL10n.getText(
                 "ftdl_info_adopt_failed",
@@ -1523,6 +1525,10 @@ function FieldToDoMenuFrame:onFieldTaskActionPicked(...)
 
     local task, errorKey = manager:addTaskFromFieldAction(field, action, true)
     if task == nil then
+        if errorKey == nil then
+            self:refreshManualTaskList(true, true)
+            return
+        end
         InfoDialog.show(FieldToDoL10n.getText(
             "ftdl_info_adopt_failed",
             "Vorschlag konnte nicht übernommen werden."
