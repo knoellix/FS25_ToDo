@@ -1,7 +1,7 @@
 # Multiplayer live sync + farm edit permissions
 
 **Date:** 2026-09-10  
-**Status:** approved design (awaiting implementation plan)  
+**Status:** implemented (0.1.0.9)  
 **Mod:** FS25_FieldToDoList  
 **Builds on:** farm-scoped tasks (`farmId`, save merge) from 0.1.0.7; UI 0.1.0.8
 

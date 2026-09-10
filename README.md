@@ -4,7 +4,7 @@
 
 **Author:** Christian Möllmann ([knoellix](https://github.com/knoellix))  
 **License:** [GNU GPL v3](LICENSE)  
-**Version:** `0.1.0.8`  
+**Version:** `0.1.0.9`  
 **Repository:** [github.com/knoellix/FS25_ToDo](https://github.com/knoellix/FS25_ToDo)
 
 ## Features
@@ -121,7 +121,7 @@ Use issue templates for bug reports, feature requests, and translations:
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
-**0.1.0.8** — vanilla FS25 green UI + ESC tab under Map; prior: multiplayer farm-scoped tasks, fallback-audit P2–P5.
+**0.1.0.9** — multiplayer live To-Do sync + farm edit permissions; prior: vanilla FS25 green UI, farm-scoped tasks.
 
 ## Known limitations
 
@@ -135,7 +135,7 @@ Full regression checklist: [`docs/REGRESSION.md`](docs/REGRESSION.md). Architect
 | **Weeds** | Hoe/spray, done when dead (coverage) | — |
 | **Custom fields** | Owned farmland without engine field ID (pseudo-fields) | Only when field center shows field ground |
 | **Planned crop / farmyard** | Sow month in suggestions; farmyard = no field scan | Planned crop does not replace the current crop column |
-| **Multiplayer** | Tasks stamped with `farmId`; list filtered per farm; save merges other farms from disk; visit/HUD local-player only | No live Event sync — same-farm concurrent edits can still race |
+| **Multiplayer** | Live sync for same-farm To-Dos, settings, and planned crop; edit gate (managers always, workers via setting); auto-complete for all farm members | Custom Vanilla farm permission UI out of scope |
 
 Debug: `ftdlDump <fieldId>` — line `baleCoverage: total/straw/grass/other` for bale diagnosis.
 

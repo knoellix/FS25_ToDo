@@ -2,6 +2,14 @@
 
 All notable changes to **FS25_FieldToDoList** are documented here.
 
+## [0.1.0.9] — 2026-09-10
+
+### Added
+
+- Multiplayer live sync for farm To-Dos, settings, and planned crop (server-authoritative events).
+- Farm edit gate: managers always; workers via setting `workersMayEditTodos` (default on).
+- Auto-complete remains allowed for all same-farm members; manual Done requires edit permission.
+
 ## [0.1.0.8] — 2026-09-10
 
 ### Improved
