@@ -2069,6 +2069,10 @@ local function onStartMission(mission)
             end
         end
     end
+
+    if FieldToDoSync ~= nil and FieldToDoSync.onMissionStarted ~= nil then
+        FieldToDoSync.onMissionStarted()
+    end
 end
 
 local function onSaveMission(missionInfo)
@@ -2118,9 +2122,20 @@ local function subscribeOverviewStaleEvents()
     end
 end
 
+local function subscribeSyncEvents()
+    if g_messageCenter == nil or MessageType == nil or FieldToDoSync == nil then
+        return
+    end
+
+    if MessageType.PLAYER_FARM_CHANGED ~= nil and FieldToDoSync.onPlayerFarmChanged ~= nil then
+        g_messageCenter:subscribe(MessageType.PLAYER_FARM_CHANGED, FieldToDoSync.onPlayerFarmChanged)
+    end
+end
+
 local function init()
     ToDoManager.initXMLSchema()
     subscribeOverviewStaleEvents()
+    subscribeSyncEvents()
 
     FSBaseMission.delete = Utils.appendedFunction(FSBaseMission.delete, unload)
     Mission00.load = Utils.prependedFunction(Mission00.load, load)

@@ -33,6 +33,7 @@ FieldToDoSync.OP = {
     SET_WORKERS_EDIT = 11,
     SET_PLANNED_CROP = 12,
     DENY = 13,
+    REQUEST_STATE = 14,
 }
 
 local OP = FieldToDoSync.OP
@@ -578,6 +579,23 @@ end
 function FieldToDoSync.handleRequest(op, payload, userId, connection)
     payload = payload or {}
 
+    if op == OP.REQUEST_STATE then
+        if connection == nil then
+            return
+        end
+
+        local farmId = FieldToDoSync.resolveFarmIdForUser(userId)
+        if farmId == nil then
+            local manager = FieldToDoSync.getManager()
+            if manager ~= nil and manager.getLocalFarmId ~= nil then
+                farmId = manager:getLocalFarmId()
+            end
+        end
+
+        FieldToDoSync.sendStateToConnection(connection, farmId)
+        return
+    end
+
     local manager = FieldToDoSync.getManager()
     if manager == nil then
         return
@@ -667,12 +685,14 @@ function FieldToDoSync.buildStateForFarm(farmId)
     end
 
     local manager = FieldToDoSync.getManager()
-    if manager ~= nil and manager.manualTasks ~= nil then
+    if manager ~= nil and manager.manualTasks ~= nil and farmId ~= nil then
         for _, task in pairs(manager.manualTasks) do
-            local taskFarmId = tonumber(task.farmId)
-            if farmId == nil or taskFarmId == nil or taskFarmId == farmId then
+            if tonumber(task.farmId) == farmId then
                 state.tasks[#state.tasks + 1] = FieldToDoSync.copyTaskForState(task)
             end
+        end
+        if manager.nextTaskId ~= nil then
+            state.nextTaskId = manager.nextTaskId
         end
     end
 
@@ -684,21 +704,6 @@ end
 function FieldToDoSync.applyState(state)
     if type(state) ~= "table" then
         return
-    end
-
-    if FieldAdvisorSettings ~= nil then
-        if not string.isNilOrWhitespace(state.workOrderPreset) then
-            FieldAdvisorSettings.setWorkOrderPreset(state.workOrderPreset)
-        end
-        FieldAdvisorSettings.setOrganicMultiPassEnabled(state.organicMultiPassEnabled == true)
-        FieldAdvisorSettings.setMulchingEnabled(state.mulchingEnabled ~= false)
-        FieldAdvisorSettings.setWorkersMayEditTodos(state.workersMayEditTodos ~= false)
-    end
-
-    if FieldPlannedCrop ~= nil and type(state.plannedCrops) == "table" then
-        for _, entry in ipairs(state.plannedCrops) do
-            FieldPlannedCrop.set(entry.fieldId, entry.fruitTypeIndex)
-        end
     end
 
     local manager = FieldToDoSync.getManager()
@@ -726,8 +731,42 @@ function FieldToDoSync.applyState(state)
         end
     end
 
+    if FieldAdvisorSettings ~= nil then
+        if not string.isNilOrWhitespace(state.workOrderPreset) then
+            FieldAdvisorSettings.setWorkOrderPreset(state.workOrderPreset)
+        end
+        FieldAdvisorSettings.setOrganicMultiPassEnabled(state.organicMultiPassEnabled == true)
+        FieldAdvisorSettings.setMulchingEnabled(state.mulchingEnabled ~= false)
+        FieldAdvisorSettings.setWorkersMayEditTodos(state.workersMayEditTodos ~= false)
+    end
+
+    if FieldPlannedCrop ~= nil and type(state.plannedCrops) == "table" then
+        for _, entry in ipairs(state.plannedCrops) do
+            FieldPlannedCrop.set(entry.fieldId, entry.fruitTypeIndex)
+        end
+    end
+
     if manager.normalizeTaskSortIndices ~= nil then
         manager:normalizeTaskSortIndices()
+    end
+
+    FieldToDoSync.refreshAfterStateSync()
+end
+
+--- Mark menu/HUD stale after a full-state replace (join or farm switch).
+function FieldToDoSync.refreshAfterStateSync()
+    local manager = FieldToDoSync.getManager()
+    if manager ~= nil then
+        if manager.markManualTasksDirty ~= nil then
+            manager:markManualTasksDirty()
+        end
+        if manager.markOwnedFieldsOverviewStale ~= nil then
+            manager:markOwnedFieldsOverviewStale()
+        end
+    end
+
+    if FieldToDoHudOverlay ~= nil and FieldToDoHudOverlay.instance ~= nil then
+        FieldToDoHudOverlay.instance.displayRows = {}
     end
 end
 
@@ -743,15 +782,35 @@ function FieldToDoSync.sendStateToConnection(connection, farmId)
     connection:sendEvent(FieldToDoStateEvent.new(state))
 end
 
---- Client-side manual resync request. No dedicated request opcode exists yet — the server
---- pushes state proactively on join (Task 4); kept as a guarded no-op safety net for now.
+--- Client-side resync request (join or farm change).
 function FieldToDoSync.requestFullState()
     if FieldToDoSync.isRunningAsServer() then
         return
     end
 
-    if g_client == nil or g_client.getServerConnection == nil then
+    if g_client == nil or g_client.getServerConnection == nil or FieldToDoRequestEvent == nil then
         return
     end
-    -- TODO(Task 4): add a REQUEST_STATE opcode + server-side handler once join hooks land.
+
+    local connection = g_client:getServerConnection()
+    if connection == nil then
+        return
+    end
+
+    connection:sendEvent(FieldToDoRequestEvent.new(OP.REQUEST_STATE, {}))
+end
+
+--- Non-host clients request authoritative farm state after savegame load.
+function FieldToDoSync.onMissionStarted()
+    if g_currentMission ~= nil and g_currentMission.getIsServer ~= nil and g_currentMission:getIsServer() then
+        return
+    end
+
+    FieldToDoSync.requestFullState()
+end
+
+--- Local player switched farm — pull fresh state for the new farm.
+function FieldToDoSync.onPlayerFarmChanged()
+    FieldToDoSync.requestFullState()
+    FieldToDoSync.refreshAfterStateSync()
 end
