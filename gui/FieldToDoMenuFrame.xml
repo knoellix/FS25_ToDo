@@ -138,9 +138,10 @@
                     <Text profile="ftdlMiniBtnTextSmall" id="mulchBtnText" position="284px -580px" size="150px 34px" text="$l10n_ftdl_mulch_on"/>
                     <Button profile="ftdlMiniBtnHitWide" id="btnMulch" position="284px -580px" onClick="onClickToggleMulching"/>
 
-                    <Bitmap profile="ftdlMiniBtnBgWide" position="378px -580px"/>
-                    <Text profile="ftdlMiniBtnTextSmall" id="workersEditBtnText" position="378px -580px" size="150px 34px" text="$l10n_ftdl_edit_all"/>
-                    <Button profile="ftdlMiniBtnHitWide" id="btnWorkersEdit" position="378px -580px" onClick="onClickToggleWorkersEdit"/>
+                    <!-- Wide buttons: organic 126–276, mulch 284–434, edit 442–592 (8px gap). -->
+                    <Bitmap profile="ftdlMiniBtnBgWide" position="442px -580px"/>
+                    <Text profile="ftdlMiniBtnTextSmall" id="workersEditBtnText" position="442px -580px" size="150px 34px" text="$l10n_ftdl_edit_all"/>
+                    <Button profile="ftdlMiniBtnHitWide" id="btnWorkersEdit" position="442px -580px" onClick="onClickToggleWorkersEdit"/>
 
                     <Bitmap profile="ftdlMiniBtnBg" position="0px -616px"/>
                     <Text profile="ftdlMiniBtnText" position="0px -616px" text="$l10n_ftdl_btn_visit"/>

@@ -13,10 +13,11 @@ FieldToDoInGameMenuIntegration.CLASS_NAME = "FieldToDoMenuFrame"
 FieldToDoInGameMenuIntegration.XML_FILENAME = "gui/FieldToDoMenuFrame.xml"
 FieldToDoInGameMenuIntegration.MENU_ICON_PATH = "gui/menuIcon.dds"
 FieldToDoInGameMenuIntegration.MENU_ICON_UVS = { 0, 0, 1024, 1024 }
---- Tab index after the map (1-based); Map is typically position 1.
-FieldToDoInGameMenuIntegration.TAB_POSITION = 2
+--- Fallback tab index if the map page cannot be found (1-based).
+FieldToDoInGameMenuIntegration.TAB_POSITION_FALLBACK = 2
 FieldToDoInGameMenuIntegration.menuScreen = nil
 FieldToDoInGameMenuIntegration._menuFrameUpdateTime = nil
+FieldToDoInGameMenuIntegration._tabPlacedAfterMap = false
 
 local LOG_PREFIX = "[FS25_FieldToDoList]"
 local pendingRegistration = false
@@ -160,7 +161,83 @@ function FieldToDoInGameMenuIntegration.updateMenuFrame(menu, dt)
     pcall(screen.onFrameUpdate, screen, dt)
 end
 
---- Move page/tab to a fixed slot (Courseplay-style). Position 2 = under Map.
+--- True if element looks like the vanilla map overview page.
+---@param child table|nil
+---@param mapScreen table|nil
+---@return boolean
+local function isMapPageChild(child, mapScreen)
+    if child == nil then
+        return false
+    end
+
+    if mapScreen ~= nil and (child == mapScreen or child.element == mapScreen) then
+        return true
+    end
+
+    local element = child
+    if type(child) == "table" and child.element ~= nil then
+        element = child.element
+    end
+
+    if element == nil then
+        return false
+    end
+
+    local name = element.name or element.id or element.pageName
+    if type(name) == "string" then
+        local lower = string.lower(name)
+        if string.find(lower, "mapoverview", 1, true) ~= nil
+            or lower == "pagemap"
+            or lower == "menumap"
+            or lower == "map" then
+            return true
+        end
+    end
+
+    return false
+end
+
+--- Index of the map page in paging lists (1-based), or nil.
+---@param inGameMenu table
+---@return number|nil
+function FieldToDoInGameMenuIntegration.findMapPageIndex(inGameMenu)
+    if inGameMenu == nil or inGameMenu.pagingElement == nil then
+        return nil
+    end
+
+    local mapScreen = inGameMenu.pageMapOverview or inGameMenu.pageMap or inGameMenu.pageMapOverviewFrame
+    local lists = {
+        inGameMenu.pagingElement.elements,
+        inGameMenu.pagingElement.pages,
+        inGameMenu.pageFrames,
+    }
+
+    for _, list in ipairs(lists) do
+        if list ~= nil then
+            for i = 1, #list do
+                if isMapPageChild(list[i], mapScreen) then
+                    return i
+                end
+            end
+        end
+    end
+
+    return nil
+end
+
+--- Slot directly after the map. Other mods may still insert later; we re-apply on menu open.
+---@param inGameMenu table
+---@return number
+function FieldToDoInGameMenuIntegration.resolveTabPositionAfterMap(inGameMenu)
+    local mapIndex = FieldToDoInGameMenuIntegration.findMapPageIndex(inGameMenu)
+    if mapIndex ~= nil then
+        return mapIndex + 1
+    end
+
+    return FieldToDoInGameMenuIntegration.TAB_POSITION_FALLBACK
+end
+
+--- Move page/tab to a slot (Courseplay-style). Prefer after map via resolveTabPositionAfterMap.
 ---@param inGameMenu table
 ---@param screen table
 ---@param position number
@@ -194,12 +271,73 @@ function FieldToDoInGameMenuIntegration.movePageToPosition(inGameMenu, screen, p
     moveInList(paging.pages)
     moveInList(inGameMenu.pageFrames)
 
+    -- Tab buttons often live in a separate list that addPageTab appends to.
+    local tabLists = {
+        inGameMenu.pagingButtons,
+        inGameMenu.pageTabs,
+        paging.buttons,
+        paging.tabButtons,
+    }
+    if inGameMenu.pagingTabList ~= nil then
+        tabLists[#tabLists + 1] = inGameMenu.pagingTabList.elements
+        tabLists[#tabLists + 1] = inGameMenu.pagingTabList
+    end
+    for _, list in ipairs(tabLists) do
+        if type(list) == "table" and #list > 0 then
+            moveInList(list)
+        end
+    end
+
     if type(paging.updateAbsolutePosition) == "function" then
         pcall(paging.updateAbsolutePosition, paging)
     end
     if type(paging.updatePageMapping) == "function" then
         pcall(paging.updatePageMapping, paging)
     end
+end
+
+--- Place our page immediately after the map and rebuild tabs.
+--- If we are already somewhere after the map, leave later mods alone.
+---@param inGameMenu table|nil
+---@param screen table|nil
+---@return number|nil position used
+function FieldToDoInGameMenuIntegration.placeTabAfterMap(inGameMenu, screen)
+    if inGameMenu == nil or screen == nil then
+        return nil
+    end
+
+    local paging = inGameMenu.pagingElement
+    local mapIndex = FieldToDoInGameMenuIntegration.findMapPageIndex(inGameMenu)
+    local ourIndex = nil
+    if paging ~= nil and paging.elements ~= nil then
+        for i = 1, #paging.elements do
+            if paging.elements[i] == screen then
+                ourIndex = i
+                break
+            end
+        end
+    end
+
+    local tabPosition
+    if mapIndex ~= nil then
+        if ourIndex ~= nil and ourIndex > mapIndex then
+            -- Already after the map (maybe other mods between) — keep slot.
+            FieldToDoInGameMenuIntegration._tabPlacedAfterMap = true
+            return ourIndex
+        end
+        tabPosition = mapIndex + 1
+    else
+        tabPosition = FieldToDoInGameMenuIntegration.TAB_POSITION_FALLBACK
+    end
+
+    FieldToDoInGameMenuIntegration.movePageToPosition(inGameMenu, screen, tabPosition)
+
+    if type(inGameMenu.rebuildTabList) == "function" then
+        pcall(inGameMenu.rebuildTabList, inGameMenu)
+    end
+
+    FieldToDoInGameMenuIntegration._tabPlacedAfterMap = true
+    return tabPosition
 end
 
 ---@param modDirectory string
@@ -277,7 +415,7 @@ function FieldToDoInGameMenuIntegration.performRegistration(modDirectory)
         pcall(inGameMenu.exposeControlsAsFields, inGameMenu, FieldToDoInGameMenuIntegration.MENU_PAGE_NAME)
     end
 
-    local tabPosition = FieldToDoInGameMenuIntegration.TAB_POSITION
+    local tabPosition = FieldToDoInGameMenuIntegration.resolveTabPositionAfterMap(inGameMenu)
     FieldToDoInGameMenuIntegration.movePageToPosition(inGameMenu, screen, tabPosition)
 
     if type(inGameMenu.registerPage) == "function" then
@@ -302,12 +440,8 @@ function FieldToDoInGameMenuIntegration.performRegistration(modDirectory)
         logWarning("Tab icon missing or addPageTab unavailable")
     end
 
-    -- Re-apply after tab button creation (addPageTab appends).
-    FieldToDoInGameMenuIntegration.movePageToPosition(inGameMenu, screen, tabPosition)
-
-    if type(inGameMenu.rebuildTabList) == "function" then
-        pcall(inGameMenu.rebuildTabList, inGameMenu)
-    end
+    -- Re-place after tab button creation (addPageTab appends). Map-relative slot.
+    tabPosition = FieldToDoInGameMenuIntegration.placeTabAfterMap(inGameMenu, screen) or tabPosition
 
     if type(screen.initialize) == "function" then
         pcall(screen.initialize, screen)
@@ -317,7 +451,19 @@ function FieldToDoInGameMenuIntegration.performRegistration(modDirectory)
         pcall(screen.updateAbsolutePosition, screen)
     end
 
-    logInfo("In-game menu page registered (tab position %d)", tabPosition)
+    -- Late mods may insert tabs after us; re-assert after-map slot when ESC opens.
+    if type(inGameMenu.onOpen) == "function" and FieldToDoInGameMenuIntegration._tabOpenHooked ~= true then
+        FieldToDoInGameMenuIntegration._tabOpenHooked = true
+        inGameMenu.onOpen = Utils.appendedFunction(inGameMenu.onOpen, function(menu)
+            local page = FieldToDoInGameMenuIntegration.menuScreen
+                or (menu ~= nil and menu[FieldToDoInGameMenuIntegration.MENU_PAGE_NAME])
+            if page ~= nil then
+                FieldToDoInGameMenuIntegration.placeTabAfterMap(menu or g_inGameMenu, page)
+            end
+        end)
+    end
+
+    logInfo("In-game menu page registered (tab after map, slot %d)", tabPosition)
     return true
 end
 
