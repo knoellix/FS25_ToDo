@@ -277,9 +277,7 @@ function FieldAdvisorSettings.loadFromXMLFile(xmlFile, key)
     FieldAdvisorSettings.setMulchingEnabled(mulching ~= false)
 
     local workersEdit = xmlFile:getValue(key .. "#workersMayEditTodos")
-    if workersEdit ~= nil then
-        FieldAdvisorSettings.setWorkersMayEditTodos(workersEdit == true)
-    end
+    FieldAdvisorSettings.setWorkersMayEditTodos(workersEdit ~= false)
 end
 
 ---@param xmlFile XMLFile|nil
