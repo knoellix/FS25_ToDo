@@ -2,24 +2,30 @@
 
 All notable changes to **FS25_FieldToDoList** are documented here.
 
-## [0.1.0.9] — 2026-09-10
+## [0.1.0.8] — 2026-09-10
 
 ### Added
 
-- Multiplayer live sync for farm To-Dos, settings, and planned crop (server-authoritative events).
+- **Multiplayer live sync** for farm To-Dos, settings, and planned crop (server-authoritative events).
 - Farm edit gate: managers always; workers via setting `workersMayEditTodos` (default on).
 - Auto-complete remains allowed for all same-farm members; manual Done requires edit permission.
-
-## [0.1.0.8] — 2026-09-10
+- ESC toggle **Edit: alle / Manager**.
 
 ### Improved
 
 - **Vanilla look:** ESC menu and HUD use FS25 green accents (`fs25_colorGreen` / MainHighlight) instead of cyan/blue.
-- **ESC tab position:** Field To-Do tab sits directly under Map (paging slot 2), Courseplay-style reorder.
+- **ESC tab:** placed dynamically directly under the Map page (other mods between Map and us are left alone).
+
+### Fixed
+
+- ESC settings button overlap (`Edit: alle` after Mulchen).
+- Safer tab reorder (no unsafe GUI list mutation on load).
+- Sync notify reaches the requesting client; custom field tasks route through sync.
 
 ### Known limitations
 
-- No live Event sync; farm admin / edit permissions not yet gated (planned with sync work).
+- Dedicated-server farm-id resolution and DENY UX still need MP validation.
+- Loose grass/straw on ground still not auto-detectable (bale objects only).
 
 ## [0.1.0.7] — 2026-09-10
 

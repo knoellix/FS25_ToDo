@@ -4,7 +4,7 @@
 
 **Author:** Christian Möllmann ([knoellix](https://github.com/knoellix))  
 **License:** [GNU GPL v3](LICENSE)  
-**Version:** `0.1.0.9`  
+**Version:** `0.1.0.8`  
 **Repository:** [github.com/knoellix/FS25_ToDo](https://github.com/knoellix/FS25_ToDo)
 
 ## Features
@@ -121,7 +121,7 @@ Use issue templates for bug reports, feature requests, and translations:
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
-**0.1.0.9** — multiplayer live To-Do sync + farm edit permissions; prior: vanilla FS25 green UI, farm-scoped tasks.
+**0.1.0.8** — multiplayer live To-Do sync + farm edit permissions, vanilla FS25 green UI, tab under Map.
 
 ## Known limitations
 
