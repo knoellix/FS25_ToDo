@@ -18,12 +18,12 @@ FieldToDoHudOverlay.TEXT_SIZE = 0.0125
 FieldToDoHudOverlay.HEADER_TEXT_SIZE = 0.014
 FieldToDoHudOverlay.MAX_TEXT_CHARS = 46
 
-FieldToDoHudOverlay.COLOR_BG = { 0.06, 0.08, 0.06, 0.52 }
-FieldToDoHudOverlay.COLOR_HEADER = { 0.82, 0.88, 0.82, 1.00 }
-FieldToDoHudOverlay.COLOR_TEXT = { 0.94, 0.96, 0.94, 1.00 }
-FieldToDoHudOverlay.COLOR_DONE = { 0.58, 0.62, 0.58, 1.00 }
-FieldToDoHudOverlay.COLOR_DIM = { 0.62, 0.68, 0.62, 1.00 }
-FieldToDoHudOverlay.COLOR_ACCENT = { 0.18, 0.72, 0.28, 0.95 }
+FieldToDoHudOverlay.COLOR_BG = { 0.00439, 0.00478, 0.00368, 0.72 }       -- fs25_colorMainDark
+FieldToDoHudOverlay.COLOR_HEADER = { 0.33716, 0.55834, 0.0003, 1.00 }    -- fs25_colorGreen
+FieldToDoHudOverlay.COLOR_TEXT = { 0.89627, 0.92158, 0.81485, 1.00 }     -- fs25_colorMainLight
+FieldToDoHudOverlay.COLOR_DONE = { 0.89627, 0.92158, 0.81485, 0.45 }
+FieldToDoHudOverlay.COLOR_DIM = { 0.89627, 0.92158, 0.81485, 0.55 }
+FieldToDoHudOverlay.COLOR_ACCENT = { 0.22323, 0.40724, 0.00368, 0.95 }   -- fs25_colorMainHighlight
 FieldToDoHudOverlay.instance = nil
 
 ---@return FieldToDoHudOverlay

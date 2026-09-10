@@ -4,7 +4,7 @@
 
 **Author:** Christian Möllmann ([knoellix](https://github.com/knoellix))  
 **License:** [GNU GPL v3](LICENSE)  
-**Version:** `0.1.0.7`  
+**Version:** `0.1.0.8`  
 **Repository:** [github.com/knoellix/FS25_ToDo](https://github.com/knoellix/FS25_ToDo)
 
 ## Features
@@ -121,7 +121,7 @@ Use issue templates for bug reports, feature requests, and translations:
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
-**0.1.0.7** — multiplayer farm-scoped tasks, fallback-audit P2–P5, harvest/bale fixes.
+**0.1.0.8** — vanilla FS25 green UI + ESC tab under Map; prior: multiplayer farm-scoped tasks, fallback-audit P2–P5.
 
 ## Known limitations
 

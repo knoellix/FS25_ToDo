@@ -4,7 +4,7 @@
 
 **Autor:** Christian Möllmann ([knoellix](https://github.com/knoellix))  
 **Lizenz:** [GNU GPL v3](LICENSE)  
-**Version:** `0.1.0.7`  
+**Version:** `0.1.0.8`  
 **Repository:** [github.com/knoellix/FS25_ToDo](https://github.com/knoellix/FS25_ToDo)
 
 ## Funktionen
@@ -109,7 +109,7 @@ Beiträge sind willkommen (Bugfixes, Features, Übersetzungen).
 
 ## Changelog
 
-Siehe [CHANGELOG.md](CHANGELOG.md). **0.1.0.7:** Multiplayer-Farm-Tasks, Fallback-Audit P2–P5, Ernte-/Ballen-Fixes.
+Siehe [CHANGELOG.md](CHANGELOG.md). **0.1.0.8:** Vanilla-Grün im ESC/HUD, Tab unter Map. Davor: Multiplayer-Farm-Tasks, Fallback-Audit P2–P5.
 
 ## Bekannte Grenzen (LIMITATIONS)
 

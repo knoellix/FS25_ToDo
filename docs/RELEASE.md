@@ -14,8 +14,8 @@ No extra runner setup is required. Ensure **Actions** is enabled for the reposit
 
 ```bash
 # after bumping modDesc.xml + CHANGELOG.md and committing on main:
-git tag v0.1.0.7
-git push origin v0.1.0.7
+git tag v0.1.0.8
+git push origin v0.1.0.8
 ```
 
 Then open the **Actions** tab and confirm the “Release Mod” workflow succeeded. The ZIP appears under **Releases**.

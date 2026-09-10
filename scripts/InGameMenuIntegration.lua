@@ -13,6 +13,8 @@ FieldToDoInGameMenuIntegration.CLASS_NAME = "FieldToDoMenuFrame"
 FieldToDoInGameMenuIntegration.XML_FILENAME = "gui/FieldToDoMenuFrame.xml"
 FieldToDoInGameMenuIntegration.MENU_ICON_PATH = "gui/menuIcon.dds"
 FieldToDoInGameMenuIntegration.MENU_ICON_UVS = { 0, 0, 1024, 1024 }
+--- Tab index after the map (1-based); Map is typically position 1.
+FieldToDoInGameMenuIntegration.TAB_POSITION = 2
 FieldToDoInGameMenuIntegration.menuScreen = nil
 FieldToDoInGameMenuIntegration._menuFrameUpdateTime = nil
 
@@ -158,6 +160,48 @@ function FieldToDoInGameMenuIntegration.updateMenuFrame(menu, dt)
     pcall(screen.onFrameUpdate, screen, dt)
 end
 
+--- Move page/tab to a fixed slot (Courseplay-style). Position 2 = under Map.
+---@param inGameMenu table
+---@param screen table
+---@param position number
+function FieldToDoInGameMenuIntegration.movePageToPosition(inGameMenu, screen, position)
+    if inGameMenu == nil or screen == nil or position == nil or position < 1 then
+        return
+    end
+
+    local paging = inGameMenu.pagingElement
+    if paging == nil then
+        return
+    end
+
+    local function moveInList(list)
+        if list == nil then
+            return
+        end
+        for i = 1, #list do
+            local child = list[i]
+            local match = child == screen or (type(child) == "table" and child.element == screen)
+            if match then
+                table.remove(list, i)
+                local insertAt = math.min(position, #list + 1)
+                table.insert(list, insertAt, child)
+                return
+            end
+        end
+    end
+
+    moveInList(paging.elements)
+    moveInList(paging.pages)
+    moveInList(inGameMenu.pageFrames)
+
+    if type(paging.updateAbsolutePosition) == "function" then
+        pcall(paging.updateAbsolutePosition, paging)
+    end
+    if type(paging.updatePageMapping) == "function" then
+        pcall(paging.updatePageMapping, paging)
+    end
+end
+
 ---@param modDirectory string
 ---@return boolean
 function FieldToDoInGameMenuIntegration.performRegistration(modDirectory)
@@ -233,16 +277,11 @@ function FieldToDoInGameMenuIntegration.performRegistration(modDirectory)
         pcall(inGameMenu.exposeControlsAsFields, inGameMenu, FieldToDoInGameMenuIntegration.MENU_PAGE_NAME)
     end
 
-    if type(inGameMenu.pagingElement.updateAbsolutePosition) == "function" then
-        pcall(inGameMenu.pagingElement.updateAbsolutePosition, inGameMenu.pagingElement)
-    end
-
-    if type(inGameMenu.pagingElement.updatePageMapping) == "function" then
-        pcall(inGameMenu.pagingElement.updatePageMapping, inGameMenu.pagingElement)
-    end
+    local tabPosition = FieldToDoInGameMenuIntegration.TAB_POSITION
+    FieldToDoInGameMenuIntegration.movePageToPosition(inGameMenu, screen, tabPosition)
 
     if type(inGameMenu.registerPage) == "function" then
-        pcall(inGameMenu.registerPage, inGameMenu, screen, nil, function()
+        pcall(inGameMenu.registerPage, inGameMenu, screen, tabPosition, function()
             return g_currentMission ~= nil
         end)
     end
@@ -263,6 +302,9 @@ function FieldToDoInGameMenuIntegration.performRegistration(modDirectory)
         logWarning("Tab icon missing or addPageTab unavailable")
     end
 
+    -- Re-apply after tab button creation (addPageTab appends).
+    FieldToDoInGameMenuIntegration.movePageToPosition(inGameMenu, screen, tabPosition)
+
     if type(inGameMenu.rebuildTabList) == "function" then
         pcall(inGameMenu.rebuildTabList, inGameMenu)
     end
@@ -271,7 +313,11 @@ function FieldToDoInGameMenuIntegration.performRegistration(modDirectory)
         pcall(screen.initialize, screen)
     end
 
-    logInfo("In-game menu page registered")
+    if type(screen.updateAbsolutePosition) == "function" then
+        pcall(screen.updateAbsolutePosition, screen)
+    end
+
+    logInfo("In-game menu page registered (tab position %d)", tabPosition)
     return true
 end
 

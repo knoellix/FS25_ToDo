@@ -256,14 +256,15 @@ function FieldToDoMenuFrame:updateOptionalColumns()
     end
 end
 
--- Toggle labels: bright green = active, muted grey = off, so the on/off state reads at a glance.
+-- Toggle labels: FS green = active, muted grey = off.
 function FieldToDoMenuFrame:applyToggleBtnColor(textElement, enabled)
     if textElement == nil or textElement.setTextColor == nil then
         return
     end
 
     if enabled then
-        textElement:setTextColor(0.32, 0.82, 0.45, 1.0)
+        -- $preset_fs25_colorGreen
+        textElement:setTextColor(0.33716, 0.55834, 0.0003, 1.0)
     else
         textElement:setTextColor(0.62, 0.64, 0.68, 1.0)
     end
@@ -354,7 +355,8 @@ function FieldToDoMenuFrame:updateFieldScanIndicator(dt, manager)
     end
 
     self.fieldScanBlinkTimer = 0
-    self.fieldScanStatusDot:setTextColor(0.25, 0.85, 0.35, 1.0)
+    -- $preset_fs25_colorGreen
+    self.fieldScanStatusDot:setTextColor(0.33716, 0.55834, 0.0003, 1.0)
     if self.fieldScanStatusDot.setToolTipText ~= nil then
         self.fieldScanStatusDot:setToolTipText(g_i18n:getText("ftdl_scan_status_ready"))
     end
@@ -660,9 +662,10 @@ function FieldToDoMenuFrame:populateCellForItemInSection(list, section, index, c
             end
             textElement:setText(displayText)
             if task.completed then
-                textElement.textColor = { 0.65, 0.65, 0.65, 1 }
+                -- muted main-light
+                textElement.textColor = { 0.89627, 0.92158, 0.81485, 0.45 }
             else
-                textElement.textColor = { 1, 1, 1, 1 }
+                textElement.textColor = { 0.89627, 0.92158, 0.81485, 1 }
             end
         end
 

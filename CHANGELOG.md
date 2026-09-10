@@ -2,6 +2,17 @@
 
 All notable changes to **FS25_FieldToDoList** are documented here.
 
+## [0.1.0.8] — 2026-09-10
+
+### Improved
+
+- **Vanilla look:** ESC menu and HUD use FS25 green accents (`fs25_colorGreen` / MainHighlight) instead of cyan/blue.
+- **ESC tab position:** Field To-Do tab sits directly under Map (paging slot 2), Courseplay-style reorder.
+
+### Known limitations
+
+- No live Event sync; farm admin / edit permissions not yet gated (planned with sync work).
+
 ## [0.1.0.7] — 2026-09-10
 
 ### Added
@@ -160,6 +171,7 @@ All notable changes to **FS25_FieldToDoList** are documented here.
 
 - Initial public pre-release: ESC to-do list, field overview, HUD, work-order presets, PF/SCS columns (limited), grass-aware suggestions.
 
+[0.1.0.8]: https://github.com/knoellix/FS25_ToDo/compare/v0.1.0.7...v0.1.0.8
 [0.1.0.7]: https://github.com/knoellix/FS25_ToDo/compare/v0.1.0.6...v0.1.0.7
 [0.1.0.6]: https://github.com/knoellix/FS25_ToDo/compare/v0.1.0.5...v0.1.0.6
 [0.1.0.5]: https://github.com/knoellix/FS25_ToDo/compare/v0.1.0.4...v0.1.0.5
