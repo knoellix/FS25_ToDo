@@ -59,7 +59,7 @@ representative at an online or offline event.
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
 reported to the community leaders responsible for enforcement at
-**[knoellix](https://codeberg.org/knoellix)** (Codeberg profile / private message)
+**[knoellix](https://github.com/knoellix)** (GitHub profile / private message)
 or as described in [SECURITY.md](SECURITY.md)
 if you prefer not to use a public issue.
 

@@ -2,9 +2,10 @@
 
 **To-Do- und Feldarbeitsliste** für Farming Simulator 25 — eigene Aufgaben verwalten, nächste Arbeitsschritte je eigenem Feld sehen, optional mit Precision-Farming- und Seasonal-Crop-Stress-Spalten.
 
-**Autor:** Christian Möllmann ([knoellix](https://codeberg.org/knoellix))  
+**Autor:** Christian Möllmann ([knoellix](https://github.com/knoellix))  
 **Lizenz:** [GNU GPL v3](LICENSE)  
-**Version:** `0.1.0.6`
+**Version:** `0.1.0.6`  
+**Repository:** [github.com/knoellix/FS25_ToDo](https://github.com/knoellix/FS25_ToDo)
 
 ## Funktionen
 
@@ -33,7 +34,7 @@ Funktioniert vollständig auch ohne Zusatzmods nur mit Basegame-Felddaten.
 
 ## Installation
 
-1. `FS25_FieldToDoList.zip` aus dem [latest release](https://codeberg.org/knoellix/FS25_FieldToDoList/releases/latest) laden.
+1. `FS25_FieldToDoList.zip` aus dem [latest release](https://github.com/knoellix/FS25_ToDo/releases/latest) laden.
 2. ZIP (**nicht entpacken**) in den Mods-Ordner kopieren:
 
 | Plattform              | Pfad                                                                                                                            |
@@ -94,13 +95,17 @@ ftdlDump 63
 
 Kein Auto-Dump beim Menü — nur manuell.
 
+## Releases
+
+Getaggte Versionen erzeugen `FS25_FieldToDoList.zip` über GitHub Actions. Anleitung: [`docs/RELEASE.md`](docs/RELEASE.md).
+
 ## Mitwirken
 
 Beiträge sind willkommen (Bugfixes, Features, Übersetzungen).
 
 - Einstieg: [`CONTRIBUTING.md`](CONTRIBUTING.md)
-- Übersetzungs-Workflow: [Übersetzungs-Issue öffnen](https://codeberg.org/knoellix/FS25_FieldToDoList/issues/new?template=translation.yml)
-- Allgemeine Bugs/Features: [Codeberg Issues](https://codeberg.org/knoellix/FS25_FieldToDoList/issues)
+- Übersetzungs-Workflow: [Übersetzungs-Issue öffnen](https://github.com/knoellix/FS25_ToDo/issues/new?template=translation.yml)
+- Allgemeine Bugs/Features: [GitHub Issues](https://github.com/knoellix/FS25_ToDo/issues)
 
 ## Changelog
 
@@ -124,7 +129,7 @@ Debug: `ftdlDump <FeldId>` — Zeile `baleCoverage: total/straw/grass/other` fü
 ## Issues
 
 Bitte die Issue-Templates für Bugs, Features und Übersetzungen nutzen:
-[Codeberg Issues](https://codeberg.org/knoellix/FS25_FieldToDoList/issues)
+[GitHub Issues](https://github.com/knoellix/FS25_ToDo/issues)
 
 ## Lizenz
 

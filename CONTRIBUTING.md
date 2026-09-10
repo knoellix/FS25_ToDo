@@ -22,7 +22,7 @@ python3 tools/generate_assets.py
 For commits that match CI release builds, you may use:
 
 ```fish
-git config user.email "knoellix@noreply.codeberg.org"
+git config user.email "128321164+knoellix@users.noreply.github.com"
 git config user.name "knoellix"
 ```
 
@@ -40,7 +40,7 @@ Build/install paths and `git` workflows are the same; only quoting and redirecti
 
 ## Preferred Workflow
 
-- Use [Codeberg Issues](https://codeberg.org/knoellix/FS25_FieldToDoList/issues) to discuss bugs or features first when scope is unclear.
+- Use [GitHub Issues](https://github.com/knoellix/FS25_ToDo/issues) to discuss bugs or features first when scope is unclear.
 - Use clear PR titles and explain the "why", not only the "what".
 - Include reproduction steps (for bug fixes) or expected behavior (for features).
 - If UI changes are involved, add screenshots when possible.
@@ -68,7 +68,7 @@ Build/install paths and `git` workflows are the same; only quoting and redirecti
 Translations are very welcome.
 
 - Open a translation issue using the template:
-  - [New translation issue](https://codeberg.org/knoellix/FS25_FieldToDoList/issues/new?template=translation.yml)
+  - [New translation issue](https://github.com/knoellix/FS25_ToDo/issues/new?template=translation.yml)
 - Copy `translations/translation_en.xml` to `translations/translation_<locale>.xml`.
 - Keep all `text name="..."` keys present (no missing keys).
 - Keep short UI labels compact (buttons, columns, HUD).
@@ -82,7 +82,17 @@ Translations are very welcome.
 - Note whether translation is full or partial.
 - Mention any wording that needs maintainer review.
 
+## Releases (maintainers)
+
+See [`docs/RELEASE.md`](docs/RELEASE.md) for the full English guide.
+
+Short version:
+
+1. Ensure GitHub Actions is allowed (Settings → Actions → General).
+2. Tag builds use `ubuntu-latest` (`.github/workflows/release.yml`). Manual upload from `./build.sh` is the fallback.
+
+
 ## Need Help?
 
-- Open a Codeberg issue and describe what blocks you.
+- Open a GitHub issue and describe what blocks you.
 - If you already have a fix, open a PR and link the related issue.

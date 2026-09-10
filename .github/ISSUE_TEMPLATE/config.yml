@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Translate the mod
-    url: https://codeberg.org/knoellix/FS25_FieldToDoList/issues/new?template=translation.yml
+    url: https://github.com/knoellix/FS25_ToDo/issues/new?template=translation.yml
     about: New language or improved UI strings (see translation issue template)
   - name: Bug or feature request
-    url: https://codeberg.org/knoellix/FS25_FieldToDoList/issues/new/choose
+    url: https://github.com/knoellix/FS25_ToDo/issues/new/choose
     about: Use the issue templates for bugs, features, or questions

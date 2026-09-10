@@ -2,9 +2,10 @@
 
 **To-Do and field work list** for Farming Simulator 25 — track your own tasks, see what to do next on each owned field, optional Precision Farming and Seasonal Crop Stress columns.
 
-**Author:** Christian Möllmann ([knoellix](https://codeberg.org/knoellix))  
+**Author:** Christian Möllmann ([knoellix](https://github.com/knoellix))  
 **License:** [GNU GPL v3](LICENSE)  
-**Version:** `0.1.0.6`
+**Version:** `0.1.0.6`  
+**Repository:** [github.com/knoellix/FS25_ToDo](https://github.com/knoellix/FS25_ToDo)
 
 ## Features
 
@@ -37,7 +38,7 @@ Works fully without add-ons using base game field data.
 
 ## Installation
 
-1. Download `FS25_FieldToDoList.zip` from the [latest release](https://codeberg.org/knoellix/FS25_FieldToDoList/releases/latest).
+1. Download `FS25_FieldToDoList.zip` from the [latest release](https://github.com/knoellix/FS25_ToDo/releases/latest).
 2. Copy the ZIP (**do not extract**) to your mods folder:
 
 
@@ -99,18 +100,22 @@ ftdlDump 63
 
 No auto-dump on menu open — commands are manual only.
 
+## Releases
+
+Tagged releases build `FS25_FieldToDoList.zip` via GitHub Actions (`ubuntu-latest`). See [`docs/RELEASE.md`](docs/RELEASE.md) for the pre-tag checklist and manual fallback.
+
 ## Contributing
 
 Contributions are welcome (bugfixes, features, translations).
 
 - Start here: [`CONTRIBUTING.md`](CONTRIBUTING.md)
-- Translation workflow: [Open translation issue](https://codeberg.org/knoellix/FS25_FieldToDoList/issues/new?template=translation.yml)
-- General bugs/features: [Codeberg Issues](https://codeberg.org/knoellix/FS25_FieldToDoList/issues)
+- Translation workflow: [Open translation issue](https://github.com/knoellix/FS25_ToDo/issues/new?template=translation.yml)
+- General bugs/features: [GitHub Issues](https://github.com/knoellix/FS25_ToDo/issues)
 
 ## Issues
 
 Use issue templates for bug reports, feature requests, and translations:
-[Codeberg Issues](https://codeberg.org/knoellix/FS25_FieldToDoList/issues)
+[GitHub Issues](https://github.com/knoellix/FS25_ToDo/issues)
 
 ## Changelog
 
