@@ -7,9 +7,9 @@
       Client calls FieldToDoSync.request(op, payload) -> sends FieldToDoRequestEvent to the
       server (or applies locally when already the server/SP).
       Server (FieldToDoSync.handleRequest) applies the op via a ToDoManager "applyX" method
-      (added in Task 4) and re-broadcasts a FieldToDoNotifyEvent to the other clients.
-      Clients apply notify via FieldToDoSync.applyNotify using the same "applyX" methods, since
-      the server already validated the request.
+      (added in Task 4) and broadcasts a FieldToDoNotifyEvent to all clients (including the
+      requester). Clients apply notify via FieldToDoSync.applyNotify using the same "applyX"
+      methods; the host skips re-apply in FieldToDoNotifyEvent:run (already applied locally).
       On join / resync, the server sends a full FieldToDoStateEvent via sendStateToConnection.
 
     Server resolves farmId from userId, checks FieldToDoPermissions, applies via ToDoManager
@@ -612,7 +612,8 @@ function FieldToDoSync.handleRequest(op, payload, userId, connection)
         return
     end
 
-    FieldToDoSync.broadcastNotify(op, resultPayload, farmId, connection)
+    -- Include the requester: pure clients need applyNotify; host/listen-server skips re-apply in NotifyEvent:run.
+    FieldToDoSync.broadcastNotify(op, resultPayload, farmId, nil)
 end
 
 --- Client-side application of a server-broadcast notify (server already validated the op).
@@ -637,11 +638,11 @@ function FieldToDoSync.applyNotify(op, payload)
     FieldToDoSync.applyOp(manager, op, payload, notifyFarmId, nil)
 end
 
---- Server -> other clients. SP (no g_server) applies locally via applyNotify.
+--- Server -> all clients (requester included). SP (no g_server) applies locally via applyNotify.
 ---@param op number
 ---@param payload table
 ---@param farmId number|nil
----@param excludeConnection table|nil connection to skip (usually the request's origin)
+---@param excludeConnection table|nil optional connection to skip (unused; kept for API compat)
 function FieldToDoSync.broadcastNotify(op, payload, farmId, excludeConnection)
     payload = payload or {}
     payload.farmId = payload.farmId or farmId

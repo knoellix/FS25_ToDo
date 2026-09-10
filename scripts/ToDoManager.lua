@@ -1472,36 +1472,29 @@ function ToDoManager:addCustomFieldTask(fieldRecord, text, actionType, autoCompl
         return nil
     end
 
-    local engineField = self.fieldScanner ~= nil and self.fieldScanner:getEngineFieldById(fieldRecord.id) or nil
-    local task = {
-        id = self.nextTaskId,
+    local resolvedActionType = actionType or "custom"
+    local draft = {
         text = self:buildFieldTaskText(fieldRecord, text),
-        completed = false,
         source = "field",
-        farmId = self:getLocalFarmId(),
         fieldId = fieldRecord.id,
         fieldName = fieldRecord.name,
         fruit = fieldRecord.fruit,
-        actionType = actionType or "custom",
+        actionType = resolvedActionType,
         suggestion = text,
         autoComplete = autoComplete == true,
-        completionBaseline = FieldAdvisor ~= nil
-            and FieldAdvisor.captureTaskBaseline(
-                engineField,
-                fieldRecord.id,
-                fieldRecord.worldX,
-                fieldRecord.worldZ
-            )
-            or nil,
     }
 
-    self.manualTasks[task.id] = task
-    self.nextTaskId = self.nextTaskId + 1
-    self:assignSortIndexAtTop(task)
-    self:requestDebouncedSave()
-    self:invalidateFieldAutoCheckCache(fieldRecord.id)
+    if FieldToDoSync ~= nil then
+        FieldToDoSync.request(FieldToDoSync.OP.ADD_FIELD, draft)
+        return nil
+    end
 
-    return task
+    local result = self:applyAddFieldTask(draft, self:getLocalFarmId(), nil)
+    if result == nil or result.task == nil then
+        return nil
+    end
+
+    return self.manualTasks[result.task.id]
 end
 
 ---@return number
