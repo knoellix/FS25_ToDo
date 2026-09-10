@@ -271,22 +271,8 @@ function FieldToDoInGameMenuIntegration.movePageToPosition(inGameMenu, screen, p
     moveInList(paging.pages)
     moveInList(inGameMenu.pageFrames)
 
-    -- Tab buttons often live in a separate list that addPageTab appends to.
-    local tabLists = {
-        inGameMenu.pagingButtons,
-        inGameMenu.pageTabs,
-        paging.buttons,
-        paging.tabButtons,
-    }
-    if inGameMenu.pagingTabList ~= nil then
-        tabLists[#tabLists + 1] = inGameMenu.pagingTabList.elements
-        tabLists[#tabLists + 1] = inGameMenu.pagingTabList
-    end
-    for _, list in ipairs(tabLists) do
-        if type(list) == "table" and #list > 0 then
-            moveInList(list)
-        end
-    end
+    -- Do NOT mutate pagingTabList / button GUI objects — Courseplay only moves the three
+    -- lists above, then rebuildTabList(). Treating GuiElements as arrays can hang the game.
 
     if type(paging.updateAbsolutePosition) == "function" then
         pcall(paging.updateAbsolutePosition, paging)
@@ -333,7 +319,10 @@ function FieldToDoInGameMenuIntegration.placeTabAfterMap(inGameMenu, screen)
     FieldToDoInGameMenuIntegration.movePageToPosition(inGameMenu, screen, tabPosition)
 
     if type(inGameMenu.rebuildTabList) == "function" then
-        pcall(inGameMenu.rebuildTabList, inGameMenu)
+        local ok, err = pcall(inGameMenu.rebuildTabList, inGameMenu)
+        if not ok then
+            logWarning("rebuildTabList failed: %s", tostring(err))
+        end
     end
 
     FieldToDoInGameMenuIntegration._tabPlacedAfterMap = true
@@ -441,7 +430,12 @@ function FieldToDoInGameMenuIntegration.performRegistration(modDirectory)
     end
 
     -- Re-place after tab button creation (addPageTab appends). Map-relative slot.
-    tabPosition = FieldToDoInGameMenuIntegration.placeTabAfterMap(inGameMenu, screen) or tabPosition
+    local placeOk, placeResult = pcall(FieldToDoInGameMenuIntegration.placeTabAfterMap, inGameMenu, screen)
+    if placeOk and placeResult ~= nil then
+        tabPosition = placeResult
+    elseif not placeOk then
+        logWarning("placeTabAfterMap failed: %s", tostring(placeResult))
+    end
 
     if type(screen.initialize) == "function" then
         pcall(screen.initialize, screen)
@@ -451,14 +445,26 @@ function FieldToDoInGameMenuIntegration.performRegistration(modDirectory)
         pcall(screen.updateAbsolutePosition, screen)
     end
 
-    -- Late mods may insert tabs after us; re-assert after-map slot when ESC opens.
+    -- One-shot soft re-check on first ESC open only (no every-open rebuild).
     if type(inGameMenu.onOpen) == "function" and FieldToDoInGameMenuIntegration._tabOpenHooked ~= true then
         FieldToDoInGameMenuIntegration._tabOpenHooked = true
         inGameMenu.onOpen = Utils.appendedFunction(inGameMenu.onOpen, function(menu)
+            if FieldToDoInGameMenuIntegration._tabOpenReplaced == true then
+                return
+            end
+            FieldToDoInGameMenuIntegration._tabOpenReplaced = true
             local page = FieldToDoInGameMenuIntegration.menuScreen
                 or (menu ~= nil and menu[FieldToDoInGameMenuIntegration.MENU_PAGE_NAME])
-            if page ~= nil then
-                FieldToDoInGameMenuIntegration.placeTabAfterMap(menu or g_inGameMenu, page)
+            if page == nil then
+                return
+            end
+            local ok, err = pcall(
+                FieldToDoInGameMenuIntegration.placeTabAfterMap,
+                menu or g_inGameMenu,
+                page
+            )
+            if not ok then
+                logWarning("placeTabAfterMap onOpen failed: %s", tostring(err))
             end
         end)
     end
