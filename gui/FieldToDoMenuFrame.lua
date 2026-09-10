@@ -254,6 +254,81 @@ function FieldToDoMenuFrame:updateOptionalColumns()
         self.mulchBtnText:setText(FieldAdvisorSettings.getMulchingLabel())
         self:applyToggleBtnColor(self.mulchBtnText, FieldAdvisorSettings.isMulchingEnabled())
     end
+
+    self:updateEditPermissionUi()
+end
+
+---@param button GuiElement|nil
+---@param disabled boolean
+function FieldToDoMenuFrame:setButtonDisabled(button, disabled)
+    if button ~= nil and button.setDisabled ~= nil then
+        button:setDisabled(disabled)
+    end
+end
+
+---@return boolean
+function FieldToDoMenuFrame:canEditLocal()
+    return FieldToDoPermissions ~= nil and FieldToDoPermissions.canEditLocal()
+end
+
+---@return boolean
+function FieldToDoMenuFrame:canChangeWorkersEditSetting()
+    if FieldToDoPermissions == nil or g_currentMission == nil or g_currentMission.fieldToDoList == nil then
+        return false
+    end
+
+    local farmId = g_currentMission.fieldToDoList:getLocalFarmId()
+    return FieldToDoPermissions.canChangeWorkersEditSetting(farmId, nil)
+end
+
+function FieldToDoMenuFrame:notifyEditDenied()
+    local message = FieldToDoL10n.getText(
+        "ftdl_edit_denied",
+        "No permission to change to-dos"
+    )
+
+    if FieldToDoLog ~= nil then
+        FieldToDoLog.info(message)
+    end
+end
+
+---@return boolean
+function FieldToDoMenuFrame:requireEditPermission()
+    if self:canEditLocal() then
+        return true
+    end
+
+    self:notifyEditDenied()
+    return false
+end
+
+function FieldToDoMenuFrame:updateEditPermissionUi()
+    local canEdit = self:canEditLocal()
+    local canSetting = self:canChangeWorkersEditSetting()
+    self.editControlsEnabled = canEdit
+
+    self:setButtonDisabled(self.btnAdd, not canEdit)
+    self:setButtonDisabled(self.btnEdit, not canEdit)
+    self:setButtonDisabled(self.btnDone, not canEdit)
+    self:setButtonDisabled(self.btnDelete, not canEdit)
+    self:setButtonDisabled(self.btnMoveUp, not canEdit)
+    self:setButtonDisabled(self.btnMoveDown, not canEdit)
+    self:setButtonDisabled(self.btnAdopt, not canEdit)
+    self:setButtonDisabled(self.btnPlannedCrop, not canEdit)
+    self:setButtonDisabled(self.btnWorkOrder, not canEdit)
+    self:setButtonDisabled(self.btnOrganicMultiPass, not canEdit)
+    self:setButtonDisabled(self.btnMulch, not canEdit)
+    self:setButtonDisabled(self.btnAddFieldTask, not canEdit)
+    self:setButtonDisabled(self.btnWorkersEdit, not canSetting)
+
+    if self.workersEditBtnText ~= nil and FieldAdvisorSettings ~= nil then
+        self.workersEditBtnText:setText(FieldAdvisorSettings.getWorkersMayEditLabel())
+        self:applyToggleBtnColor(self.workersEditBtnText, FieldAdvisorSettings.isWorkersMayEditTodos())
+    end
+
+    if self.fieldList ~= nil and self.fieldList.reloadVisibleItems ~= nil then
+        self.fieldList:reloadVisibleItems()
+    end
 end
 
 -- Toggle labels: FS green = active, muted grey = off.
@@ -372,6 +447,9 @@ function FieldToDoMenuFrame:onFrameUpdate(dt)
         end
         if manager.consumeManualTasksDirty ~= nil and manager:consumeManualTasksDirty() then
             self:refreshManualTaskList(true, true)
+            self:resetFieldSuggestionIndices()
+            self:updateOptionalColumns()
+            self:refreshLists(false)
         end
         self:syncOwnedFieldsFromScan()
         self:updateFieldScanIndicator(dt, manager)
@@ -696,6 +774,9 @@ function FieldToDoMenuFrame:populateCellForItemInSection(list, section, index, c
                     "Planfrucht"
                 ))
             end
+            if plannedHit.setDisabled ~= nil then
+                plannedHit:setDisabled(self.editControlsEnabled ~= true)
+            end
         end
         cell:getAttribute("growth"):setText(field.growthState)
         cell:getAttribute("harvest"):setText(field.expectedHarvest or "-")
@@ -792,7 +873,7 @@ function FieldToDoMenuFrame:populateCellForItemInSection(list, section, index, c
                 cycleElement:setVisible(hasMultipleSuggestions)
                 cycleElement.ftdlFieldId = field.id
                 if cycleElement.setDisabled ~= nil then
-                    cycleElement:setDisabled(not hasMultipleSuggestions)
+                    cycleElement:setDisabled(not hasMultipleSuggestions or self.editControlsEnabled ~= true)
                 end
             end
         end
@@ -999,6 +1080,10 @@ function FieldToDoMenuFrame:getSelectedField()
 end
 
 function FieldToDoMenuFrame:onClickAdoptFieldSuggestion()
+    if not self:requireEditPermission() then
+        return
+    end
+
     local field = self:getSelectedField()
     if field == nil then
         InfoDialog.show(FieldToDoL10n.getText(
@@ -1137,10 +1222,18 @@ function FieldToDoMenuFrame:openPlannedCropPicker(field)
 end
 
 function FieldToDoMenuFrame:onClickSetPlannedCrop()
+    if not self:requireEditPermission() then
+        return
+    end
+
     self:openPlannedCropPicker(self:getSelectedField())
 end
 
 function FieldToDoMenuFrame:onClickPlannedSowInRow(element)
+    if not self:requireEditPermission() then
+        return
+    end
+
     local fieldId = self:resolveFieldIdFromGuiElement(element)
     local field = self:getFieldById(fieldId)
     if field == nil then
@@ -1247,48 +1340,85 @@ function FieldToDoMenuFrame:resetFieldSuggestionIndices()
     self.fieldSuggestionIndexByFieldId = {}
 end
 
-function FieldToDoMenuFrame:persistAdvisorSettings()
-    local manager = self:getManager()
-    if manager ~= nil and manager.saveSettingsNow ~= nil then
-        manager:saveSettingsNow()
+---@return string|nil
+function FieldToDoMenuFrame:getNextWorkOrderPresetKey()
+    if FieldAdvisorSettings == nil then
+        return nil
     end
+
+    local currentIndex = 1
+    for index, key in ipairs(FieldAdvisorSettings.PRESET_KEYS) do
+        if key == FieldAdvisorSettings.getWorkOrderPreset() then
+            currentIndex = index
+            break
+        end
+    end
+
+    local nextIndex = (currentIndex % #FieldAdvisorSettings.PRESET_KEYS) + 1
+    return FieldAdvisorSettings.PRESET_KEYS[nextIndex]
 end
 
 function FieldToDoMenuFrame:onClickCycleWorkOrder()
-    if FieldAdvisorSettings == nil then
+    if FieldAdvisorSettings == nil or FieldToDoSync == nil then
         return
     end
 
-    FieldAdvisorSettings.cycleWorkOrderPreset()
+    if not self:requireEditPermission() then
+        return
+    end
+
+    local presetKey = self:getNextWorkOrderPresetKey()
+    if presetKey == nil then
+        return
+    end
+
     self:resetFieldSuggestionIndices()
-    self:updateSettingsWorkOrderLabel()
-    self:updateOptionalColumns()
-    self:refreshLists()
-    self:persistAdvisorSettings()
+    FieldToDoSync.request(FieldToDoSync.OP.SET_PRESET, { presetKey = presetKey })
 end
 
 function FieldToDoMenuFrame:onClickToggleOrganicMultiPass()
-    if FieldAdvisorSettings == nil then
+    if FieldAdvisorSettings == nil or FieldToDoSync == nil then
         return
     end
 
-    FieldAdvisorSettings.toggleOrganicMultiPass()
+    if not self:requireEditPermission() then
+        return
+    end
+
     self:resetFieldSuggestionIndices()
-    self:updateOptionalColumns()
-    self:refreshLists()
-    self:persistAdvisorSettings()
+    FieldToDoSync.request(FieldToDoSync.OP.SET_ORGANIC, {
+        enabled = not FieldAdvisorSettings.isOrganicMultiPassEnabled(),
+    })
 end
 
 function FieldToDoMenuFrame:onClickToggleMulching()
-    if FieldAdvisorSettings == nil then
+    if FieldAdvisorSettings == nil or FieldToDoSync == nil then
         return
     end
 
-    FieldAdvisorSettings.toggleMulching()
+    if not self:requireEditPermission() then
+        return
+    end
+
     self:resetFieldSuggestionIndices()
-    self:updateOptionalColumns()
-    self:refreshLists()
-    self:persistAdvisorSettings()
+    FieldToDoSync.request(FieldToDoSync.OP.SET_MULCH, {
+        enabled = not FieldAdvisorSettings.isMulchingEnabled(),
+    })
+end
+
+function FieldToDoMenuFrame:onClickToggleWorkersEdit()
+    if FieldAdvisorSettings == nil or FieldToDoSync == nil then
+        return
+    end
+
+    if not self:canChangeWorkersEditSetting() then
+        self:notifyEditDenied()
+        return
+    end
+
+    FieldToDoSync.request(FieldToDoSync.OP.SET_WORKERS_EDIT, {
+        enabled = not FieldAdvisorSettings.isWorkersMayEditTodos(),
+    })
 end
 
 function FieldToDoMenuFrame:onClickVisitField()
@@ -1322,6 +1452,10 @@ function FieldToDoMenuFrame:onClickVisitField()
 end
 
 function FieldToDoMenuFrame:onClickCycleFieldSuggestion(delta)
+    if not self:requireEditPermission() then
+        return
+    end
+
     local field = self:getSelectedField()
     if field == nil then
         InfoDialog.show(FieldToDoL10n.getText(
@@ -1337,6 +1471,10 @@ end
 
 ---@param element GuiElement|nil
 function FieldToDoMenuFrame:onClickCycleFieldSuggestionInRow(element)
+    if not self:requireEditPermission() then
+        return
+    end
+
     local fieldId = self:resolveFieldIdFromGuiElement(element)
     local field = self:getFieldById(fieldId)
     if field == nil then
@@ -1406,6 +1544,10 @@ function FieldToDoMenuFrame:buildFieldTaskPickerActions(field)
 end
 
 function FieldToDoMenuFrame:onClickAddFieldTask()
+    if not self:requireEditPermission() then
+        return
+    end
+
     local field = self:getSelectedField()
     if field == nil then
         InfoDialog.show(FieldToDoL10n.getText(
@@ -1681,6 +1823,10 @@ function FieldToDoMenuFrame:onEditTaskDialog(text, clickOk)
 end
 
 function FieldToDoMenuFrame:onClickAddTask()
+    if not self:requireEditPermission() then
+        return
+    end
+
     TextInputDialog.show(
         self.onAddTaskDialog,
         self,
@@ -1691,6 +1837,10 @@ function FieldToDoMenuFrame:onClickAddTask()
 end
 
 function FieldToDoMenuFrame:onClickEditTask()
+    if not self:requireEditPermission() then
+        return
+    end
+
     local task = self:getSelectedTask()
     if task == nil then
         InfoDialog.show(FieldToDoL10n.getText(
@@ -1711,6 +1861,10 @@ function FieldToDoMenuFrame:onClickEditTask()
 end
 
 function FieldToDoMenuFrame:onClickDeleteTask()
+    if not self:requireEditPermission() then
+        return
+    end
+
     local task = self:getSelectedTask()
     if task == nil then
         InfoDialog.show(FieldToDoL10n.getText(
@@ -1749,6 +1903,10 @@ function FieldToDoMenuFrame:onConfirmDeleteTask(yes)
 end
 
 function FieldToDoMenuFrame:onClickToggleTask()
+    if not self:requireEditPermission() then
+        return
+    end
+
     local task = self:getSelectedTask()
     if task == nil then
         InfoDialog.show(FieldToDoL10n.getText(
@@ -1778,6 +1936,10 @@ end
 
 ---@param delta number
 function FieldToDoMenuFrame:moveSelectedTask(delta)
+    if not self:requireEditPermission() then
+        return
+    end
+
     if self.selectedTaskId == nil then
         InfoDialog.show(FieldToDoL10n.getText(
             "ftdl_info_select_task",

@@ -128,31 +128,35 @@
 
                     <Bitmap profile="ftdlMiniBtnBg" position="0px -580px"/>
                     <Text profile="ftdlMiniBtnText" position="0px -580px" text="$l10n_ftdl_btn_work_order"/>
-                    <Button profile="ftdlMiniBtnHit" position="0px -580px" onClick="onClickCycleWorkOrder"/>
+                    <Button profile="ftdlMiniBtnHit" id="btnWorkOrder" position="0px -580px" onClick="onClickCycleWorkOrder"/>
 
                     <Bitmap profile="ftdlMiniBtnBgWide" position="126px -580px"/>
                     <Text profile="ftdlMiniBtnTextSmall" id="organicMultiPassBtnText" position="126px -580px" size="150px 34px" text="$l10n_ftdl_organic_once"/>
-                    <Button profile="ftdlMiniBtnHitWide" position="126px -580px" onClick="onClickToggleOrganicMultiPass"/>
+                    <Button profile="ftdlMiniBtnHitWide" id="btnOrganicMultiPass" position="126px -580px" onClick="onClickToggleOrganicMultiPass"/>
 
                     <Bitmap profile="ftdlMiniBtnBgWide" position="284px -580px"/>
                     <Text profile="ftdlMiniBtnTextSmall" id="mulchBtnText" position="284px -580px" size="150px 34px" text="$l10n_ftdl_mulch_on"/>
-                    <Button profile="ftdlMiniBtnHitWide" position="284px -580px" onClick="onClickToggleMulching"/>
+                    <Button profile="ftdlMiniBtnHitWide" id="btnMulch" position="284px -580px" onClick="onClickToggleMulching"/>
+
+                    <Bitmap profile="ftdlMiniBtnBgWide" position="378px -580px"/>
+                    <Text profile="ftdlMiniBtnTextSmall" id="workersEditBtnText" position="378px -580px" size="150px 34px" text="$l10n_ftdl_edit_all"/>
+                    <Button profile="ftdlMiniBtnHitWide" id="btnWorkersEdit" position="378px -580px" onClick="onClickToggleWorkersEdit"/>
 
                     <Bitmap profile="ftdlMiniBtnBg" position="0px -616px"/>
                     <Text profile="ftdlMiniBtnText" position="0px -616px" text="$l10n_ftdl_btn_visit"/>
-                    <Button profile="ftdlMiniBtnHit" position="0px -616px" onClick="onClickVisitField"/>
+                    <Button profile="ftdlMiniBtnHit" id="btnVisit" position="0px -616px" onClick="onClickVisitField"/>
 
                     <Bitmap profile="ftdlMiniBtnBg" position="126px -616px"/>
                     <Text profile="ftdlMiniBtnText" position="126px -616px" text="$l10n_ftdl_btn_field_task"/>
-                    <Button profile="ftdlMiniBtnHit" position="126px -616px" onClick="onClickAddFieldTask"/>
+                    <Button profile="ftdlMiniBtnHit" id="btnAddFieldTask" position="126px -616px" onClick="onClickAddFieldTask"/>
 
                     <Bitmap profile="ftdlMiniBtnBg" position="252px -616px"/>
                     <Text profile="ftdlMiniBtnText" position="252px -616px" text="$l10n_ftdl_btn_adopt"/>
-                    <Button profile="ftdlMiniBtnHit" position="252px -616px" onClick="onClickAdoptFieldSuggestion"/>
+                    <Button profile="ftdlMiniBtnHit" id="btnAdopt" position="252px -616px" onClick="onClickAdoptFieldSuggestion"/>
 
                     <Bitmap profile="ftdlMiniBtnBgWide" position="378px -616px"/>
                     <Text profile="ftdlMiniBtnTextSmall" position="378px -616px" size="150px 34px" text="$l10n_ftdl_btn_planned_crop"/>
-                    <Button profile="ftdlMiniBtnHitWide" position="378px -616px" onClick="onClickSetPlannedCrop"/>
+                    <Button profile="ftdlMiniBtnHitWide" id="btnPlannedCrop" position="378px -616px" onClick="onClickSetPlannedCrop"/>
                 </GuiElement>
             </ThreePartBitmap>
 
