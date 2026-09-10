@@ -237,11 +237,14 @@ function ToDoManager:getLocalFarmId()
     return nil
 end
 
---- True when this peer may write fieldToDoList.xml.
---- All peers may write; save merges other farms from disk so MP farms do not wipe each other.
+--- True when this peer may write fieldToDoList.xml (server / host only).
 ---@return boolean
 function ToDoManager:canPersistSidecar()
-    return true
+    if g_currentMission ~= nil and g_currentMission.getIsServer ~= nil then
+        return g_currentMission:getIsServer() == true
+    end
+
+    return g_server ~= nil
 end
 
 --- Before writing: replace in-memory tasks of *other* farms with the disk copy so a local
@@ -317,6 +320,43 @@ function ToDoManager:taskBelongsToLocalFarm(task)
     return taskFarm == localFarm
 end
 
+---@param task table|nil
+---@param farmId number|nil
+---@return boolean
+function ToDoManager:taskBelongsToFarm(task, farmId)
+    if task == nil then
+        return false
+    end
+
+    farmId = tonumber(farmId)
+    if farmId == nil then
+        return self:taskBelongsToLocalFarm(task)
+    end
+
+    local taskFarm = tonumber(task.farmId)
+    if taskFarm == nil then
+        return true
+    end
+
+    return taskFarm == farmId
+end
+
+---@param farmId number|nil
+---@return table[] tasks
+function ToDoManager:getManualTasksForFarm(farmId)
+    local tasks = {}
+
+    for _, task in pairs(self.manualTasks) do
+        if self:taskBelongsToFarm(task, farmId) then
+            tasks[#tasks + 1] = task
+        end
+    end
+
+    table.sort(tasks, ToDoManager.compareTasksForDisplay)
+
+    return tasks
+end
+
 ---@return table[] tasks
 function ToDoManager:getAllManualTasks()
     local tasks = {}
@@ -355,42 +395,12 @@ end
 ---@param delta number
 ---@return boolean
 function ToDoManager:moveTask(taskId, delta)
-    if taskId == nil or delta == nil or delta == 0 then
+    if FieldToDoSync ~= nil then
+        FieldToDoSync.request(FieldToDoSync.OP.MOVE, { taskId = taskId, delta = delta })
         return false
     end
 
-    local tasks = self:getManualTasks()
-    local currentIndex = nil
-
-    for index, task in ipairs(tasks) do
-        if task.id == taskId then
-            currentIndex = index
-            break
-        end
-    end
-
-    if currentIndex == nil then
-        return false
-    end
-
-    local targetIndex = currentIndex + math.floor(delta)
-    if targetIndex < 1 or targetIndex > #tasks then
-        return false
-    end
-
-    local currentTask = tasks[currentIndex]
-    local targetTask = tasks[targetIndex]
-
-    if currentTask.completed ~= targetTask.completed then
-        return false
-    end
-
-    local currentSort = currentTask.sortIndex
-    currentTask.sortIndex = targetTask.sortIndex
-    targetTask.sortIndex = currentSort
-
-    self:requestDebouncedSave()
-    return true
+    return self:applyMoveTask({ taskId = taskId, delta = delta }, self:getLocalFarmId(), nil) ~= nil
 end
 
 --- Schedule a sidecar write after task edits (debounced).
@@ -787,12 +797,90 @@ function ToDoManager:getOwnedFields(forceComplete)
     return self.ownedFieldsCache or {}
 end
 
----@param text string
----@return table|nil task
-function ToDoManager:addManualTask(text)
+--- Copy task fields needed for sync notify / upsert.
+---@param task table
+---@return table
+function ToDoManager:copyTaskForSync(task)
+    if FieldToDoSync ~= nil and FieldToDoSync.copyTaskForState ~= nil then
+        return FieldToDoSync.copyTaskForState(task)
+    end
+
+    return {
+        id = task.id,
+        sortIndex = task.sortIndex,
+        text = task.text,
+        completed = task.completed,
+        source = task.source,
+        autoComplete = task.autoComplete,
+        farmId = task.farmId,
+        fieldId = task.fieldId,
+        fieldName = task.fieldName,
+        fruit = task.fruit,
+        actionType = task.actionType,
+        fertPass = task.fertPass,
+        fertPassTotal = task.fertPassTotal,
+        suggestion = task.suggestion,
+    }
+end
+
+--- Idempotent upsert by task.id (server notify + state apply).
+---@param task table|nil
+---@return table|nil
+function ToDoManager:applyUpsertTask(task)
+    if task == nil or task.id == nil then
+        return nil
+    end
+
+    local isNew = self.manualTasks[task.id] == nil
+    self.manualTasks[task.id] = task
+
+    if task.id >= self.nextTaskId then
+        self.nextTaskId = task.id + 1
+    end
+
+    if isNew and (tonumber(task.sortIndex) == nil or tonumber(task.sortIndex) == 0) then
+        self:assignSortIndexAtTop(task)
+    end
+
+    if task.source == "field" and task.fieldId ~= nil then
+        self:invalidateFieldAutoCheckCache(tonumber(task.fieldId))
+    end
+
+    self:markManualTasksDirty()
+    self:requestDebouncedSave()
+
+    return task
+end
+
+---@param payload table
+---@param farmId number|nil
+---@param userId number|nil
+---@return table|nil
+function ToDoManager:applyAddManualTask(payload, farmId, userId)
+    payload = payload or {}
+
+    local taskId = tonumber(payload.taskId) or (payload.task ~= nil and tonumber(payload.task.id)) or nil
+    if taskId ~= nil and taskId > 0 then
+        local task = payload.task or {
+            id = taskId,
+            sortIndex = payload.sortIndex,
+            text = payload.text,
+            completed = false,
+            source = "manual",
+            autoComplete = false,
+            farmId = farmId,
+        }
+        task.farmId = farmId
+        self:applyUpsertTask(task)
+        return { task = self:copyTaskForSync(task), farmId = farmId, taskId = task.id, sortIndex = task.sortIndex, text = task.text }
+    end
+
+    local text = payload.text
     if string.isNilOrWhitespace(text) then
         return nil
     end
+
+    farmId = tonumber(farmId) or self:getLocalFarmId()
 
     local task = {
         id = self.nextTaskId,
@@ -800,15 +888,449 @@ function ToDoManager:addManualTask(text)
         completed = false,
         source = "manual",
         autoComplete = false,
-        farmId = self:getLocalFarmId(),
+        farmId = farmId,
     }
 
     self.manualTasks[task.id] = task
     self.nextTaskId = self.nextTaskId + 1
     self:assignSortIndexAtTop(task)
+    self:markManualTasksDirty()
     self:requestDebouncedSave()
 
-    return task
+    return {
+        task = self:copyTaskForSync(task),
+        farmId = farmId,
+        taskId = task.id,
+        sortIndex = task.sortIndex,
+        text = text,
+    }
+end
+
+---@param fieldId number
+---@param actionType string
+---@param action table|nil
+---@param farmId number|nil
+---@return table|nil
+function ToDoManager:findOpenFieldTaskForFarm(fieldId, actionType, action, farmId)
+    local fertPass = action ~= nil and action.fertPass or nil
+
+    for _, task in pairs(self.manualTasks) do
+        if not task.completed
+            and self:taskBelongsToFarm(task, farmId)
+            and task.source == "field"
+            and task.fieldId == fieldId
+            and task.actionType == actionType
+            and (tonumber(task.fertPass) or 1) == (tonumber(fertPass) or 1) then
+            return task
+        end
+    end
+
+    return nil
+end
+
+---@param payload table
+---@param farmId number|nil
+---@param userId number|nil
+---@return table|nil
+function ToDoManager:applyAddFieldTask(payload, farmId, userId)
+    payload = payload or {}
+
+    local taskId = tonumber(payload.taskId) or (payload.task ~= nil and tonumber(payload.task.id)) or nil
+    if taskId ~= nil and taskId > 0 then
+        local task = payload.task
+        if task == nil then
+            task = {
+                id = taskId,
+                sortIndex = payload.sortIndex,
+                text = payload.text,
+                completed = false,
+                source = "field",
+                autoComplete = payload.autoComplete == true,
+                farmId = farmId,
+                fieldId = payload.fieldId,
+                fieldName = payload.fieldName,
+                fruit = payload.fruit,
+                actionType = payload.actionType,
+                fertPass = payload.fertPass,
+                fertPassTotal = payload.fertPassTotal,
+                suggestion = payload.suggestion,
+            }
+        end
+        task.farmId = farmId
+        self:applyUpsertTask(task)
+        return { task = self:copyTaskForSync(task), farmId = farmId, taskId = task.id, sortIndex = task.sortIndex }
+    end
+
+    local actionType = payload.actionType or "none"
+    if actionType == "none" or string.isNilOrWhitespace(payload.text) then
+        return nil
+    end
+
+    farmId = tonumber(farmId) or self:getLocalFarmId()
+    local fieldId = tonumber(payload.fieldId)
+    if fieldId == nil then
+        return nil
+    end
+
+    local existingTask = self:findOpenFieldTaskForFarm(fieldId, actionType, payload, farmId)
+    if existingTask ~= nil then
+        return { task = self:copyTaskForSync(existingTask), farmId = farmId, taskId = existingTask.id, sortIndex = existingTask.sortIndex }
+    end
+
+    local engineField = self.fieldScanner ~= nil and self.fieldScanner:getEngineFieldById(fieldId) or nil
+    local task = {
+        id = self.nextTaskId,
+        text = payload.text,
+        completed = false,
+        source = "field",
+        farmId = farmId,
+        fieldId = fieldId,
+        fieldName = payload.fieldName,
+        fruit = payload.fruit,
+        actionType = actionType,
+        suggestion = payload.suggestion,
+        autoComplete = payload.autoComplete == true,
+        fertPass = payload.fertPass,
+        fertPassTotal = payload.fertPassTotal,
+        completionBaseline = FieldAdvisor ~= nil
+            and engineField ~= nil
+            and FieldAdvisor.captureTaskBaseline(engineField, fieldId, nil, nil)
+            or nil,
+    }
+
+    self.manualTasks[task.id] = task
+    self.nextTaskId = self.nextTaskId + 1
+    self:assignSortIndexAtTop(task)
+    self:invalidateFieldAutoCheckCache(fieldId)
+    self:markManualTasksDirty()
+    self:requestDebouncedSave()
+
+    return {
+        task = self:copyTaskForSync(task),
+        farmId = farmId,
+        taskId = task.id,
+        sortIndex = task.sortIndex,
+        text = task.text,
+        fieldId = fieldId,
+        actionType = actionType,
+        autoComplete = task.autoComplete,
+        fertPass = task.fertPass,
+        fertPassTotal = task.fertPassTotal,
+        fruit = task.fruit,
+        fieldName = task.fieldName,
+        suggestion = task.suggestion,
+    }
+end
+
+---@param payload table
+---@param farmId number|nil
+---@param userId number|nil
+---@return table|nil
+function ToDoManager:applyUpdateTaskText(payload, farmId, userId)
+    payload = payload or {}
+    local taskId = tonumber(payload.taskId)
+    local text = payload.text
+    if taskId == nil or string.isNilOrWhitespace(text) then
+        return nil
+    end
+
+    local task = self.manualTasks[taskId]
+    if task == nil or not self:taskBelongsToFarm(task, farmId) then
+        return nil
+    end
+
+    task.text = text
+    self:markManualTasksDirty()
+    self:requestDebouncedSave()
+
+    return { taskId = taskId, text = text, farmId = farmId, task = self:copyTaskForSync(task) }
+end
+
+---@param payload table
+---@param farmId number|nil
+---@param userId number|nil
+---@return table|nil
+function ToDoManager:applyDeleteTask(payload, farmId, userId)
+    payload = payload or {}
+    local taskId = tonumber(payload.taskId)
+    if taskId == nil then
+        return nil
+    end
+
+    local task = self.manualTasks[taskId]
+    if task == nil or not self:taskBelongsToFarm(task, farmId) then
+        return nil
+    end
+
+    self.manualTasks[taskId] = nil
+    self:markManualTasksDirty()
+    self:requestDebouncedSave()
+
+    return { taskId = taskId, farmId = farmId }
+end
+
+---@param payload table
+---@param farmId number|nil
+---@return table|nil
+function ToDoManager:applyMoveTask(payload, farmId, userId)
+    payload = payload or {}
+
+    if type(payload.swapTasks) == "table" then
+        for _, entry in ipairs(payload.swapTasks) do
+            local task = self.manualTasks[tonumber(entry.id)]
+            if task ~= nil and self:taskBelongsToFarm(task, farmId) and entry.sortIndex ~= nil then
+                task.sortIndex = entry.sortIndex
+            end
+        end
+        self:markManualTasksDirty()
+        self:requestDebouncedSave()
+        return { farmId = farmId, swapTasks = payload.swapTasks, taskId = payload.taskId, delta = payload.delta }
+    end
+
+    local taskId = tonumber(payload.taskId)
+    local delta = payload.delta
+    if taskId == nil or delta == nil or delta == 0 then
+        return nil
+    end
+
+    local tasks = self:getManualTasksForFarm(farmId)
+    local currentIndex = nil
+
+    for index, task in ipairs(tasks) do
+        if task.id == taskId then
+            currentIndex = index
+            break
+        end
+    end
+
+    if currentIndex == nil then
+        return nil
+    end
+
+    local targetIndex = currentIndex + math.floor(delta)
+    if targetIndex < 1 or targetIndex > #tasks then
+        return nil
+    end
+
+    local currentTask = tasks[currentIndex]
+    local targetTask = tasks[targetIndex]
+
+    if currentTask.completed ~= targetTask.completed then
+        return nil
+    end
+
+    local currentSort = currentTask.sortIndex
+    currentTask.sortIndex = targetTask.sortIndex
+    targetTask.sortIndex = currentSort
+
+    self:markManualTasksDirty()
+    self:requestDebouncedSave()
+
+    return {
+        farmId = farmId,
+        taskId = taskId,
+        delta = delta,
+        swapTasks = {
+            { id = currentTask.id, sortIndex = currentTask.sortIndex },
+            { id = targetTask.id, sortIndex = targetTask.sortIndex },
+        },
+    }
+end
+
+---@param payload table
+---@param farmId number|nil
+---@param userId number|nil
+---@return table|nil
+function ToDoManager:applyToggleTaskDone(payload, farmId, userId)
+    payload = payload or {}
+    local taskId = tonumber(payload.taskId)
+    if taskId == nil then
+        return nil
+    end
+
+    local task = self.manualTasks[taskId]
+    if task == nil or not self:taskBelongsToFarm(task, farmId) then
+        return nil
+    end
+
+    if payload.completed ~= nil then
+        if payload.completed == true then
+            if not task.completed then
+                self:onTaskMarkedComplete(task)
+            elseif payload.sortIndex ~= nil and tonumber(payload.sortIndex) > 0 then
+                task.sortIndex = payload.sortIndex
+            end
+        else
+            task.completed = false
+            if payload.sortIndex ~= nil and tonumber(payload.sortIndex) > 0 then
+                task.sortIndex = payload.sortIndex
+            else
+                self:assignSortIndexAtTop(task)
+            end
+        end
+    elseif task.completed then
+        task.completed = false
+        self:assignSortIndexAtTop(task)
+    else
+        self:onTaskMarkedComplete(task)
+    end
+
+    self:markManualTasksDirty()
+    self:requestDebouncedSave()
+
+    return {
+        taskId = taskId,
+        completed = task.completed,
+        sortIndex = task.sortIndex,
+        farmId = farmId,
+        task = self:copyTaskForSync(task),
+    }
+end
+
+---@param payload table
+---@param farmId number|nil
+---@param userId number|nil
+---@return table|nil
+function ToDoManager:applyAutoCompleteTask(payload, farmId, userId)
+    payload = payload or {}
+    local taskId = tonumber(payload.taskId)
+    if taskId == nil then
+        return nil
+    end
+
+    local task = self.manualTasks[taskId]
+    if task == nil or not self:taskBelongsToFarm(task, farmId) then
+        return nil
+    end
+
+    if task.completed then
+        return {
+            taskId = taskId,
+            completed = true,
+            sortIndex = task.sortIndex,
+            farmId = farmId,
+            task = self:copyTaskForSync(task),
+        }
+    end
+
+    self:onTaskMarkedComplete(task)
+    self:markManualTasksDirty()
+    self:requestDebouncedSave()
+
+    return {
+        taskId = taskId,
+        completed = true,
+        sortIndex = task.sortIndex,
+        farmId = farmId,
+        task = self:copyTaskForSync(task),
+    }
+end
+
+---@param payload table
+---@param farmId number|nil
+---@param userId number|nil
+---@return table|nil
+function ToDoManager:applySetWorkOrderPreset(payload, farmId, userId)
+    payload = payload or {}
+    if FieldAdvisorSettings == nil or string.isNilOrWhitespace(payload.presetKey) then
+        return nil
+    end
+
+    FieldAdvisorSettings.setWorkOrderPreset(payload.presetKey)
+    self:markManualTasksDirty()
+    self:requestDebouncedSave()
+
+    return { presetKey = payload.presetKey, farmId = farmId }
+end
+
+---@param payload table
+---@param farmId number|nil
+---@param userId number|nil
+---@return table|nil
+function ToDoManager:applySetOrganicMultiPass(payload, farmId, userId)
+    payload = payload or {}
+    if FieldAdvisorSettings == nil then
+        return nil
+    end
+
+    FieldAdvisorSettings.setOrganicMultiPassEnabled(payload.enabled == true)
+    self:markManualTasksDirty()
+    self:requestDebouncedSave()
+
+    return { enabled = payload.enabled == true, farmId = farmId }
+end
+
+---@param payload table
+---@param farmId number|nil
+---@param userId number|nil
+---@return table|nil
+function ToDoManager:applySetMulching(payload, farmId, userId)
+    payload = payload or {}
+    if FieldAdvisorSettings == nil then
+        return nil
+    end
+
+    FieldAdvisorSettings.setMulchingEnabled(payload.enabled ~= false)
+    self:markManualTasksDirty()
+    self:requestDebouncedSave()
+
+    return { enabled = payload.enabled ~= false, farmId = farmId }
+end
+
+---@param payload table
+---@param farmId number|nil
+---@param userId number|nil
+---@return table|nil
+function ToDoManager:applySetWorkersMayEdit(payload, farmId, userId)
+    payload = payload or {}
+    if FieldAdvisorSettings == nil then
+        return nil
+    end
+
+    FieldAdvisorSettings.setWorkersMayEditTodos(payload.enabled ~= false)
+    self:markManualTasksDirty()
+    self:requestDebouncedSave()
+
+    return { enabled = payload.enabled ~= false, farmId = farmId }
+end
+
+---@param payload table
+---@param farmId number|nil
+---@param userId number|nil
+---@return table|nil
+function ToDoManager:applySetPlannedCrop(payload, farmId, userId)
+    payload = payload or {}
+    if FieldPlannedCrop == nil then
+        return nil
+    end
+
+    local fieldId = tonumber(payload.fieldId)
+    local fruitTypeIndex = tonumber(payload.fruitTypeIndex)
+    if fieldId == nil then
+        return nil
+    end
+
+    FieldPlannedCrop.set(fieldId, fruitTypeIndex)
+    self:markManualTasksDirty()
+    self:requestDebouncedSave()
+
+    return { fieldId = fieldId, fruitTypeIndex = fruitTypeIndex, farmId = farmId }
+end
+
+---@param text string
+---@return table|nil task
+function ToDoManager:addManualTask(text)
+    if FieldToDoSync ~= nil then
+        FieldToDoSync.request(FieldToDoSync.OP.ADD_MANUAL, { text = text })
+        return nil
+    end
+
+    local result = self:applyAddManualTask({ text = text }, self:getLocalFarmId(), nil)
+    if result == nil or result.task == nil then
+        return nil
+    end
+
+    return self.manualTasks[result.task.id]
 end
 
 ---@param fieldRecord table
@@ -896,39 +1418,30 @@ function ToDoManager:addTaskFromFieldAction(fieldRecord, action, allowUntrackabl
         return existingTask, "already_exists"
     end
 
-    local engineField = self.fieldScanner ~= nil and self.fieldScanner:getEngineFieldById(fieldRecord.id) or nil
-    local task = {
-        id = self.nextTaskId,
+    local draft = {
         text = self:buildFieldTaskText(fieldRecord, action.label, action),
-        completed = false,
         source = "field",
-        farmId = self:getLocalFarmId(),
         fieldId = fieldRecord.id,
         fieldName = fieldRecord.name,
         fruit = fieldRecord.fruit,
         actionType = actionType,
-        suggestion = action.label,
-        autoComplete = action.autoComplete == true,
         fertPass = action.fertPass,
         fertPassTotal = action.fertPassTotal,
-        plannedSowFruitIndex = action.plannedSowFruitIndex,
-        completionBaseline = FieldAdvisor ~= nil
-            and FieldAdvisor.captureTaskBaseline(
-                engineField,
-                fieldRecord.id,
-                fieldRecord.worldX,
-                fieldRecord.worldZ
-            )
-            or nil,
+        suggestion = action.label,
+        autoComplete = action.autoComplete == true,
     }
 
-    self.manualTasks[task.id] = task
-    self.nextTaskId = self.nextTaskId + 1
-    self:assignSortIndexAtTop(task)
-    self:requestDebouncedSave()
-    self:invalidateFieldAutoCheckCache(fieldRecord.id)
+    if FieldToDoSync ~= nil then
+        FieldToDoSync.request(FieldToDoSync.OP.ADD_FIELD, draft)
+        return nil, nil
+    end
 
-    return task, nil
+    local result = self:applyAddFieldTask(draft, self:getLocalFarmId(), nil)
+    if result == nil or result.task == nil then
+        return nil, "apply_failed"
+    end
+
+    return self.manualTasks[result.task.id], nil
 end
 
 ---@param fieldId number|nil
@@ -938,8 +1451,15 @@ function ToDoManager:setFieldPlannedSowFruit(fieldId, fruitTypeIndex)
         return
     end
 
-    FieldPlannedCrop.set(fieldId, fruitTypeIndex)
-    self:saveSettingsNow()
+    if FieldToDoSync ~= nil then
+        FieldToDoSync.request(FieldToDoSync.OP.SET_PLANNED_CROP, {
+            fieldId = fieldId,
+            fruitTypeIndex = fruitTypeIndex,
+        })
+        return
+    end
+
+    self:applySetPlannedCrop({ fieldId = fieldId, fruitTypeIndex = fruitTypeIndex }, self:getLocalFarmId(), nil)
 end
 
 ---@param fieldRecord table
@@ -1034,7 +1554,11 @@ function ToDoManager:updateAutoCompletion()
             for _, taskId in ipairs(taskIds) do
                 local task = self.manualTasks[taskId]
                 if task ~= nil and not task.completed and FieldAdvisor.isFieldTaskComplete(task, self.fieldScanner, fieldCache) then
-                    self:onTaskMarkedComplete(task)
+                    if FieldToDoSync ~= nil then
+                        FieldToDoSync.request(FieldToDoSync.OP.AUTO_COMPLETE, { taskId = taskId })
+                    else
+                        self:onTaskMarkedComplete(task)
+                    end
                     fieldCompleted = true
                     completedCount = completedCount + 1
                 end
@@ -1054,7 +1578,9 @@ function ToDoManager:updateAutoCompletion()
     end
 
     if completedCount > 0 then
-        self:requestDebouncedSave()
+        if FieldToDoSync == nil then
+            self:requestDebouncedSave()
+        end
         self:markManualTasksDirty()
     end
 
@@ -1115,45 +1641,34 @@ end
 ---@param text string
 ---@return boolean
 function ToDoManager:updateManualTask(taskId, text)
-    local task = self.manualTasks[taskId]
-    if task == nil or string.isNilOrWhitespace(text) then
+    if FieldToDoSync ~= nil then
+        FieldToDoSync.request(FieldToDoSync.OP.UPDATE_TEXT, { taskId = taskId, text = text })
         return false
     end
 
-    task.text = text
-    self:requestDebouncedSave()
-    return true
+    return self:applyUpdateTaskText({ taskId = taskId, text = text }, self:getLocalFarmId(), nil) ~= nil
 end
 
 ---@param taskId number
 ---@return boolean
 function ToDoManager:deleteManualTask(taskId)
-    if self.manualTasks[taskId] == nil then
+    if FieldToDoSync ~= nil then
+        FieldToDoSync.request(FieldToDoSync.OP.DELETE, { taskId = taskId })
         return false
     end
 
-    self.manualTasks[taskId] = nil
-    self:requestDebouncedSave()
-    return true
+    return self:applyDeleteTask({ taskId = taskId }, self:getLocalFarmId(), nil) ~= nil
 end
 
 ---@param taskId number
 ---@return boolean
 function ToDoManager:toggleManualTask(taskId)
-    local task = self.manualTasks[taskId]
-    if task == nil then
+    if FieldToDoSync ~= nil then
+        FieldToDoSync.request(FieldToDoSync.OP.TOGGLE_DONE, { taskId = taskId })
         return false
     end
 
-    if task.completed then
-        task.completed = false
-        self:assignSortIndexAtTop(task)
-    else
-        self:onTaskMarkedComplete(task)
-    end
-
-    self:requestDebouncedSave()
-    return true
+    return self:applyToggleTaskDone({ taskId = taskId }, self:getLocalFarmId(), nil) ~= nil
 end
 
 ---@param taskId number

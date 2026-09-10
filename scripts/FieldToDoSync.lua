@@ -12,8 +12,8 @@
       the server already validated the request.
       On join / resync, the server sends a full FieldToDoStateEvent via sendStateToConnection.
 
-    ToDoManager apply* methods referenced below do not exist yet (Task 4). Until then,
-    handleRequest/applyNotify are safe no-ops (guarded), per design.
+    Server resolves farmId from userId, checks FieldToDoPermissions, applies via ToDoManager
+    apply* methods, then broadcasts authoritative notify payloads to other clients.
 ]]
 
 FieldToDoSync = {}
@@ -37,8 +37,7 @@ FieldToDoSync.OP = {
 
 local OP = FieldToDoSync.OP
 
---- ToDoManager method invoked for each op once permission/farm checks pass. Missing method
---- (Task 4 not merged yet) means the op is a guarded no-op.
+--- ToDoManager method invoked for each op once permission/farm checks pass.
 FieldToDoSync.APPLY_METHOD_BY_OP = {
     [OP.ADD_MANUAL] = "applyAddManualTask",
     [OP.ADD_FIELD] = "applyAddFieldTask",
@@ -119,6 +118,10 @@ function FieldToDoSync.writePayload(streamId, op, payload)
 
     if op == OP.ADD_MANUAL then
         FieldToDoSync.writeString(streamId, payload.text)
+        local taskId = tonumber(payload.taskId) or (payload.task ~= nil and tonumber(payload.task.id)) or 0
+        local sortIndex = tonumber(payload.sortIndex) or (payload.task ~= nil and tonumber(payload.task.sortIndex)) or 0
+        streamWriteInt32(streamId, taskId)
+        streamWriteInt32(streamId, sortIndex)
     elseif op == OP.ADD_FIELD then
         streamWriteInt32(streamId, tonumber(payload.fieldId) or 0)
         FieldToDoSync.writeString(streamId, payload.actionType)
@@ -129,6 +132,10 @@ function FieldToDoSync.writePayload(streamId, op, payload)
         FieldToDoSync.writeString(streamId, payload.fruit)
         FieldToDoSync.writeString(streamId, payload.fieldName)
         FieldToDoSync.writeString(streamId, payload.suggestion)
+        local taskId = tonumber(payload.taskId) or (payload.task ~= nil and tonumber(payload.task.id)) or 0
+        local sortIndex = tonumber(payload.sortIndex) or (payload.task ~= nil and tonumber(payload.task.sortIndex)) or 0
+        streamWriteInt32(streamId, taskId)
+        streamWriteInt32(streamId, sortIndex)
     elseif op == OP.UPDATE_TEXT then
         streamWriteInt32(streamId, tonumber(payload.taskId) or 0)
         FieldToDoSync.writeString(streamId, payload.text)
@@ -137,10 +144,21 @@ function FieldToDoSync.writePayload(streamId, op, payload)
     elseif op == OP.MOVE then
         streamWriteInt32(streamId, tonumber(payload.taskId) or 0)
         streamWriteInt32(streamId, tonumber(payload.delta) or 0)
+        local swapTasks = payload.swapTasks or {}
+        local swapA = swapTasks[1] or {}
+        local swapB = swapTasks[2] or {}
+        streamWriteInt32(streamId, tonumber(swapA.id) or 0)
+        streamWriteInt32(streamId, tonumber(swapA.sortIndex) or 0)
+        streamWriteInt32(streamId, tonumber(swapB.id) or 0)
+        streamWriteInt32(streamId, tonumber(swapB.sortIndex) or 0)
     elseif op == OP.TOGGLE_DONE then
         streamWriteInt32(streamId, tonumber(payload.taskId) or 0)
+        streamWriteBool(streamId, payload.completed == true)
+        streamWriteInt32(streamId, tonumber(payload.sortIndex) or 0)
     elseif op == OP.AUTO_COMPLETE then
         streamWriteInt32(streamId, tonumber(payload.taskId) or 0)
+        streamWriteBool(streamId, payload.completed == true)
+        streamWriteInt32(streamId, tonumber(payload.sortIndex) or 0)
     elseif op == OP.SET_PRESET then
         FieldToDoSync.writeString(streamId, payload.presetKey)
     elseif op == OP.SET_ORGANIC then
@@ -166,6 +184,8 @@ function FieldToDoSync.readPayload(streamId, op)
 
     if op == OP.ADD_MANUAL then
         payload.text = FieldToDoSync.readString(streamId)
+        payload.taskId = streamReadInt32(streamId)
+        payload.sortIndex = streamReadInt32(streamId)
     elseif op == OP.ADD_FIELD then
         payload.fieldId = streamReadInt32(streamId)
         payload.actionType = FieldToDoSync.readString(streamId)
@@ -176,6 +196,8 @@ function FieldToDoSync.readPayload(streamId, op)
         payload.fruit = FieldToDoSync.readString(streamId)
         payload.fieldName = FieldToDoSync.readString(streamId)
         payload.suggestion = FieldToDoSync.readString(streamId)
+        payload.taskId = streamReadInt32(streamId)
+        payload.sortIndex = streamReadInt32(streamId)
     elseif op == OP.UPDATE_TEXT then
         payload.taskId = streamReadInt32(streamId)
         payload.text = FieldToDoSync.readString(streamId)
@@ -184,10 +206,24 @@ function FieldToDoSync.readPayload(streamId, op)
     elseif op == OP.MOVE then
         payload.taskId = streamReadInt32(streamId)
         payload.delta = streamReadInt32(streamId)
+        local swapAId = streamReadInt32(streamId)
+        local swapASort = streamReadInt32(streamId)
+        local swapBId = streamReadInt32(streamId)
+        local swapBSort = streamReadInt32(streamId)
+        if swapAId ~= 0 and swapBId ~= 0 then
+            payload.swapTasks = {
+                { id = swapAId, sortIndex = swapASort },
+                { id = swapBId, sortIndex = swapBSort },
+            }
+        end
     elseif op == OP.TOGGLE_DONE then
         payload.taskId = streamReadInt32(streamId)
+        payload.completed = streamReadBool(streamId)
+        payload.sortIndex = streamReadInt32(streamId)
     elseif op == OP.AUTO_COMPLETE then
         payload.taskId = streamReadInt32(streamId)
+        payload.completed = streamReadBool(streamId)
+        payload.sortIndex = streamReadInt32(streamId)
     elseif op == OP.SET_PRESET then
         payload.presetKey = FieldToDoSync.readString(streamId)
     elseif op == OP.SET_ORGANIC then
@@ -334,25 +370,183 @@ end
 -- Request / notify dispatch.
 -- ============================================================================
 
+--- Resolve the requester's farm on the server; never trust client-supplied farmId.
+---@param userId number|nil
+---@return number|nil
+function FieldToDoSync.resolveFarmIdForUser(userId)
+    userId = tonumber(userId)
+
+    local override = FieldToDoPermissions ~= nil and FieldToDoPermissions._testOverride or nil
+    if override ~= nil and override.resolveFarmId ~= nil then
+        return tonumber(override.resolveFarmId)
+    end
+
+    if userId == nil then
+        return nil
+    end
+
+    if g_currentMission ~= nil and g_currentMission.playerSystem ~= nil then
+        local playerSystem = g_currentMission.playerSystem
+        if playerSystem.getPlayerByUserId ~= nil then
+            local ok, player = pcall(playerSystem.getPlayerByUserId, playerSystem, userId)
+            if ok and player ~= nil then
+                local farmId = tonumber(player.farmId)
+                if farmId ~= nil and farmId > 0 then
+                    return farmId
+                end
+            end
+        end
+    end
+
+    if g_farmManager ~= nil and g_farmManager.farms ~= nil then
+        for _, farm in pairs(g_farmManager.farms) do
+            if farm.isUserInFarm ~= nil then
+                local ok, inFarm = pcall(farm.isUserInFarm, farm, userId)
+                if ok and inFarm == true then
+                    return tonumber(farm.farmId)
+                end
+            end
+            if farm.getUsers ~= nil then
+                local ok, users = pcall(farm.getUsers, farm)
+                if ok and type(users) == "table" then
+                    for _, uid in pairs(users) do
+                        if tonumber(uid) == userId then
+                            return tonumber(farm.farmId)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return nil
+end
+
+---@param op number
+---@param farmId number|nil
+---@param userId number|nil
+---@return boolean
+function FieldToDoSync.canExecuteOp(op, farmId, userId)
+    if FieldToDoPermissions == nil then
+        return true
+    end
+
+    if op == OP.AUTO_COMPLETE then
+        return FieldToDoPermissions.canAutoCompleteFarmTodos(farmId, userId)
+    end
+
+    if op == OP.SET_WORKERS_EDIT then
+        return FieldToDoPermissions.canChangeWorkersEditSetting(farmId, userId)
+    end
+
+    if op == OP.DENY then
+        return false
+    end
+
+    return FieldToDoPermissions.canEditFarmTodos(farmId, userId)
+end
+
 ---@param manager ToDoManager|nil
 ---@param op number
 ---@param payload table
 ---@param farmId number|nil
 ---@param userId number|nil
----@return boolean applied
+---@return boolean ok
+---@return table|nil result
 function FieldToDoSync.applyOp(manager, op, payload, farmId, userId)
     if manager == nil then
-        return false
+        return false, nil
     end
 
     local methodName = FieldToDoSync.APPLY_METHOD_BY_OP[op]
     if methodName == nil or manager[methodName] == nil then
-        -- Task 4 adds these ToDoManager apply* methods; no-op until then.
-        return false
+        return false, nil
     end
 
-    local ok = pcall(manager[methodName], manager, payload, farmId, userId)
-    return ok == true
+    local ok, result = pcall(manager[methodName], manager, payload, farmId, userId)
+    if not ok then
+        if FieldToDoLog ~= nil then
+            FieldToDoLog.warning("FieldToDoSync: apply %s failed (%s)", methodName, tostring(result))
+        end
+        return false, nil
+    end
+
+    if result == nil or result == false then
+        return false, nil
+    end
+
+    return true, result
+end
+
+--- Merge apply result with request fields for notify serialization.
+---@param op number
+---@param requestPayload table
+---@param applyResult table|nil
+---@param farmId number|nil
+---@return table
+function FieldToDoSync.buildNotifyPayload(op, requestPayload, applyResult, farmId)
+    local notify = {}
+    requestPayload = requestPayload or {}
+    applyResult = applyResult or {}
+
+    for key, value in pairs(requestPayload) do
+        notify[key] = value
+    end
+    for key, value in pairs(applyResult) do
+        notify[key] = value
+    end
+
+    notify.farmId = notify.farmId or farmId
+
+    if notify.task ~= nil then
+        notify.taskId = notify.taskId or notify.task.id
+        notify.sortIndex = notify.sortIndex or notify.task.sortIndex
+    end
+
+    return notify
+end
+
+---@param op number
+---@param payload table
+---@param farmId number|nil
+---@param userId number|nil
+---@return boolean ok
+---@return table|string|nil resultPayload
+function FieldToDoSync.executeOnServer(op, payload, farmId, userId)
+    local manager = FieldToDoSync.getManager()
+    if manager == nil then
+        return false, "no_manager"
+    end
+
+    farmId = tonumber(farmId)
+    if farmId == nil or farmId <= 0 then
+        return false, "no_farm"
+    end
+
+    if not FieldToDoSync.canExecuteOp(op, farmId, userId) then
+        return false, "denied"
+    end
+
+    local ok, applyResult = FieldToDoSync.applyOp(manager, op, payload, farmId, userId)
+    if not ok then
+        return false, "apply_failed"
+    end
+
+    return true, FieldToDoSync.buildNotifyPayload(op, payload, applyResult, farmId)
+end
+
+---@param connection table|nil
+---@param deniedOp number
+---@param reason string|nil
+function FieldToDoSync.sendDeny(connection, deniedOp, reason)
+    if connection == nil or FieldToDoNotifyEvent == nil then
+        return
+    end
+
+    connection:sendEvent(FieldToDoNotifyEvent.new(OP.DENY, {
+        deniedOp = deniedOp,
+        reason = tostring(reason or "denied"),
+    }))
 end
 
 --- Client or local-server entry point for a user-initiated change.
@@ -376,8 +570,7 @@ function FieldToDoSync.request(op, payload)
     FieldToDoSync.handleRequest(op, payload, nil, nil)
 end
 
---- Server-side (or local SP) application of a request. Farm/permission resolution and the
---- actual ToDoManager apply* methods are wired in Task 4; this only dispatches + re-broadcasts.
+--- Server-side (or local SP) application of a request.
 ---@param op number
 ---@param payload table
 ---@param userId number|nil
@@ -390,16 +583,18 @@ function FieldToDoSync.handleRequest(op, payload, userId, connection)
         return
     end
 
-    local farmId = tonumber(payload.farmId)
+    local farmId = FieldToDoSync.resolveFarmIdForUser(userId)
     if farmId == nil and manager.getLocalFarmId ~= nil then
         farmId = manager:getLocalFarmId()
     end
 
-    FieldToDoSync.applyOp(manager, op, payload, farmId, userId)
-
-    if FieldToDoSync.isRunningAsServer() then
-        FieldToDoSync.broadcastNotify(op, payload, farmId, connection)
+    local ok, resultPayload = FieldToDoSync.executeOnServer(op, payload, farmId, userId)
+    if not ok then
+        FieldToDoSync.sendDeny(connection, op, resultPayload)
+        return
     end
+
+    FieldToDoSync.broadcastNotify(op, resultPayload, farmId, connection)
 end
 
 --- Client-side application of a server-broadcast notify (server already validated the op).
@@ -420,21 +615,27 @@ function FieldToDoSync.applyNotify(op, payload)
         return
     end
 
-    FieldToDoSync.applyOp(manager, op, payload, tonumber(payload.farmId), nil)
+    local notifyFarmId = tonumber(payload.farmId)
+    FieldToDoSync.applyOp(manager, op, payload, notifyFarmId, nil)
 end
 
---- Server -> other clients. No-op when not the server (e.g. called defensively).
+--- Server -> other clients. SP (no g_server) applies locally via applyNotify.
 ---@param op number
 ---@param payload table
 ---@param farmId number|nil
 ---@param excludeConnection table|nil connection to skip (usually the request's origin)
 function FieldToDoSync.broadcastNotify(op, payload, farmId, excludeConnection)
-    if g_server == nil or FieldToDoNotifyEvent == nil then
+    payload = payload or {}
+    payload.farmId = payload.farmId or farmId
+
+    if g_server == nil then
+        FieldToDoSync.applyNotify(op, payload)
         return
     end
 
-    payload = payload or {}
-    payload.farmId = payload.farmId or farmId
+    if FieldToDoNotifyEvent == nil then
+        return
+    end
 
     g_server:broadcastEvent(FieldToDoNotifyEvent.new(op, payload), false, excludeConnection, nil)
 end
