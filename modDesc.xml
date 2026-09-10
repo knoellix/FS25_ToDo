@@ -71,6 +71,7 @@ Version 0.1.0.6 — Planfrucht pro Feld, Hof-Kennzeichnung, Strohballen, Ernte-S
         <sourceFile filename="scripts/FieldToDoLog.lua"/>
         <sourceFile filename="scripts/SeasonalCropStressReader.lua"/>
         <sourceFile filename="scripts/FieldAdvisorSettings.lua"/>
+        <sourceFile filename="scripts/FieldToDoPermissions.lua"/>
         <sourceFile filename="scripts/FieldActionPicker.lua"/>
         <sourceFile filename="scripts/FieldSavegameReader.lua"/>
         <sourceFile filename="scripts/FieldTaskCompletion.lua"/>

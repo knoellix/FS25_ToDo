@@ -183,5 +183,48 @@ if type(FieldAdvisor) == "table" and type(FieldAdvisor.estimateNonSeasonalPeriod
   FieldAdvisor.hasActiveCrop = oldActive
 end
 
+-- FieldToDoPermissions contract (MP farm edit gates).
+local permFixtures = dofile(here .. "/permissions_fixtures.lua")
+dofile(repoRoot .. "/scripts/FieldAdvisorSettings.lua")
+dofile(repoRoot .. "/scripts/FieldToDoPermissions.lua")
+
+if type(FieldToDoPermissions) ~= "table"
+    or type(FieldToDoPermissions.canEditFarmTodos) ~= "function"
+    or type(FieldToDoPermissions.canChangeWorkersEditSetting) ~= "function"
+    or type(FieldToDoPermissions.canAutoCompleteFarmTodos) ~= "function" then
+  io.write(RED .. "PENDING: scripts/FieldToDoPermissions.lua not implemented yet.\n" .. RESET)
+  fail = fail + #permFixtures
+else
+  io.write("\n")
+  for _, c in ipairs(permFixtures) do
+    FieldAdvisorSettings.workersMayEditTodos = c.workersMayEdit
+    FieldToDoPermissions._testOverride = {
+      farmId = 1,
+      userId = 1,
+      isManager = c.isManager,
+      resolveFarmId = c.sameFarm and 1 or 2,
+    }
+    local gotEdit = FieldToDoPermissions.canEditFarmTodos(1, 1)
+    local gotSetting = FieldToDoPermissions.canChangeWorkersEditSetting(1, 1)
+    local gotAuto = FieldToDoPermissions.canAutoCompleteFarmTodos(1, 1)
+    local mismatch = nil
+    if gotEdit ~= c.expect.edit then
+      mismatch = string.format("edit expected %s got %s", tostring(c.expect.edit), tostring(gotEdit))
+    elseif gotSetting ~= c.expect.changeSetting then
+      mismatch = string.format("changeSetting expected %s got %s", tostring(c.expect.changeSetting), tostring(gotSetting))
+    elseif gotAuto ~= c.expect.autoComplete then
+      mismatch = string.format("autoComplete expected %s got %s", tostring(c.expect.autoComplete), tostring(gotAuto))
+    end
+    if mismatch == nil then
+      pass = pass + 1
+      io.write(string.format(GREEN .. "PASS" .. RESET .. " %-44s -> permissions ok\n", c.name))
+    else
+      fail = fail + 1
+      io.write(string.format(RED .. "FAIL" .. RESET .. " %-44s %s\n", c.name, mismatch))
+    end
+  end
+  FieldToDoPermissions._testOverride = nil
+end
+
 io.write(string.format("\n%d passed, %d failed, %d total\n", pass, fail, pass + fail))
 os.exit(fail == 0 and 0 or 1)
