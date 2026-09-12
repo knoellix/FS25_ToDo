@@ -7,6 +7,8 @@ FieldToDoHudOverlay = {}
 FieldToDoHudOverlay.__index = FieldToDoHudOverlay
 
 FieldToDoHudOverlay.MAX_ENTRIES = 5
+FieldToDoHudOverlay.DRAG_MOVE_THRESHOLD = 0.005
+FieldToDoHudOverlay.PANEL_MARGIN = 0.01
 FieldToDoHudOverlay.PANEL_W = 0.168
 FieldToDoHudOverlay.PANEL_X = 0.827
 FieldToDoHudOverlay.PANEL_Y = 0.72
@@ -25,6 +27,48 @@ FieldToDoHudOverlay.COLOR_DONE = { 0.89627, 0.92158, 0.81485, 0.45 }
 FieldToDoHudOverlay.COLOR_DIM = { 0.89627, 0.92158, 0.81485, 0.55 }
 FieldToDoHudOverlay.COLOR_ACCENT = { 0.22323, 0.40724, 0.00368, 0.95 }   -- fs25_colorMainHighlight
 FieldToDoHudOverlay.instance = nil
+
+function FieldToDoHudOverlay.clampPanelPosition(panelX, panelY, panelW, panelH, margin)
+    margin = margin or FieldToDoHudOverlay.PANEL_MARGIN
+    panelW = panelW or FieldToDoHudOverlay.PANEL_W
+    panelH = panelH or 0.08
+    local minX = margin
+    local maxX = 1 - margin - panelW
+    local minY = margin
+    local maxY = 1 - margin - panelH
+    if maxX < minX then
+        panelX = minX
+    else
+        panelX = math.max(minX, math.min(maxX, panelX))
+    end
+    if maxY < minY then
+        panelY = minY
+    else
+        panelY = math.max(minY, math.min(maxY, panelY))
+    end
+    return panelX, panelY
+end
+
+function FieldToDoHudOverlay.getHeaderRect(panelX, panelY, panelW, panelH, headerH)
+    headerH = headerH or FieldToDoHudOverlay.HEADER_H
+    return panelX, panelY + panelH - headerH, panelW, headerH
+end
+
+function FieldToDoHudOverlay.getRowRect(panelX, panelY, panelW, panelH, headerH, rowH, rowIndex)
+    headerH = headerH or FieldToDoHudOverlay.HEADER_H
+    rowH = rowH or FieldToDoHudOverlay.ROW_H
+    rowIndex = math.floor(tonumber(rowIndex) or 0)
+    local listTopY = panelY + panelH - headerH
+    local rowY = listTopY - rowIndex * rowH
+    return panelX, rowY, panelW, rowH
+end
+
+function FieldToDoHudOverlay.pointInRect(px, py, x, y, w, h)
+    if px == nil or py == nil or x == nil or y == nil or w == nil or h == nil then
+        return false
+    end
+    return px >= x and px <= x + w and py >= y and py <= y + h
+end
 
 ---@return FieldToDoHudOverlay
 function FieldToDoHudOverlay.new()

@@ -236,5 +236,71 @@ else
   FieldToDoPermissions._testOverride = nil
 end
 
+local hudFixtures = dofile(here .. "/hud_layout_fixtures.lua")
+dofile(repoRoot .. "/scripts/FieldToDoHudOverlay.lua")
+
+io.write("\n")
+for _, c in ipairs(hudFixtures) do
+  local mismatch = nil
+  if c.name == "clamp_keeps_panel_on_screen" then
+    if type(FieldToDoHudOverlay.clampPanelPosition) ~= "function" then
+      mismatch = "clampPanelPosition missing"
+    else
+      local x, y = FieldToDoHudOverlay.clampPanelPosition(c.panelX, c.panelY, c.panelW, c.panelH, c.margin)
+      if x < c.expectXMin - 1e-6 or x > c.expectXMax + 1e-6 then
+        mismatch = string.format("x=%s out of range", tostring(x))
+      elseif y < c.expectYMin - 1e-6 or y > c.expectYMax + 1e-6 then
+        mismatch = string.format("y=%s out of range", tostring(y))
+      end
+    end
+  elseif c.name == "header_is_top_strip" then
+    if type(FieldToDoHudOverlay.getHeaderRect) ~= "function" then
+      mismatch = "getHeaderRect missing"
+    else
+      local _, hy = FieldToDoHudOverlay.getHeaderRect(c.panelX, c.panelY, c.panelW, c.panelH, c.headerH)
+      if math.abs(hy - c.expectHeaderY) > 1e-6 then
+        mismatch = string.format("headerY expected %s got %s", c.expectHeaderY, tostring(hy))
+      end
+    end
+  elseif c.name == "row1_below_header" then
+    if type(FieldToDoHudOverlay.getRowRect) ~= "function" then
+      mismatch = "getRowRect missing"
+    else
+      local _, ry = FieldToDoHudOverlay.getRowRect(
+        c.panelX, c.panelY, c.panelW, c.panelH, c.headerH, c.rowH, c.rowIndex
+      )
+      if math.abs(ry - c.expectRowY) > 1e-6 then
+        mismatch = string.format("rowY expected %s got %s", c.expectRowY, tostring(ry))
+      end
+    end
+  elseif c.name == "point_in_header" then
+    if type(FieldToDoHudOverlay.pointInRect) ~= "function" then
+      mismatch = "pointInRect missing"
+    else
+      local r = c.rect
+      local inside = FieldToDoHudOverlay.pointInRect(c.px, c.py, r.x, r.y, r.w, r.h)
+      if inside ~= c.expectInside then
+        mismatch = string.format("inside expected %s got %s", tostring(c.expectInside), tostring(inside))
+      end
+    end
+  elseif c.name == "drag_threshold_constant" then
+    if FieldToDoHudOverlay.DRAG_MOVE_THRESHOLD ~= c.expectThreshold then
+      mismatch = string.format(
+        "threshold expected %s got %s",
+        tostring(c.expectThreshold),
+        tostring(FieldToDoHudOverlay.DRAG_MOVE_THRESHOLD)
+      )
+    end
+  end
+
+  if mismatch == nil then
+    pass = pass + 1
+    io.write(string.format(GREEN .. "PASS" .. RESET .. " %-44s -> hud layout ok\n", c.name))
+  else
+    fail = fail + 1
+    io.write(string.format(RED .. "FAIL" .. RESET .. " %-44s %s\n", c.name, mismatch))
+  end
+end
+
 io.write(string.format("\n%d passed, %d failed, %d total\n", pass, fail, pass + fail))
 os.exit(fail == 0 and 0 or 1)
