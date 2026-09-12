@@ -311,8 +311,14 @@ function FieldAdvisorSettings.loadFromXMLFile(xmlFile, key)
     FieldAdvisorSettings.setMulchingEnabled(mulching ~= false)
 
     local workersEdit = xmlFile:getValue(key .. "#workersMayEditTodos")
-    FieldAdvisorSettings.migrateWorkersMayEditTodosFlag(workersEdit)
-    FieldAdvisorSettings.workersMayEditTodos = FieldAdvisorSettings.todoEditDefaultAllow
+    local defaultAllow = xmlFile:getValue(key .. "#todoEditDefaultAllow")
+    if defaultAllow ~= nil then
+        FieldAdvisorSettings.todoEditDefaultAllow = defaultAllow ~= false
+        FieldAdvisorSettings.workersMayEditTodos = FieldAdvisorSettings.todoEditDefaultAllow
+    else
+        FieldAdvisorSettings.migrateWorkersMayEditTodosFlag(workersEdit)
+        FieldAdvisorSettings.workersMayEditTodos = FieldAdvisorSettings.todoEditDefaultAllow
+    end
 end
 
 ---@param xmlFile XMLFile|nil

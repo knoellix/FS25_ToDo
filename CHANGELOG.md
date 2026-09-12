@@ -2,6 +2,14 @@
 
 All notable changes to **FS25_FieldToDoList** are documented here.
 
+## [0.1.0.10] — 2026-09-12
+
+### Fixed
+
+- **Dedicated MP edit deny:** missing `uniqueUserId` no longer fail-closes past farm `defaultAllow` (Planfrucht / add / adopt work again when „Alle Worker“ is on).
+- **Farm membership:** resolve User objects from `getUsers` / `getActiveUsers` so membership/`no_farm` checks work on dedicated.
+- **Sidecar schema:** register and load `todoEditDefaultAllow` so `fieldToDoList.xml` saves without XML path validation errors.
+
 ## [0.1.0.9] — 2026-09-12
 
 ### Added
@@ -27,7 +35,6 @@ All notable changes to **FS25_FieldToDoList** are documented here.
 - **Edit UI freshness:** DENY refreshes button disable state; online member list refreshes during deferred menu open; „Alle Worker“ also updates `defaultAllow`; dialog confirm callbacks re-check edit permission.
 - **Schema/ops:** request/notify/state reject mismatched schema versions; delete notify is idempotent; orphan tasks without `farmId` migrate to the local farm.
 - **Edit-grant UI:** member nicknames no longer show Lua `table: 0x…` (resolve User objects from `getActiveUsers`); hide per-user grant list and „Alle Worker“ in singleplayer.
-- **MP edit deny (hotfix):** missing `uniqueUserId` on dedicated no longer fail-closes past `defaultAllow`; farm user lists may be User objects when resolving membership/`no_farm`.
 
 ### Changed
 

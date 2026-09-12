@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
 <modDesc descVersion="98">
     <author>knoellix</author>
-    <version>0.1.0.9</version>
+    <version>0.1.0.10</version>
 
     <title>
         <en>Field To-Do List</en>
@@ -22,7 +22,7 @@ Field work list and To-Dos for Farming Simulator 25.
 
 Optional: Precision Farming (pH / nitrogen columns). Seasonal Crop Stress: not fully supported yet.
 
-Version 0.1.0.9 — per-user To-Do edit grants, ESC tab scroll, MP membership deny fix.
+Version 0.1.0.10 — dedicated MP edit fix (uniqueUserId / farm users / sidecar schema).
         ]]></en>
         <de><![CDATA[
 Feld-Arbeitsliste und To-Dos für Farming Simulator 25.
@@ -37,7 +37,7 @@ Feld-Arbeitsliste und To-Dos für Farming Simulator 25.
 
 Optional: Precision Farming (pH / Stickstoff). Seasonal Crop Stress: noch nicht voll unterstützt.
 
-Version 0.1.0.9 — Bearbeitungsrechte pro Spieler, ESC-Tab-Scroll, MP-Mitgliedschafts-Fix.
+Version 0.1.0.10 — Dedicated-MP-Edit-Fix (uniqueUserId / Hof-User / Sidecar-Schema).
         ]]></de>
     </description>
 
