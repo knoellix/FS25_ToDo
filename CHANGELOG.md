@@ -2,16 +2,31 @@
 
 All notable changes to **FS25_FieldToDoList** are documented here.
 
-## [0.1.0.9] — unreleased
+## [0.1.0.9] — 2026-09-12
 
-### Fixed
+### Added
+
+- **Per-user To-Do edit grants:** farm managers toggle edit for each **online same-farm** member on the Field To-Do ESC page; managers always edit.
+- **Alle Worker an/aus:** farm-wide toggle for all listed non-manager rows (replaces ambiguous **Edit: alle / Manager**).
+- Farm-scoped persistence keyed by `uniqueUserId`; sync schema **v2** with manager-only ops (opcodes 15/16).
+
+### Improved
 
 - Field To-Do ESC tab scrolls into view when the tab strip overflows (best-effort via `pagingTabList.scrollTo` / `setSelectedIndex`; no GUI array mutation).
 - ESC tab bar mouse-wheel scroll when cursor is over the tab strip (best-effort via `getSliderValue`/`setSliderValue`; wired via `Input.MOUSE_BUTTON_WHEEL_*` when available).
 
+### Fixed
+
+- **MP membership deny:** server edit gate resolves farm membership via `userBelongsToFarm`; remote requests with unknown membership are denied instead of falling back to host `getLocalFarmId()`.
+
+### Changed
+
+- Legacy `workersMayEditTodos` migrated to per-farm `todoEditDefaultAllow` + `byUniqueUserId` map (`false` → default deny for missing ids; `true`/absent → default allow). Legacy attribute still read/written for one release.
+
 ### Known limitations
 
 - Tab-strip wheel scroll is best-effort only (slider API on `pagingTabList`); not verified in-game with many tab mods.
+- Offline same-farm members are not listed; grant/revoke requires them to be online.
 
 ## [0.1.0.8] — 2026-09-10
 
@@ -202,6 +217,7 @@ All notable changes to **FS25_FieldToDoList** are documented here.
 
 - Initial public pre-release: ESC to-do list, field overview, HUD, work-order presets, PF/SCS columns (limited), grass-aware suggestions.
 
+[0.1.0.9]: https://github.com/knoellix/FS25_ToDo/compare/v0.1.0.8...v0.1.0.9
 [0.1.0.8]: https://github.com/knoellix/FS25_ToDo/compare/v0.1.0.7...v0.1.0.8
 [0.1.0.7]: https://github.com/knoellix/FS25_ToDo/compare/v0.1.0.6...v0.1.0.7
 [0.1.0.6]: https://github.com/knoellix/FS25_ToDo/compare/v0.1.0.5...v0.1.0.6
