@@ -18,6 +18,7 @@ FieldToDoInGameMenuIntegration.TAB_POSITION_FALLBACK = 2
 FieldToDoInGameMenuIntegration.menuScreen = nil
 FieldToDoInGameMenuIntegration._menuFrameUpdateTime = nil
 FieldToDoInGameMenuIntegration._tabPlacedAfterMap = false
+FieldToDoInGameMenuIntegration._ensuredVisibleThisOpen = false
 
 local LOG_PREFIX = "[FS25_FieldToDoList]"
 local pendingRegistration = false
@@ -156,6 +157,11 @@ function FieldToDoInGameMenuIntegration.updateMenuFrame(menu, dt)
 
     if not FieldToDoInGameMenuIntegration.isFieldToDoPageVisible(menu, screen) then
         return
+    end
+
+    if FieldToDoInGameMenuIntegration._ensuredVisibleThisOpen ~= true then
+        FieldToDoInGameMenuIntegration._ensuredVisibleThisOpen = true
+        pcall(FieldToDoInGameMenuIntegration.ensureTabVisible, menu or g_inGameMenu, screen)
     end
 
     pcall(screen.onFrameUpdate, screen, dt)
@@ -329,6 +335,43 @@ function FieldToDoInGameMenuIntegration.placeTabAfterMap(inGameMenu, screen)
     return tabPosition
 end
 
+--- Try to scroll the ESC tab strip so our tab button is visible.
+---@param inGameMenu table|nil
+---@param screen table|nil
+---@return boolean handled
+function FieldToDoInGameMenuIntegration.ensureTabVisible(inGameMenu, screen)
+    if inGameMenu == nil or screen == nil then
+        return false
+    end
+
+    local tabList = inGameMenu.pagingTabList
+    if tabList == nil then
+        return false
+    end
+
+    -- Prefer vanilla helpers if present; never treat tabList as a plain array to mutate.
+    if type(tabList.scrollTo) == "function" and type(tabList.elements) == "table" then
+        for i = 1, #tabList.elements do
+            local btn = tabList.elements[i]
+            if btn ~= nil and (btn.target == screen or btn.pageElement == screen) then
+                local ok = pcall(tabList.scrollTo, tabList, i)
+                return ok == true
+            end
+        end
+    end
+
+    if type(tabList.setSelectedIndex) == "function" and type(inGameMenu.pageFrames) == "table" then
+        for i = 1, #inGameMenu.pageFrames do
+            if inGameMenu.pageFrames[i] == screen then
+                local ok = pcall(tabList.setSelectedIndex, tabList, i, true)
+                return ok == true
+            end
+        end
+    end
+
+    return false
+end
+
 ---@param modDirectory string
 ---@return boolean
 function FieldToDoInGameMenuIntegration.performRegistration(modDirectory)
@@ -449,23 +492,27 @@ function FieldToDoInGameMenuIntegration.performRegistration(modDirectory)
     if type(inGameMenu.onOpen) == "function" and FieldToDoInGameMenuIntegration._tabOpenHooked ~= true then
         FieldToDoInGameMenuIntegration._tabOpenHooked = true
         inGameMenu.onOpen = Utils.appendedFunction(inGameMenu.onOpen, function(menu)
-            if FieldToDoInGameMenuIntegration._tabOpenReplaced == true then
-                return
-            end
-            FieldToDoInGameMenuIntegration._tabOpenReplaced = true
+            FieldToDoInGameMenuIntegration._ensuredVisibleThisOpen = false
+
             local page = FieldToDoInGameMenuIntegration.menuScreen
                 or (menu ~= nil and menu[FieldToDoInGameMenuIntegration.MENU_PAGE_NAME])
             if page == nil then
                 return
             end
-            local ok, err = pcall(
-                FieldToDoInGameMenuIntegration.placeTabAfterMap,
-                menu or g_inGameMenu,
-                page
-            )
-            if not ok then
-                logWarning("placeTabAfterMap onOpen failed: %s", tostring(err))
+
+            if FieldToDoInGameMenuIntegration._tabOpenReplaced ~= true then
+                FieldToDoInGameMenuIntegration._tabOpenReplaced = true
+                local ok, err = pcall(
+                    FieldToDoInGameMenuIntegration.placeTabAfterMap,
+                    menu or g_inGameMenu,
+                    page
+                )
+                if not ok then
+                    logWarning("placeTabAfterMap onOpen failed: %s", tostring(err))
+                end
             end
+
+            pcall(FieldToDoInGameMenuIntegration.ensureTabVisible, menu or g_inGameMenu, page)
         end)
     end
 
