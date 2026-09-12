@@ -41,7 +41,6 @@ Works fully without add-ons using base game field data.
 1. Download `FS25_FieldToDoList.zip` from the [latest release](https://github.com/knoellix/FS25_ToDo/releases/latest).
 2. Copy the ZIP (**do not extract**) to your mods folder:
 
-
 | Platform               | Path                                                                                                                          |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | Windows                | `%USERPROFILE%\Documents\My Games\FarmingSimulator2025\mods\`                                                                 |
@@ -51,6 +50,8 @@ Works fully without add-ons using base game field data.
 3. Enable **Field To-Do List** in the in-game mod manager.
 4. Load any career save — the mod activates automatically on load.
 5. **Restart the game completely** after installing or updating the mod.
+
+**Windows auto-update helper (optional):** download [`tools/Update-FS25_FieldToDoList.bat`](tools/Update-FS25_FieldToDoList.bat) only and double-click it. It compares your local zip with the latest GitHub release and replaces it when newer. Edit `MODS_DIR` at the top of the `.bat` if your mods path differs from the default Documents path.
 
 ## Development
 

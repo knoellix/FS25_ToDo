@@ -11,6 +11,7 @@ All notable changes to **FS25_FieldToDoList** are documented here.
 - Farm-scoped persistence keyed by `uniqueUserId`; sync schema **v2** with manager-only ops (opcodes 15/16).
 - **Draggable To-Do HUD:** with mouse cursor visible, drag the green title bar; position saved client-side under `modSettings/FS25_FieldToDoList/hud.xml`.
 - **HUD click-to-complete:** left-click an open row to mark it done (edit permission + existing sync path).
+- **Windows buddy updater:** `tools/Update-FS25_FieldToDoList.bat` (single file) checks GitHub latest vs local `FS25_FieldToDoList.zip` and replaces when newer (no local `.bak`).
 
 ### Improved
 
