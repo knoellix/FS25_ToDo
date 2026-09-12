@@ -1792,6 +1792,11 @@ function ToDoManager:update(dt)
         end
     end
 
+    -- HUD mouse/drag must run every frame (draw is not fields-gated).
+    if FieldToDoHudOverlay ~= nil and FieldToDoHudOverlay.instance ~= nil then
+        FieldToDoHudOverlay.instance:update(dt)
+    end
+
     if not self:areGameFieldsReady() then
         return
     end
@@ -1813,10 +1818,6 @@ function ToDoManager:update(dt)
             and FieldToDoInGameMenuIntegration.syncFieldListFromScan ~= nil then
             FieldToDoInGameMenuIntegration.syncFieldListFromScan()
         end
-    end
-
-    if FieldToDoHudOverlay ~= nil and FieldToDoHudOverlay.instance ~= nil then
-        FieldToDoHudOverlay.instance:update(dt)
     end
 
     self.autoCheckTimer = self.autoCheckTimer + dt
