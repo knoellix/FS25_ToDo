@@ -247,6 +247,7 @@ function FieldToDoHudOverlay:rebuildDisplayRows()
         if not task.completed and openCount < FieldToDoHudOverlay.MAX_ENTRIES then
             openCount = openCount + 1
             self.displayRows[#self.displayRows + 1] = {
+                taskId = task.id,
                 text = FieldToDoHudOverlay.truncateText(
                     FieldToDoHudOverlay.cleanTaskText(task.text),
                     FieldToDoHudOverlay.MAX_TEXT_CHARS
@@ -301,8 +302,14 @@ function FieldToDoHudOverlay:draw()
     local numRows = math.min(#self.displayRows, FieldToDoHudOverlay.MAX_ENTRIES)
     local showEmpty = numRows == 0
     local panelH = self:calcPanelHeight(showEmpty and 1 or numRows)
-    local px = FieldToDoHudOverlay.PANEL_X
-    local py = FieldToDoHudOverlay.PANEL_Y
+    local px = self.panelX or FieldToDoHudOverlay.PANEL_X
+    local py = self.panelY or FieldToDoHudOverlay.PANEL_Y
+    px, py = FieldToDoHudOverlay.clampPanelPosition(
+        px, py, panelW, panelH, FieldToDoHudOverlay.PANEL_MARGIN
+    )
+    self.panelX = px
+    self.panelY = py
+    self.lastPanelH = panelH
     local textX = px + pad + FieldToDoHudOverlay.ACCENT_W
 
     setOverlayColor(self.fillOverlay, unpack(FieldToDoHudOverlay.COLOR_BG))
