@@ -453,11 +453,23 @@ function FieldToDoMenuFrame:getAllWorkersEditLabel()
     return FieldToDoL10n.getText("ftdl_edit_all_workers_on", "Alle Worker: an")
 end
 
+function FieldToDoMenuFrame:refreshEditMemberListUi()
+    self.editMemberRows = self:listOnlineFarmMembersForEditUi()
+
+    if self.workersEditBtnText ~= nil then
+        self.workersEditBtnText:setText(self:getAllWorkersEditLabel())
+        self:applyToggleBtnColor(self.workersEditBtnText, self:areAllListedWorkersMayEdit())
+    end
+
+    if self.editMemberList ~= nil and self.editMemberList.reloadData ~= nil then
+        self.editMemberList:reloadData()
+    end
+end
+
 function FieldToDoMenuFrame:updateEditPermissionUi()
     local canEdit = self:canEditLocal()
     local canSetting = self:canChangeWorkersEditSetting()
     self.editControlsEnabled = canEdit
-    self.editMemberRows = self:listOnlineFarmMembersForEditUi()
 
     self:setButtonDisabled(self.btnAdd, not canEdit)
     self:setButtonDisabled(self.btnEdit, not canEdit)
@@ -479,14 +491,7 @@ function FieldToDoMenuFrame:updateEditPermissionUi()
     self:setElementVisible(self.workersEditBtnText, canSetting)
     self:setElementVisible(self.btnWorkersEdit, canSetting)
 
-    if self.workersEditBtnText ~= nil then
-        self.workersEditBtnText:setText(self:getAllWorkersEditLabel())
-        self:applyToggleBtnColor(self.workersEditBtnText, self:areAllListedWorkersMayEdit())
-    end
-
-    if self.editMemberList ~= nil and self.editMemberList.reloadData ~= nil then
-        self.editMemberList:reloadData()
-    end
+    self:refreshEditMemberListUi()
 
     if self.fieldList ~= nil and self.fieldList.reloadVisibleItems ~= nil then
         self.fieldList:reloadVisibleItems()
@@ -645,6 +650,10 @@ function FieldToDoMenuFrame:onFrameUpdate(dt)
     end
 
     self.listRefreshTimer = 0
+
+    if self:canChangeWorkersEditSetting() then
+        self:refreshEditMemberListUi()
+    end
 
     self.fieldRescanTimer = (self.fieldRescanTimer or 0) + 1000
     local rescanMs = ToDoManager.OWNED_FIELDS_MENU_RESCAN_MS or 15000
@@ -932,7 +941,15 @@ function FieldToDoMenuFrame:populateCellForItemInSection(list, section, index, c
         local toggleElement = cell:getAttribute("editToggle")
         if toggleElement ~= nil then
             toggleElement:setText(self:formatEditMemberToggleLabel(row))
-            self:applyToggleBtnColor(toggleElement, row.mayEdit == true)
+            if row.isManager then
+                self:applyToggleBtnColor(toggleElement, false)
+            else
+                self:applyToggleBtnColor(toggleElement, row.mayEdit == true)
+            end
+        end
+
+        if cell.setDisabled ~= nil then
+            cell:setDisabled(row.isManager == true)
         end
 
         cell.ftdlEditMemberIndex = index
