@@ -23,6 +23,7 @@ All notable changes to **FS25_FieldToDoList** are documented here.
 - **Sidecar save merge:** foreign farms' `farmTodoEdit` maps are preserved from disk like tasks; clients never write the sidecar (`canPersistSidecar`).
 - **Edit UI freshness:** DENY refreshes button disable state; online member list refreshes during deferred menu open; „Alle Worker“ also updates `defaultAllow`; dialog confirm callbacks re-check edit permission.
 - **Schema/ops:** request/notify/state reject mismatched schema versions; delete notify is idempotent; orphan tasks without `farmId` migrate to the local farm.
+- **Edit-grant UI:** member nicknames no longer show Lua `table: 0x…` (resolve User objects from `getActiveUsers`); hide per-user grant list and „Alle Worker“ in singleplayer.
 
 ### Changed
 

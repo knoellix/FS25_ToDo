@@ -293,6 +293,26 @@ function FieldToDoMenuFrame:canChangeWorkersEditSetting()
     return FieldToDoPermissions.canChangeWorkersEditSetting(farmId, nil)
 end
 
+--- Per-user edit grants only matter online; hide the block in singleplayer.
+---@return boolean
+function FieldToDoMenuFrame:isMultiplayerSession()
+    if g_currentMission == nil then
+        return false
+    end
+
+    local info = g_currentMission.missionDynamicInfo
+    if info ~= nil and info.isMultiplayer == true then
+        return true
+    end
+
+    return false
+end
+
+---@return boolean
+function FieldToDoMenuFrame:shouldShowWorkersEditUi()
+    return self:isMultiplayerSession() and self:canChangeWorkersEditSetting()
+end
+
 function FieldToDoMenuFrame:notifyEditDenied()
     local message = FieldToDoL10n.getText(
         "ftdl_edit_denied",
@@ -316,40 +336,110 @@ function FieldToDoMenuFrame:requireEditPermission()
     return false
 end
 
----@param userId number|string|nil
----@return string
-function FieldToDoMenuFrame:resolveMemberNickname(userId)
-    local nickname = tostring(userId)
-
-    if g_currentMission == nil or g_currentMission.userManager == nil then
-        return nickname
+--- Extract a numeric/string userId from getActiveUsers entries (id or User object).
+---@param entry any
+---@return number|string|nil userId
+---@return table|nil userObject
+function FieldToDoMenuFrame:resolveActiveUserEntry(entry)
+    if entry == nil then
+        return nil, nil
     end
 
-    local um = g_currentMission.userManager
-    if um.getUserByUserId == nil then
-        return nickname
+    if type(entry) == "number" or type(entry) == "string" then
+        return entry, nil
     end
 
-    local ok, user = pcall(um.getUserByUserId, um, userId)
-    if not ok or user == nil then
-        return nickname
+    if type(entry) ~= "table" then
+        return nil, nil
+    end
+
+    if entry.getUserId ~= nil then
+        local ok, uid = pcall(entry.getUserId, entry)
+        if ok and uid ~= nil then
+            return uid, entry
+        end
+    end
+
+    if entry.userId ~= nil then
+        return entry.userId, entry
+    end
+
+    if entry.id ~= nil and type(entry.id) ~= "table" then
+        return entry.id, entry
+    end
+
+    return nil, entry
+end
+
+---@param user table|nil
+---@return string|nil
+function FieldToDoMenuFrame:nicknameFromUserObject(user)
+    if type(user) ~= "table" then
+        return nil
     end
 
     if user.getNickname ~= nil then
         local okNick, value = pcall(user.getNickname, user)
-        if okNick and value ~= nil and value ~= "" then
-            return tostring(value)
+        if okNick and value ~= nil and tostring(value) ~= "" then
+            local text = tostring(value)
+            if not text:match("^table:") then
+                return text
+            end
         end
     end
 
     if user.getName ~= nil then
         local okName, value = pcall(user.getName, user)
-        if okName and value ~= nil and value ~= "" then
-            return tostring(value)
+        if okName and value ~= nil and tostring(value) ~= "" then
+            local text = tostring(value)
+            if not text:match("^table:") then
+                return text
+            end
         end
     end
 
-    return nickname
+    if type(user.nickname) == "string" and user.nickname ~= "" then
+        return user.nickname
+    end
+
+    return nil
+end
+
+---@param userId number|string|nil
+---@param userObject table|nil
+---@return string
+function FieldToDoMenuFrame:resolveMemberNickname(userId, userObject)
+    local fromObject = self:nicknameFromUserObject(userObject)
+    if fromObject ~= nil then
+        return fromObject
+    end
+
+    if type(userId) == "table" then
+        fromObject = self:nicknameFromUserObject(userId)
+        if fromObject ~= nil then
+            return fromObject
+        end
+        return FieldToDoL10n.getText("ftdl_edit_member_unknown", "Spieler")
+    end
+
+    if g_currentMission ~= nil and g_currentMission.userManager ~= nil and userId ~= nil then
+        local um = g_currentMission.userManager
+        if um.getUserByUserId ~= nil then
+            local ok, user = pcall(um.getUserByUserId, um, userId)
+            if ok and user ~= nil then
+                fromObject = self:nicknameFromUserObject(user)
+                if fromObject ~= nil then
+                    return fromObject
+                end
+            end
+        end
+    end
+
+    if userId ~= nil and type(userId) ~= "table" then
+        return tostring(userId)
+    end
+
+    return FieldToDoL10n.getText("ftdl_edit_member_unknown", "Spieler")
 end
 
 ---@param label string
@@ -378,6 +468,10 @@ end
 ---@return table[]
 function FieldToDoMenuFrame:listOnlineFarmMembersForEditUi()
     local rows = {}
+    if not self:isMultiplayerSession() then
+        return rows
+    end
+
     local manager = self:getManager()
     local farmId = manager ~= nil and manager:getLocalFarmId() or nil
     if farmId == nil or g_farmManager == nil then
@@ -394,36 +488,16 @@ function FieldToDoMenuFrame:listOnlineFarmMembersForEditUi()
         return rows
     end
 
-    for _, userId in pairs(users) do
-        local uid = tonumber(userId) or userId
-        local uniqueId = FieldToDoPermissions.resolveUniqueUserId(uid)
-        local isManager = FieldToDoPermissions.isFarmManager(farmId, uid)
-        local mayEdit = isManager or FieldAdvisorSettings.getTodoEditAllowedForUniqueUser(uniqueId)
-        rows[#rows + 1] = {
-            userId = uid,
-            uniqueUserId = uniqueId,
-            nickname = self:resolveMemberNickname(uid),
-            isManager = isManager,
-            mayEdit = mayEdit,
-        }
-    end
-
-    if #rows == 0 then
-        local localUserId = nil
-        if g_currentMission ~= nil and g_currentMission.playerUserId ~= nil then
-            localUserId = g_currentMission.playerUserId
-        elseif g_localPlayer ~= nil and g_localPlayer.userId ~= nil then
-            localUserId = g_localPlayer.userId
-        end
-
-        if localUserId ~= nil then
-            local uniqueId = FieldToDoPermissions.resolveUniqueUserId(localUserId)
-            local isManager = FieldToDoPermissions.isFarmManager(farmId, localUserId)
+    for _, entry in pairs(users) do
+        local uid, userObject = self:resolveActiveUserEntry(entry)
+        if uid ~= nil and type(uid) ~= "table" then
+            local uniqueId = FieldToDoPermissions.resolveUniqueUserId(uid)
+            local isManager = FieldToDoPermissions.isFarmManager(farmId, uid)
             local mayEdit = isManager or FieldAdvisorSettings.getTodoEditAllowedForUniqueUser(uniqueId)
-            rows[1] = {
-                userId = localUserId,
+            rows[#rows + 1] = {
+                userId = uid,
                 uniqueUserId = uniqueId,
-                nickname = self:resolveMemberNickname(localUserId),
+                nickname = self:resolveMemberNickname(uid, userObject),
                 isManager = isManager,
                 mayEdit = mayEdit,
             }
@@ -470,7 +544,7 @@ end
 
 function FieldToDoMenuFrame:updateEditPermissionUi()
     local canEdit = self:canEditLocal()
-    local canSetting = self:canChangeWorkersEditSetting()
+    local showWorkersEdit = self:shouldShowWorkersEditUi()
     self.editControlsEnabled = canEdit
 
     self:setButtonDisabled(self.btnAdd, not canEdit)
@@ -485,13 +559,13 @@ function FieldToDoMenuFrame:updateEditPermissionUi()
     self:setButtonDisabled(self.btnOrganicMultiPass, not canEdit)
     self:setButtonDisabled(self.btnMulch, not canEdit)
     self:setButtonDisabled(self.btnAddFieldTask, not canEdit)
-    self:setButtonDisabled(self.btnWorkersEdit, not canSetting)
+    self:setButtonDisabled(self.btnWorkersEdit, not showWorkersEdit)
 
-    self:setElementVisible(self.editMembersHeader, canSetting)
-    self:setElementVisible(self.editMembersListWrapper, canSetting)
-    self:setElementVisible(self.workersEditBtnBg, canSetting)
-    self:setElementVisible(self.workersEditBtnText, canSetting)
-    self:setElementVisible(self.btnWorkersEdit, canSetting)
+    self:setElementVisible(self.editMembersHeader, showWorkersEdit)
+    self:setElementVisible(self.editMembersListWrapper, showWorkersEdit)
+    self:setElementVisible(self.workersEditBtnBg, showWorkersEdit)
+    self:setElementVisible(self.workersEditBtnText, showWorkersEdit)
+    self:setElementVisible(self.btnWorkersEdit, showWorkersEdit)
 
     self:refreshEditMemberListUi()
 
@@ -631,7 +705,7 @@ function FieldToDoMenuFrame:onFrameUpdate(dt)
     local memberRefreshDue = self.listRefreshTimer >= 1000
     if memberRefreshDue then
         self.listRefreshTimer = 0
-        if self:canChangeWorkersEditSetting() then
+        if self:shouldShowWorkersEditUi() then
             self:refreshEditMemberListUi()
         end
     end
@@ -1626,7 +1700,7 @@ function FieldToDoMenuFrame:onClickToggleWorkersEdit()
         return
     end
 
-    if not self:canChangeWorkersEditSetting() then
+    if not self:shouldShowWorkersEditUi() then
         self:notifyEditDenied()
         return
     end
@@ -1655,7 +1729,7 @@ function FieldToDoMenuFrame:onClickEditMemberRow(listItem)
         return
     end
 
-    if not self:canChangeWorkersEditSetting() then
+    if not self:shouldShowWorkersEditUi() then
         self:notifyEditDenied()
         return
     end
