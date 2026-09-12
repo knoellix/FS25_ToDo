@@ -472,11 +472,6 @@ function FieldToDoInGameMenuIntegration.onTabListMouseWheel(inGameMenu, delta)
         return
     end
 
-    if type(tabList.mouseEvent) == "function" then
-        -- Prefer letting list handle wheel if API exists; otherwise adjust slider.
-        return
-    end
-
     if type(tabList.setSliderValue) == "function" and type(tabList.getSliderValue) == "function" then
         local ok, value = pcall(tabList.getSliderValue, tabList)
         if ok and type(value) == "number" then
