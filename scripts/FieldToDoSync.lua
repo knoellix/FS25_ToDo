@@ -17,7 +17,7 @@
 ]]
 
 FieldToDoSync = {}
-FieldToDoSync.SCHEMA_VERSION = 1
+FieldToDoSync.SCHEMA_VERSION = 2
 
 FieldToDoSync.OP = {
     ADD_MANUAL = 1,
@@ -34,6 +34,8 @@ FieldToDoSync.OP = {
     SET_PLANNED_CROP = 12,
     DENY = 13,
     REQUEST_STATE = 14,
+    SET_USER_TODO_EDIT = 15,
+    SET_ALL_WORKERS_TODO_EDIT = 16,
 }
 
 local OP = FieldToDoSync.OP
@@ -52,6 +54,8 @@ FieldToDoSync.APPLY_METHOD_BY_OP = {
     [OP.SET_MULCH] = "applySetMulching",
     [OP.SET_WORKERS_EDIT] = "applySetWorkersMayEdit",
     [OP.SET_PLANNED_CROP] = "applySetPlannedCrop",
+    [OP.SET_USER_TODO_EDIT] = "applySetUserTodoEdit",
+    [OP.SET_ALL_WORKERS_TODO_EDIT] = "applySetAllWorkersTodoEdit",
 }
 
 --- Fields serialized for a task in FieldToDoStateEvent, mirroring ToDoManager's XML schema
@@ -171,6 +175,16 @@ function FieldToDoSync.writePayload(streamId, op, payload)
     elseif op == OP.SET_PLANNED_CROP then
         streamWriteInt32(streamId, tonumber(payload.fieldId) or 0)
         streamWriteInt32(streamId, tonumber(payload.fruitTypeIndex) or 0)
+    elseif op == OP.SET_USER_TODO_EDIT then
+        FieldToDoSync.writeString(streamId, payload.uniqueUserId)
+        streamWriteBool(streamId, payload.enabled == true)
+    elseif op == OP.SET_ALL_WORKERS_TODO_EDIT then
+        streamWriteBool(streamId, payload.enabled == true)
+        local uniqueUserIds = payload.uniqueUserIds or {}
+        streamWriteInt32(streamId, #uniqueUserIds)
+        for i = 1, #uniqueUserIds do
+            FieldToDoSync.writeString(streamId, uniqueUserIds[i])
+        end
     elseif op == OP.DENY then
         streamWriteUInt8(streamId, tonumber(payload.deniedOp) or 0)
         FieldToDoSync.writeString(streamId, payload.reason)
@@ -236,6 +250,16 @@ function FieldToDoSync.readPayload(streamId, op)
     elseif op == OP.SET_PLANNED_CROP then
         payload.fieldId = streamReadInt32(streamId)
         payload.fruitTypeIndex = streamReadInt32(streamId)
+    elseif op == OP.SET_USER_TODO_EDIT then
+        payload.uniqueUserId = FieldToDoSync.readString(streamId)
+        payload.enabled = streamReadBool(streamId)
+    elseif op == OP.SET_ALL_WORKERS_TODO_EDIT then
+        payload.enabled = streamReadBool(streamId)
+        local idCount = streamReadInt32(streamId) or 0
+        payload.uniqueUserIds = {}
+        for _ = 1, idCount do
+            payload.uniqueUserIds[#payload.uniqueUserIds + 1] = FieldToDoSync.readString(streamId)
+        end
     elseif op == OP.DENY then
         payload.deniedOp = streamReadUInt8(streamId)
         payload.reason = FieldToDoSync.readString(streamId)
@@ -322,6 +346,14 @@ function FieldToDoSync.writeState(streamId, state)
     streamWriteBool(streamId, state.organicMultiPassEnabled == true)
     streamWriteBool(streamId, state.mulchingEnabled ~= false)
     streamWriteBool(streamId, state.workersMayEditTodos ~= false)
+    streamWriteBool(streamId, state.todoEditDefaultAllow ~= false)
+
+    local todoEditUsers = state.todoEditUsers or {}
+    streamWriteInt32(streamId, #todoEditUsers)
+    for _, entry in ipairs(todoEditUsers) do
+        FieldToDoSync.writeString(streamId, entry.uniqueUserId)
+        streamWriteBool(streamId, entry.mayEdit == true)
+    end
 
     local plannedCrops = state.plannedCrops or {}
     streamWriteInt32(streamId, #plannedCrops)
@@ -349,6 +381,16 @@ function FieldToDoSync.readState(streamId)
     state.organicMultiPassEnabled = streamReadBool(streamId)
     state.mulchingEnabled = streamReadBool(streamId)
     state.workersMayEditTodos = streamReadBool(streamId)
+    state.todoEditDefaultAllow = streamReadBool(streamId)
+
+    state.todoEditUsers = {}
+    local todoEditUserCount = streamReadInt32(streamId) or 0
+    for _ = 1, todoEditUserCount do
+        state.todoEditUsers[#state.todoEditUsers + 1] = {
+            uniqueUserId = FieldToDoSync.readString(streamId),
+            mayEdit = streamReadBool(streamId),
+        }
+    end
 
     state.plannedCrops = {}
     local plannedCropCount = streamReadInt32(streamId) or 0
@@ -484,6 +526,10 @@ function FieldToDoSync.canExecuteOp(op, farmId, userId)
 
     if op == OP.SET_WORKERS_EDIT then
         return FieldToDoPermissions.canChangeWorkersEditSetting(farmId, userId)
+    end
+
+    if op == OP.SET_USER_TODO_EDIT or op == OP.SET_ALL_WORKERS_TODO_EDIT then
+        return FieldToDoPermissions.canManageTodoEditGrants(farmId, userId)
     end
 
     if op == OP.DENY then
@@ -726,13 +772,39 @@ end
 function FieldToDoSync.buildStateForFarm(farmId)
     farmId = tonumber(farmId)
 
+    local todoEditDefaultAllow = true
+    local todoEditUsers = {}
+    local manager = FieldToDoSync.getManager()
+    if manager ~= nil and farmId ~= nil and manager.getTodoEditStateForFarm ~= nil then
+        local editState = manager:getTodoEditStateForFarm(farmId)
+        if editState ~= nil then
+            todoEditDefaultAllow = editState.defaultAllow ~= false
+            for uniqueUserId, mayEdit in pairs(editState.byUniqueUserId or {}) do
+                todoEditUsers[#todoEditUsers + 1] = {
+                    uniqueUserId = tostring(uniqueUserId),
+                    mayEdit = mayEdit == true,
+                }
+            end
+        end
+    elseif FieldAdvisorSettings ~= nil then
+        todoEditDefaultAllow = FieldAdvisorSettings.todoEditDefaultAllow ~= false
+        for uniqueUserId, mayEdit in pairs(FieldAdvisorSettings.todoEditByUniqueUserId or {}) do
+            todoEditUsers[#todoEditUsers + 1] = {
+                uniqueUserId = tostring(uniqueUserId),
+                mayEdit = mayEdit == true,
+            }
+        end
+    end
+
     local state = {
         schemaVersion = FieldToDoSync.SCHEMA_VERSION,
         farmId = farmId,
         workOrderPreset = FieldAdvisorSettings ~= nil and FieldAdvisorSettings.getWorkOrderPreset() or nil,
         organicMultiPassEnabled = FieldAdvisorSettings ~= nil and FieldAdvisorSettings.isOrganicMultiPassEnabled() or false,
         mulchingEnabled = FieldAdvisorSettings == nil or FieldAdvisorSettings.isMulchingEnabled(),
-        workersMayEditTodos = FieldAdvisorSettings == nil or FieldAdvisorSettings.isWorkersMayEditTodos(),
+        workersMayEditTodos = todoEditDefaultAllow,
+        todoEditDefaultAllow = todoEditDefaultAllow,
+        todoEditUsers = todoEditUsers,
         plannedCrops = {},
         tasks = {},
     }
@@ -743,7 +815,6 @@ function FieldToDoSync.buildStateForFarm(farmId)
         end
     end
 
-    local manager = FieldToDoSync.getManager()
     if manager ~= nil and manager.manualTasks ~= nil and farmId ~= nil then
         for _, task in pairs(manager.manualTasks) do
             if tonumber(task.farmId) == farmId then
@@ -790,13 +861,33 @@ function FieldToDoSync.applyState(state)
         end
     end
 
+    if farmId ~= nil and manager.getTodoEditStateForFarm ~= nil then
+        local editState = manager:getTodoEditStateForFarm(farmId)
+        local defaultAllow = state.todoEditDefaultAllow
+        if defaultAllow == nil then
+            defaultAllow = state.workersMayEditTodos ~= false
+        end
+        editState.defaultAllow = defaultAllow
+        editState.byUniqueUserId = {}
+        if type(state.todoEditUsers) == "table" then
+            for _, entry in ipairs(state.todoEditUsers) do
+                local uniqueUserId = entry.uniqueUserId ~= nil and tostring(entry.uniqueUserId) or ""
+                if uniqueUserId ~= "" then
+                    editState.byUniqueUserId[uniqueUserId] = entry.mayEdit == true
+                end
+            end
+        end
+        if manager.syncTodoEditSettingsCache ~= nil then
+            manager:syncTodoEditSettingsCache(farmId)
+        end
+    end
+
     if FieldAdvisorSettings ~= nil then
         if not string.isNilOrWhitespace(state.workOrderPreset) then
             FieldAdvisorSettings.setWorkOrderPreset(state.workOrderPreset)
         end
         FieldAdvisorSettings.setOrganicMultiPassEnabled(state.organicMultiPassEnabled == true)
         FieldAdvisorSettings.setMulchingEnabled(state.mulchingEnabled ~= false)
-        FieldAdvisorSettings.setWorkersMayEditTodos(state.workersMayEditTodos ~= false)
     end
 
     if FieldPlannedCrop ~= nil and type(state.plannedCrops) == "table" then
