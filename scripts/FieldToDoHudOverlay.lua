@@ -70,6 +70,89 @@ function FieldToDoHudOverlay.pointInRect(px, py, x, y, w, h)
     return px >= x and px <= x + w and py >= y and py <= y + h
 end
 
+function FieldToDoHudOverlay.getSettingsDirectory()
+    local base = nil
+    if getUserProfileAppPath ~= nil then
+        local ok, path = pcall(getUserProfileAppPath)
+        if ok and path ~= nil and path ~= "" then
+            base = path
+        end
+    end
+    if base == nil then
+        return nil
+    end
+    -- Normalize trailing slash
+    if string.sub(base, -1) ~= "/" and string.sub(base, -1) ~= "\\" then
+        base = base .. "/"
+    end
+    return base .. "modSettings/FS25_FieldToDoList"
+end
+
+function FieldToDoHudOverlay.getSettingsFilePath()
+    local dir = FieldToDoHudOverlay.getSettingsDirectory()
+    if dir == nil then
+        return nil
+    end
+    return dir .. "/hud.xml"
+end
+
+function FieldToDoHudOverlay:loadPositionFromDisk()
+    self.panelX = FieldToDoHudOverlay.PANEL_X
+    self.panelY = FieldToDoHudOverlay.PANEL_Y
+    local filePath = FieldToDoHudOverlay.getSettingsFilePath()
+    if filePath == nil or fileExists == nil or not fileExists(filePath) then
+        return
+    end
+    if XMLFile == nil or XMLFile.load == nil then
+        return
+    end
+    local ok, xmlFile = pcall(XMLFile.load, "fieldToDoHudLoad", filePath)
+    if not ok or xmlFile == nil then
+        return
+    end
+    local x = xmlFile.getValue ~= nil and xmlFile:getValue("fieldToDoHud#panelX") or nil
+    local y = xmlFile.getValue ~= nil and xmlFile:getValue("fieldToDoHud#panelY") or nil
+    if xmlFile.delete ~= nil then
+        xmlFile:delete()
+    end
+    x = tonumber(x)
+    y = tonumber(y)
+    if x ~= nil and y ~= nil then
+        self.panelX, self.panelY = FieldToDoHudOverlay.clampPanelPosition(
+            x, y, FieldToDoHudOverlay.PANEL_W, 0.08, FieldToDoHudOverlay.PANEL_MARGIN
+        )
+    end
+end
+
+function FieldToDoHudOverlay:savePositionToDisk()
+    local dir = FieldToDoHudOverlay.getSettingsDirectory()
+    local filePath = FieldToDoHudOverlay.getSettingsFilePath()
+    if dir == nil or filePath == nil then
+        return
+    end
+    if createFolder ~= nil then
+        pcall(createFolder, dir)
+    end
+    if XMLFile == nil or XMLFile.create == nil then
+        return
+    end
+    local ok, xmlFile = pcall(XMLFile.create, "fieldToDoHudSave", filePath, "fieldToDoHud")
+    if not ok or xmlFile == nil then
+        return
+    end
+    if xmlFile.setValue ~= nil then
+        xmlFile:setValue("fieldToDoHud#panelX", self.panelX)
+        xmlFile:setValue("fieldToDoHud#panelY", self.panelY)
+    end
+    if xmlFile.save ~= nil then
+        xmlFile:save()
+    end
+    if xmlFile.delete ~= nil then
+        xmlFile:delete()
+    end
+    self.positionDirty = false
+end
+
 ---@return FieldToDoHudOverlay
 function FieldToDoHudOverlay.new()
     local self = setmetatable({}, FieldToDoHudOverlay)
@@ -77,6 +160,19 @@ function FieldToDoHudOverlay.new()
     self.isInitialized = false
     self.fillOverlay = nil
     self.displayRows = {}
+    self.panelX = FieldToDoHudOverlay.PANEL_X
+    self.panelY = FieldToDoHudOverlay.PANEL_Y
+    self.positionDirty = false
+    self.dragActive = false
+    self.dragMoved = false
+    self.dragOffsetX = 0
+    self.dragOffsetY = 0
+    self.mouseDown = false
+    self.mouseDownOnHeader = false
+    self.mouseDownRowIndex = nil
+    self.mouseDownX = nil
+    self.mouseDownY = nil
+    self.lastPanelH = 0.08
     return self
 end
 
@@ -90,6 +186,7 @@ function FieldToDoHudOverlay:initialize()
     end
 
     self.isInitialized = true
+    self:loadPositionFromDisk()
 end
 
 function FieldToDoHudOverlay:delete()
