@@ -22,9 +22,15 @@ All notable changes to **FS25_FieldToDoList** are documented here.
 - Safer tab reorder (no unsafe GUI list mutation on load).
 - Sync notify reaches the requesting client; custom field tasks route through sync.
 
+### Fixed (MP follow-up)
+
+- Server edit gate no longer compares against the **host** `getLocalFarmId()` (blocked other farms / non-host workers).
+- Resolve requester via `userManager:getUserByConnection`; no silent fallback to host farm on client requests.
+- DENY logs include reason (`no_farm` / `denied` / …).
+
 ### Known limitations
 
-- Dedicated-server farm-id resolution and DENY UX still need MP validation.
+- ESC tab bar scroll with many mods is a Giants/UI limit (our tab placement after Map is fine).
 - Loose grass/straw on ground still not auto-detectable (bale objects only).
 
 ## [0.1.0.7] — 2026-09-10

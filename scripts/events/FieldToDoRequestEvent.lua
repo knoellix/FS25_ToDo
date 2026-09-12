@@ -42,13 +42,6 @@ function FieldToDoRequestEvent:run(connection)
         return
     end
 
-    local userId = nil
-    if connection.getUserId ~= nil then
-        local ok, result = pcall(connection.getUserId, connection)
-        if ok then
-            userId = result
-        end
-    end
-
+    local userId = FieldToDoSync.resolveUserIdFromConnection(connection)
     FieldToDoSync.handleRequest(self.op, self.payload, userId, connection)
 end

@@ -36,24 +36,75 @@ function FieldToDoPermissions.isFarmManager(farmId, userId)
     return ok and result == true
 end
 
+--- Membership check. Returns true/false when known, nil when APIs unavailable.
+---@param farmId number
+---@param userId number
+---@return boolean|nil
+function FieldToDoPermissions.userBelongsToFarm(farmId, userId)
+    farmId = tonumber(farmId)
+    userId = tonumber(userId) or userId
+    if farmId == nil or farmId <= 0 or userId == nil or g_farmManager == nil then
+        return nil
+    end
+
+    if g_farmManager.getFarmByUserId ~= nil then
+        local ok, farm = pcall(g_farmManager.getFarmByUserId, g_farmManager, userId)
+        if ok then
+            return farm ~= nil and tonumber(farm.farmId) == farmId
+        end
+    end
+
+    local farm = g_farmManager.getFarmById ~= nil and g_farmManager:getFarmById(farmId) or nil
+    if farm ~= nil and farm.isUserInFarm ~= nil then
+        local ok, inFarm = pcall(farm.isUserInFarm, farm, userId)
+        if ok then
+            return inFarm == true
+        end
+    end
+
+    return nil
+end
+
 function FieldToDoPermissions.canAutoCompleteFarmTodos(farmId, userId)
     farmId = tonumber(farmId)
     if farmId == nil or farmId <= 0 then
         return false
     end
+
     local override = FieldToDoPermissions._testOverride
-    if override ~= nil and override.resolveFarmId ~= nil and override.resolveFarmId ~= farmId then
-        return false
-    end
-    if override == nil then
-        local localFarm = nil
-        if ToDoManager ~= nil and g_currentMission ~= nil and g_currentMission.fieldToDoList ~= nil then
-            localFarm = g_currentMission.fieldToDoList:getLocalFarmId()
-        end
-        if localFarm ~= nil and localFarm ~= farmId then
+    if override ~= nil then
+        if override.resolveFarmId ~= nil and override.resolveFarmId ~= farmId then
             return false
         end
+        return true
     end
+
+    -- Keep whether the caller passed an explicit user (server request) before local resolve.
+    local explicitUserId = userId ~= nil
+    local resolved = resolveUserId(userId)
+
+    if resolved ~= nil then
+        local membership = FieldToDoPermissions.userBelongsToFarm(farmId, resolved)
+        if membership ~= nil then
+            return membership
+        end
+        -- Remote request with broken membership APIs: deny (do NOT use host getLocalFarmId).
+        if explicitUserId then
+            return false
+        end
+    elseif explicitUserId then
+        return false
+    end
+
+    -- Local UI / SP fallback only (no explicit remote userId).
+    local localFarm = nil
+    if ToDoManager ~= nil and g_currentMission ~= nil and g_currentMission.fieldToDoList ~= nil then
+        localFarm = g_currentMission.fieldToDoList:getLocalFarmId()
+    end
+    if localFarm ~= nil and localFarm ~= farmId then
+        return false
+    end
+
     return true
 end
 

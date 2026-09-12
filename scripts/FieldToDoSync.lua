@@ -371,11 +371,47 @@ end
 -- Request / notify dispatch.
 -- ============================================================================
 
+--- Resolve userId from a client connection (server-side). Prefer UserManager.
+---@param connection table|nil
+---@return number|nil
+function FieldToDoSync.resolveUserIdFromConnection(connection)
+    if connection == nil then
+        return nil
+    end
+
+    if g_currentMission ~= nil and g_currentMission.userManager ~= nil then
+        local userManager = g_currentMission.userManager
+        if userManager.getUserByConnection ~= nil then
+            local ok, user = pcall(userManager.getUserByConnection, userManager, connection)
+            if ok and user ~= nil then
+                if user.getId ~= nil then
+                    local okId, userId = pcall(user.getId, user)
+                    if okId and userId ~= nil then
+                        return tonumber(userId) or userId
+                    end
+                end
+                if user.id ~= nil then
+                    return tonumber(user.id) or user.id
+                end
+            end
+        end
+    end
+
+    if connection.getUserId ~= nil then
+        local ok, result = pcall(connection.getUserId, connection)
+        if ok and result ~= nil then
+            return tonumber(result) or result
+        end
+    end
+
+    return nil
+end
+
 --- Resolve the requester's farm on the server; never trust client-supplied farmId.
 ---@param userId number|nil
 ---@return number|nil
 function FieldToDoSync.resolveFarmIdForUser(userId)
-    userId = tonumber(userId)
+    userId = tonumber(userId) or userId
 
     local override = FieldToDoPermissions ~= nil and FieldToDoPermissions._testOverride or nil
     if override ~= nil and override.resolveFarmId ~= nil then
@@ -384,6 +420,16 @@ function FieldToDoSync.resolveFarmIdForUser(userId)
 
     if userId == nil then
         return nil
+    end
+
+    if g_farmManager ~= nil and g_farmManager.getFarmByUserId ~= nil then
+        local ok, farm = pcall(g_farmManager.getFarmByUserId, g_farmManager, userId)
+        if ok and farm ~= nil then
+            local farmId = tonumber(farm.farmId)
+            if farmId ~= nil and farmId > 0 then
+                return farmId
+            end
+        end
     end
 
     if g_currentMission ~= nil and g_currentMission.playerSystem ~= nil then
@@ -540,13 +586,18 @@ end
 ---@param deniedOp number
 ---@param reason string|nil
 function FieldToDoSync.sendDeny(connection, deniedOp, reason)
+    reason = tostring(reason or "denied")
+    if FieldToDoLog ~= nil then
+        FieldToDoLog.warning("FieldToDoSync: denying op=%s reason=%s", tostring(deniedOp), reason)
+    end
+
     if connection == nil or FieldToDoNotifyEvent == nil then
         return
     end
 
     connection:sendEvent(FieldToDoNotifyEvent.new(OP.DENY, {
         deniedOp = deniedOp,
-        reason = tostring(reason or "denied"),
+        reason = reason,
     }))
 end
 
@@ -579,13 +630,16 @@ end
 function FieldToDoSync.handleRequest(op, payload, userId, connection)
     payload = payload or {}
 
+    -- Local/SP calls pass connection=nil; only then may we fall back to getLocalFarmId.
+    local allowLocalFarmFallback = connection == nil
+
     if op == OP.REQUEST_STATE then
         if connection == nil then
             return
         end
 
         local farmId = FieldToDoSync.resolveFarmIdForUser(userId)
-        if farmId == nil then
+        if farmId == nil and allowLocalFarmFallback then
             local manager = FieldToDoSync.getManager()
             if manager ~= nil and manager.getLocalFarmId ~= nil then
                 farmId = manager:getLocalFarmId()
@@ -602,7 +656,7 @@ function FieldToDoSync.handleRequest(op, payload, userId, connection)
     end
 
     local farmId = FieldToDoSync.resolveFarmIdForUser(userId)
-    if farmId == nil and manager.getLocalFarmId ~= nil then
+    if farmId == nil and allowLocalFarmFallback and manager.getLocalFarmId ~= nil then
         farmId = manager:getLocalFarmId()
     end
 
@@ -624,7 +678,11 @@ function FieldToDoSync.applyNotify(op, payload)
 
     if op == OP.DENY then
         if FieldToDoLog ~= nil then
-            FieldToDoLog.warning("FieldToDoSync: request denied by server (op=%s)", tostring(payload.deniedOp))
+            FieldToDoLog.warning(
+                "FieldToDoSync: request denied by server (op=%s reason=%s)",
+                tostring(payload.deniedOp),
+                tostring(payload.reason or "?")
+            )
         end
         return
     end
