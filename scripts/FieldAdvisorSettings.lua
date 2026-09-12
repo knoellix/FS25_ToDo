@@ -74,15 +74,49 @@ FieldAdvisorSettings.organicMultiPassEnabled = false
 -- yield bonus. We expose a mod-side toggle so players who never mulch can hide the suggestion.
 FieldAdvisorSettings.mulchingEnabled = true
 FieldAdvisorSettings.workersMayEditTodos = true
+FieldAdvisorSettings.todoEditDefaultAllow = true
+FieldAdvisorSettings.todoEditByUniqueUserId = {}
 
 ---@return boolean
 function FieldAdvisorSettings.isWorkersMayEditTodos()
-    return FieldAdvisorSettings.workersMayEditTodos ~= false
+    return FieldAdvisorSettings.todoEditDefaultAllow ~= false
 end
 
 ---@param enabled boolean|nil
 function FieldAdvisorSettings.setWorkersMayEditTodos(enabled)
     FieldAdvisorSettings.workersMayEditTodos = enabled ~= false
+    FieldAdvisorSettings.todoEditDefaultAllow = enabled ~= false
+end
+
+---@param uniqueUserId string|nil
+---@return boolean
+function FieldAdvisorSettings.getTodoEditAllowedForUniqueUser(uniqueUserId)
+    if uniqueUserId == nil or uniqueUserId == "" then
+        return FieldAdvisorSettings.todoEditDefaultAllow ~= false
+    end
+    local mapped = FieldAdvisorSettings.todoEditByUniqueUserId[tostring(uniqueUserId)]
+    if mapped == nil then
+        return FieldAdvisorSettings.todoEditDefaultAllow ~= false
+    end
+    return mapped == true
+end
+
+---@param uniqueUserId string|nil
+---@param enabled boolean|nil
+function FieldAdvisorSettings.setTodoEditAllowedForUniqueUser(uniqueUserId, enabled)
+    if uniqueUserId == nil or uniqueUserId == "" then
+        return
+    end
+    FieldAdvisorSettings.todoEditByUniqueUserId[tostring(uniqueUserId)] = enabled == true
+end
+
+---@param workersFlag boolean|nil
+function FieldAdvisorSettings.migrateWorkersMayEditTodosFlag(workersFlag)
+    if workersFlag == false then
+        FieldAdvisorSettings.todoEditDefaultAllow = false
+    else
+        FieldAdvisorSettings.todoEditDefaultAllow = true
+    end
 end
 
 function FieldAdvisorSettings.toggleWorkersMayEditTodos()
@@ -277,7 +311,8 @@ function FieldAdvisorSettings.loadFromXMLFile(xmlFile, key)
     FieldAdvisorSettings.setMulchingEnabled(mulching ~= false)
 
     local workersEdit = xmlFile:getValue(key .. "#workersMayEditTodos")
-    FieldAdvisorSettings.setWorkersMayEditTodos(workersEdit ~= false)
+    FieldAdvisorSettings.migrateWorkersMayEditTodosFlag(workersEdit)
+    FieldAdvisorSettings.workersMayEditTodos = FieldAdvisorSettings.todoEditDefaultAllow
 end
 
 ---@param xmlFile XMLFile|nil
@@ -290,5 +325,6 @@ function FieldAdvisorSettings.saveToXMLFile(xmlFile, key)
     xmlFile:setValue(key .. "#workOrderPreset", FieldAdvisorSettings.getWorkOrderPreset())
     xmlFile:setValue(key .. "#organicMultiPassEnabled", FieldAdvisorSettings.isOrganicMultiPassEnabled())
     xmlFile:setValue(key .. "#mulchingEnabled", FieldAdvisorSettings.isMulchingEnabled())
-    xmlFile:setValue(key .. "#workersMayEditTodos", FieldAdvisorSettings.isWorkersMayEditTodos())
+    xmlFile:setValue(key .. "#workersMayEditTodos", FieldAdvisorSettings.todoEditDefaultAllow == true)
+    xmlFile:setValue(key .. "#todoEditDefaultAllow", FieldAdvisorSettings.todoEditDefaultAllow == true)
 end

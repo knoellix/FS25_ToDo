@@ -195,28 +195,33 @@ dofile(repoRoot .. "/scripts/FieldToDoPermissions.lua")
 
 if type(FieldToDoPermissions) ~= "table"
     or type(FieldToDoPermissions.canEditFarmTodos) ~= "function"
-    or type(FieldToDoPermissions.canChangeWorkersEditSetting) ~= "function"
+    or type(FieldToDoPermissions.canManageTodoEditGrants) ~= "function"
     or type(FieldToDoPermissions.canAutoCompleteFarmTodos) ~= "function" then
   io.write(RED .. "PENDING: scripts/FieldToDoPermissions.lua not implemented yet.\n" .. RESET)
   fail = fail + #permFixtures
 else
   io.write("\n")
   for _, c in ipairs(permFixtures) do
-    FieldAdvisorSettings.workersMayEditTodos = c.workersMayEdit
+    FieldAdvisorSettings.todoEditDefaultAllow = c.defaultAllow
+    FieldAdvisorSettings.todoEditByUniqueUserId = {}
     FieldToDoPermissions._testOverride = {
       farmId = 1,
       userId = 1,
+      uniqueUserId = "u1",
       isManager = c.isManager,
       resolveFarmId = c.sameFarm and 1 or 2,
     }
+    if c.userGrant ~= nil then
+      FieldAdvisorSettings.todoEditByUniqueUserId["u1"] = c.userGrant
+    end
     local gotEdit = FieldToDoPermissions.canEditFarmTodos(1, 1)
-    local gotSetting = FieldToDoPermissions.canChangeWorkersEditSetting(1, 1)
+    local gotManage = FieldToDoPermissions.canManageTodoEditGrants(1, 1)
     local gotAuto = FieldToDoPermissions.canAutoCompleteFarmTodos(1, 1)
     local mismatch = nil
     if gotEdit ~= c.expect.edit then
       mismatch = string.format("edit expected %s got %s", tostring(c.expect.edit), tostring(gotEdit))
-    elseif gotSetting ~= c.expect.changeSetting then
-      mismatch = string.format("changeSetting expected %s got %s", tostring(c.expect.changeSetting), tostring(gotSetting))
+    elseif gotManage ~= c.expect.manageGrants then
+      mismatch = string.format("manageGrants expected %s got %s", tostring(c.expect.manageGrants), tostring(gotManage))
     elseif gotAuto ~= c.expect.autoComplete then
       mismatch = string.format("autoComplete expected %s got %s", tostring(c.expect.autoComplete), tostring(gotAuto))
     end

@@ -108,27 +108,57 @@ function FieldToDoPermissions.canAutoCompleteFarmTodos(farmId, userId)
     return true
 end
 
+function FieldToDoPermissions.resolveUniqueUserId(userId)
+    local override = FieldToDoPermissions._testOverride
+    if override ~= nil and override.uniqueUserId ~= nil then
+        return tostring(override.uniqueUserId)
+    end
+    userId = resolveUserId(userId)
+    if userId == nil or g_currentMission == nil or g_currentMission.userManager == nil then
+        return nil
+    end
+    local um = g_currentMission.userManager
+    if um.getUniqueUserIdByUserId ~= nil then
+        local ok, uid = pcall(um.getUniqueUserIdByUserId, um, userId)
+        if ok and uid ~= nil and uid ~= "" then
+            return tostring(uid)
+        end
+    end
+    if um.getUserByUserId ~= nil then
+        local ok, user = pcall(um.getUserByUserId, um, userId)
+        if ok and user ~= nil and user.getUniqueUserId ~= nil then
+            local ok2, uid = pcall(user.getUniqueUserId, user)
+            if ok2 and uid ~= nil then
+                return tostring(uid)
+            end
+        end
+    end
+    return nil
+end
+
 function FieldToDoPermissions.canEditFarmTodos(farmId, userId)
     if not FieldToDoPermissions.canAutoCompleteFarmTodos(farmId, userId) then
         return false
     end
-    local workersOk = true
-    if FieldAdvisorSettings ~= nil and FieldAdvisorSettings.isWorkersMayEditTodos ~= nil then
-        workersOk = FieldAdvisorSettings.isWorkersMayEditTodos()
-    elseif FieldAdvisorSettings ~= nil then
-        workersOk = FieldAdvisorSettings.workersMayEditTodos ~= false
-    end
-    if workersOk then
+    if FieldToDoPermissions.isFarmManager(farmId, userId) then
         return true
+    end
+    local uniqueId = FieldToDoPermissions.resolveUniqueUserId(userId)
+    if FieldAdvisorSettings == nil or FieldAdvisorSettings.getTodoEditAllowedForUniqueUser == nil then
+        return true
+    end
+    return FieldAdvisorSettings.getTodoEditAllowedForUniqueUser(uniqueId)
+end
+
+function FieldToDoPermissions.canManageTodoEditGrants(farmId, userId)
+    if not FieldToDoPermissions.canAutoCompleteFarmTodos(farmId, userId) then
+        return false
     end
     return FieldToDoPermissions.isFarmManager(farmId, userId)
 end
 
 function FieldToDoPermissions.canChangeWorkersEditSetting(farmId, userId)
-    if not FieldToDoPermissions.canAutoCompleteFarmTodos(farmId, userId) then
-        return false
-    end
-    return FieldToDoPermissions.isFarmManager(farmId, userId)
+    return FieldToDoPermissions.canManageTodoEditGrants(farmId, userId)
 end
 
 function FieldToDoPermissions.canEditLocal()
