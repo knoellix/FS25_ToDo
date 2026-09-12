@@ -63,6 +63,7 @@ function ToDoManager.new(mission, modDirectory, modName)
     self.ownedFieldsScanDirty = false
     self.ownedFieldsOverviewStale = false
     self.manualTasksDirty = false
+    self.todoEditByFarmId = {}
 
     return self
 end
@@ -245,6 +246,52 @@ function ToDoManager:canPersistSidecar()
     end
 
     return g_server ~= nil
+end
+
+---@param farmId number|nil
+---@return table|nil
+function ToDoManager:getTodoEditStateForFarm(farmId)
+    farmId = tonumber(farmId)
+    if farmId == nil then
+        return nil
+    end
+
+    local state = self.todoEditByFarmId[farmId]
+    if state == nil then
+        state = {
+            defaultAllow = true,
+            byUniqueUserId = {},
+        }
+        self.todoEditByFarmId[farmId] = state
+    end
+
+    return state
+end
+
+--- Copy farm-scoped edit map into FieldAdvisorSettings when it is the local farm.
+---@param farmId number|nil
+function ToDoManager:syncTodoEditSettingsCache(farmId)
+    farmId = tonumber(farmId)
+    if farmId == nil or FieldAdvisorSettings == nil then
+        return
+    end
+
+    local localFarm = self:getLocalFarmId()
+    if localFarm == nil or farmId ~= localFarm then
+        return
+    end
+
+    local state = self:getTodoEditStateForFarm(farmId)
+    if state == nil then
+        return
+    end
+
+    FieldAdvisorSettings.todoEditDefaultAllow = state.defaultAllow ~= false
+    FieldAdvisorSettings.workersMayEditTodos = FieldAdvisorSettings.todoEditDefaultAllow
+    FieldAdvisorSettings.todoEditByUniqueUserId = {}
+    for uniqueUserId, mayEdit in pairs(state.byUniqueUserId) do
+        FieldAdvisorSettings.todoEditByUniqueUserId[tostring(uniqueUserId)] = mayEdit == true
+    end
 end
 
 --- Before writing: replace in-memory tasks of *other* farms with the disk copy so a local
@@ -1287,11 +1334,66 @@ function ToDoManager:applySetWorkersMayEdit(payload, farmId, userId)
         return nil
     end
 
-    FieldAdvisorSettings.setWorkersMayEditTodos(payload.enabled ~= false)
+    farmId = tonumber(farmId) or self:getLocalFarmId()
+    local enabled = payload.enabled ~= false
+    FieldAdvisorSettings.setWorkersMayEditTodos(enabled)
+    if farmId ~= nil then
+        local state = self:getTodoEditStateForFarm(farmId)
+        state.defaultAllow = enabled
+    end
+    self:syncTodoEditSettingsCache(farmId)
     self:markManualTasksDirty()
     self:requestDebouncedSave()
 
-    return { enabled = payload.enabled ~= false, farmId = farmId }
+    return { enabled = enabled, farmId = farmId }
+end
+
+---@param payload table
+---@param farmId number|nil
+---@param userId number|nil
+---@return table|nil
+function ToDoManager:applySetUserTodoEdit(payload, farmId, userId)
+    payload = payload or {}
+    farmId = tonumber(farmId)
+    local uniqueUserId = payload.uniqueUserId ~= nil and tostring(payload.uniqueUserId) or ""
+    if farmId == nil or uniqueUserId == "" then
+        return nil
+    end
+
+    local state = self:getTodoEditStateForFarm(farmId)
+    state.byUniqueUserId[uniqueUserId] = payload.enabled == true
+    self:syncTodoEditSettingsCache(farmId)
+    self:markManualTasksDirty()
+    self:requestDebouncedSave()
+
+    return { farmId = farmId, uniqueUserId = uniqueUserId, enabled = payload.enabled == true }
+end
+
+---@param payload table
+---@param farmId number|nil
+---@param userId number|nil
+---@return table|nil
+function ToDoManager:applySetAllWorkersTodoEdit(payload, farmId, userId)
+    payload = payload or {}
+    farmId = tonumber(farmId)
+    if farmId == nil then
+        return nil
+    end
+
+    local enabled = payload.enabled == true
+    local ids = payload.uniqueUserIds or {}
+    local state = self:getTodoEditStateForFarm(farmId)
+    for i = 1, #ids do
+        local uid = tostring(ids[i])
+        if uid ~= "" then
+            state.byUniqueUserId[uid] = enabled
+        end
+    end
+    self:syncTodoEditSettingsCache(farmId)
+    self:markManualTasksDirty()
+    self:requestDebouncedSave()
+
+    return { farmId = farmId, enabled = enabled, uniqueUserIds = ids }
 end
 
 ---@param payload table
@@ -1684,7 +1786,11 @@ function ToDoManager.registerSavegameXMLPaths(schema, basePath)
     schema:register(XMLValueType.STRING, basePath .. "#workOrderPreset", "Field work order preset key")
     schema:register(XMLValueType.BOOL, basePath .. "#organicMultiPassEnabled", "Split organic fertilizing into multiple passes")
     schema:register(XMLValueType.BOOL, basePath .. "#mulchingEnabled", "Suggest mulching after harvest for stubble crops")
-    schema:register(XMLValueType.BOOL, basePath .. "#workersMayEditTodos", "Non-managers may edit farm to-dos")
+    schema:register(XMLValueType.BOOL, basePath .. "#workersMayEditTodos", "Legacy default allow (mirrored)")
+    schema:register(XMLValueType.INT, basePath .. ".farmTodoEdit(?)#farmId", "Farm id")
+    schema:register(XMLValueType.BOOL, basePath .. ".farmTodoEdit(?)#defaultAllow", "Default worker edit")
+    schema:register(XMLValueType.STRING, basePath .. ".farmTodoEdit(?).user(?)#uniqueUserId", "Unique user id")
+    schema:register(XMLValueType.BOOL, basePath .. ".farmTodoEdit(?).user(?)#mayEdit", "May edit to-dos")
     schema:register(XMLValueType.INT, basePath .. ".tasks.task(?)#id", "Task id")
     schema:register(XMLValueType.INT, basePath .. ".tasks.task(?)#sortIndex", "Display order in the list")
     schema:register(XMLValueType.STRING, basePath .. ".tasks.task(?)#text", "Task display text")
@@ -1758,12 +1864,102 @@ end
 
 ---@param xmlFile XMLFile
 ---@param key string
+function ToDoManager:loadTodoEditFromXMLFile(xmlFile, key)
+    self.todoEditByFarmId = {}
+
+    local index = 0
+    while true do
+        local farmKey = string.format("%s.farmTodoEdit(%d)", key, index)
+        local farmId = tonumber(xmlFile:getValue(farmKey .. "#farmId"))
+        if farmId == nil then
+            break
+        end
+
+        local defaultAllow = xmlFile:getValue(farmKey .. "#defaultAllow")
+        local state = {
+            defaultAllow = defaultAllow ~= false,
+            byUniqueUserId = {},
+        }
+
+        local userIndex = 0
+        while true do
+            local userKey = string.format("%s.user(%d)", farmKey, userIndex)
+            local uniqueUserId = xmlFile:getValue(userKey .. "#uniqueUserId")
+            if uniqueUserId == nil or uniqueUserId == "" then
+                break
+            end
+
+            state.byUniqueUserId[tostring(uniqueUserId)] = xmlFile:getValue(userKey .. "#mayEdit") == true
+            userIndex = userIndex + 1
+        end
+
+        self.todoEditByFarmId[farmId] = state
+        index = index + 1
+    end
+
+    local localFarm = self:getLocalFarmId()
+    if localFarm ~= nil and self.todoEditByFarmId[localFarm] == nil and FieldAdvisorSettings ~= nil then
+        self.todoEditByFarmId[localFarm] = {
+            defaultAllow = FieldAdvisorSettings.todoEditDefaultAllow ~= false,
+            byUniqueUserId = {},
+        }
+    end
+
+    if localFarm ~= nil then
+        self:syncTodoEditSettingsCache(localFarm)
+    end
+end
+
+---@param xmlFile XMLFile
+---@param key string
+function ToDoManager:saveTodoEditToXMLFile(xmlFile, key)
+    local localFarm = self:getLocalFarmId()
+    if localFarm ~= nil then
+        local state = self.todoEditByFarmId[localFarm]
+        local defaultAllow = true
+        if state ~= nil then
+            defaultAllow = state.defaultAllow ~= false
+        elseif FieldAdvisorSettings ~= nil then
+            defaultAllow = FieldAdvisorSettings.todoEditDefaultAllow ~= false
+        end
+        xmlFile:setValue(key .. "#workersMayEditTodos", defaultAllow == true)
+    end
+
+    local farmIds = {}
+    for farmId in pairs(self.todoEditByFarmId) do
+        farmIds[#farmIds + 1] = farmId
+    end
+    table.sort(farmIds)
+
+    for index, farmId in ipairs(farmIds) do
+        local state = self.todoEditByFarmId[farmId]
+        local farmKey = string.format("%s.farmTodoEdit(%d)", key, index - 1)
+        xmlFile:setValue(farmKey .. "#farmId", farmId)
+        xmlFile:setValue(farmKey .. "#defaultAllow", state.defaultAllow ~= false)
+
+        local userIds = {}
+        for uniqueUserId in pairs(state.byUniqueUserId) do
+            userIds[#userIds + 1] = uniqueUserId
+        end
+        table.sort(userIds)
+
+        for userIndex, uniqueUserId in ipairs(userIds) do
+            local userKey = string.format("%s.user(%d)", farmKey, userIndex - 1)
+            xmlFile:setValue(userKey .. "#uniqueUserId", uniqueUserId)
+            xmlFile:setValue(userKey .. "#mayEdit", state.byUniqueUserId[uniqueUserId] == true)
+        end
+    end
+end
+
+---@param xmlFile XMLFile
+---@param key string
 function ToDoManager:loadFromXMLFile(xmlFile, key)
     if xmlFile == nil or key == nil then
         return
     end
 
     self.manualTasks = {}
+    self.todoEditByFarmId = {}
 
     local nextId = xmlFile:getValue(key .. "#nextTaskId")
     self.nextTaskId = math.max(1, tonumber(nextId) or 1)
@@ -1771,6 +1967,8 @@ function ToDoManager:loadFromXMLFile(xmlFile, key)
     if FieldAdvisorSettings ~= nil then
         FieldAdvisorSettings.loadFromXMLFile(xmlFile, key)
     end
+
+    self:loadTodoEditFromXMLFile(xmlFile, key)
 
     if FieldPlannedCrop ~= nil then
         FieldPlannedCrop.loadFromXMLFile(xmlFile, key)
@@ -1893,6 +2091,8 @@ function ToDoManager:saveToXMLFile(xmlFile, key, usedModNames)
     if FieldPlannedCrop ~= nil then
         FieldPlannedCrop.saveToXMLFile(xmlFile, key)
     end
+
+    self:saveTodoEditToXMLFile(xmlFile, key)
 
     local sortedTasks = self:getAllManualTasks()
     table.sort(sortedTasks, function(a, b)

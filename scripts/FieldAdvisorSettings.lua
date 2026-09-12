@@ -120,8 +120,8 @@ function FieldAdvisorSettings.migrateWorkersMayEditTodosFlag(workersFlag)
 end
 
 function FieldAdvisorSettings.toggleWorkersMayEditTodos()
-    FieldAdvisorSettings.workersMayEditTodos = not FieldAdvisorSettings.isWorkersMayEditTodos()
-    return FieldAdvisorSettings.workersMayEditTodos
+    FieldAdvisorSettings.setWorkersMayEditTodos(not FieldAdvisorSettings.isWorkersMayEditTodos())
+    return FieldAdvisorSettings.isWorkersMayEditTodos()
 end
 
 ---@return string
