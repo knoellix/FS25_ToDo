@@ -1815,6 +1815,10 @@ function ToDoManager:update(dt)
         end
     end
 
+    if FieldToDoHudOverlay ~= nil and FieldToDoHudOverlay.instance ~= nil then
+        FieldToDoHudOverlay.instance:update(dt)
+    end
+
     self.autoCheckTimer = self.autoCheckTimer + dt
     if self.autoCheckTimer < ToDoManager.AUTO_CHECK_INTERVAL_MS then
         return

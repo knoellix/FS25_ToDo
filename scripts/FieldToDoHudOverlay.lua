@@ -267,6 +267,155 @@ function FieldToDoHudOverlay:calcPanelHeight(rowCount)
         + FieldToDoHudOverlay.PADDING * 2
 end
 
+function FieldToDoHudOverlay:clearMouseInteractionState()
+    self.dragActive = false
+    self.dragMoved = false
+    self.mouseDown = false
+    self.mouseDownOnHeader = false
+    self.mouseDownRowIndex = nil
+    self.mouseDownX = nil
+    self.mouseDownY = nil
+end
+
+function FieldToDoHudOverlay:isMouseCursorVisible()
+    if g_inputBinding == nil then
+        return false
+    end
+    local ib = g_inputBinding
+    if ib.getShowMouseCursor ~= nil then
+        local ok, shown = pcall(ib.getShowMouseCursor, ib)
+        if ok then
+            return shown == true
+        end
+    end
+    if ib.showMouseCursor ~= nil then
+        return ib.showMouseCursor == true
+    end
+    -- Fallback: if last mouse pos exists and HUD can draw, allow interaction
+    -- (AutoDrive-style unlock usually sets showMouseCursor; without it, skip).
+    return false
+end
+
+function FieldToDoHudOverlay:getMouseState()
+    if g_inputBinding == nil then
+        return nil
+    end
+    local x = g_inputBinding.mousePosXLast
+    local y = g_inputBinding.mousePosYLast
+    if x == nil or y == nil then
+        return nil
+    end
+    local down = false
+    if Input ~= nil and Input.MOUSE_BUTTON_LEFT ~= nil and Input.isMouseButtonPressed ~= nil then
+        local ok, pressed = pcall(Input.isMouseButtonPressed, Input.MOUSE_BUTTON_LEFT)
+        if ok then
+            down = pressed == true
+        end
+    end
+    return { x = x, y = y, down = down }
+end
+
+function FieldToDoHudOverlay:tryCompleteRow(rowIndex)
+    local row = self.displayRows[rowIndex]
+    if row == nil or row.taskId == nil then
+        return
+    end
+    if FieldToDoPermissions == nil or not FieldToDoPermissions.canEditLocal() then
+        if FieldToDoLog ~= nil then
+            FieldToDoLog.info(FieldToDoL10n.getText(
+                "ftdl_edit_denied",
+                "No permission to change to-dos"
+            ))
+        end
+        return
+    end
+    if g_currentMission == nil or g_currentMission.fieldToDoList == nil then
+        return
+    end
+    g_currentMission.fieldToDoList:toggleManualTask(row.taskId)
+end
+
+function FieldToDoHudOverlay:update(dt)
+    if not self:canDraw() or not self:isMouseCursorVisible() then
+        self:clearMouseInteractionState()
+        return
+    end
+
+    local mouse = self:getMouseState()
+    if mouse == nil then
+        return
+    end
+
+    local panelW = FieldToDoHudOverlay.PANEL_W
+    local headerH = FieldToDoHudOverlay.HEADER_H
+    local rowH = FieldToDoHudOverlay.ROW_H
+    local numRows = math.min(#self.displayRows, FieldToDoHudOverlay.MAX_ENTRIES)
+    local panelH = self.lastPanelH
+    if panelH == nil or panelH <= 0 then
+        panelH = self:calcPanelHeight(numRows == 0 and 1 or numRows)
+    end
+    local px = self.panelX or FieldToDoHudOverlay.PANEL_X
+    local py = self.panelY or FieldToDoHudOverlay.PANEL_Y
+
+    local wasDown = self.mouseDown == true
+    local down = mouse.down == true
+
+    if down and not wasDown then
+        self.dragActive = false
+        self.dragMoved = false
+        self.mouseDownOnHeader = false
+        self.mouseDownRowIndex = nil
+        self.mouseDownX = mouse.x
+        self.mouseDownY = mouse.y
+
+        local hx, hy, hw, hh = FieldToDoHudOverlay.getHeaderRect(px, py, panelW, panelH, headerH)
+        if FieldToDoHudOverlay.pointInRect(mouse.x, mouse.y, hx, hy, hw, hh) then
+            self.mouseDownOnHeader = true
+            self.dragOffsetX = mouse.x - px
+            self.dragOffsetY = mouse.y - py
+        else
+            for index = 1, numRows do
+                local rx, ry, rw, rh = FieldToDoHudOverlay.getRowRect(
+                    px, py, panelW, panelH, headerH, rowH, index
+                )
+                if FieldToDoHudOverlay.pointInRect(mouse.x, mouse.y, rx, ry, rw, rh) then
+                    self.mouseDownRowIndex = index
+                    break
+                end
+            end
+        end
+    end
+
+    if down and self.mouseDownOnHeader then
+        local dx = mouse.x - (self.mouseDownX or mouse.x)
+        local dy = mouse.y - (self.mouseDownY or mouse.y)
+        local dist = math.sqrt(dx * dx + dy * dy)
+        if dist > FieldToDoHudOverlay.DRAG_MOVE_THRESHOLD then
+            self.dragActive = true
+            self.dragMoved = true
+        end
+        if self.dragActive then
+            self.panelX = mouse.x - self.dragOffsetX
+            self.panelY = mouse.y - self.dragOffsetY
+            self.panelX, self.panelY = FieldToDoHudOverlay.clampPanelPosition(
+                self.panelX, self.panelY, panelW, panelH, FieldToDoHudOverlay.PANEL_MARGIN
+            )
+            self.positionDirty = true
+        end
+    end
+
+    if not down and wasDown then
+        if self.dragMoved then
+            self:savePositionToDisk()
+        elseif self.mouseDownRowIndex ~= nil and not self.dragMoved then
+            self:tryCompleteRow(self.mouseDownRowIndex)
+        end
+        self:clearMouseInteractionState()
+    else
+        self.mouseDown = down
+    end
+end
+
 function FieldToDoHudOverlay:canDraw()
     if not self.isVisible or not self.isInitialized then
         return false
