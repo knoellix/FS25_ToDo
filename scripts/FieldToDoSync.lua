@@ -19,6 +19,13 @@
 FieldToDoSync = {}
 FieldToDoSync.SCHEMA_VERSION = 2
 
+---@param version number|nil
+---@return boolean
+function FieldToDoSync.isCompatibleSchemaVersion(version)
+    version = tonumber(version)
+    return version ~= nil and version == FieldToDoSync.SCHEMA_VERSION
+end
+
 FieldToDoSync.OP = {
     ADD_MANUAL = 1,
     ADD_FIELD = 2,
@@ -698,6 +705,7 @@ function FieldToDoSync.handleRequest(op, payload, userId, connection)
 
     local manager = FieldToDoSync.getManager()
     if manager == nil then
+        FieldToDoSync.sendDeny(connection, op, "no_manager")
         return
     end
 
@@ -730,6 +738,12 @@ function FieldToDoSync.applyNotify(op, payload)
                 tostring(payload.reason or "?")
             )
         end
+        if FieldToDoInGameMenuIntegration ~= nil and FieldToDoInGameMenuIntegration.menuScreen ~= nil then
+            local screen = FieldToDoInGameMenuIntegration.menuScreen
+            if screen.notifyEditDenied ~= nil then
+                pcall(screen.notifyEditDenied, screen)
+            end
+        end
         return
     end
 
@@ -739,6 +753,16 @@ function FieldToDoSync.applyNotify(op, payload)
     end
 
     local notifyFarmId = tonumber(payload.farmId)
+    local localFarm = nil
+    if manager.getLocalFarmId ~= nil then
+        localFarm = manager:getLocalFarmId()
+    end
+
+    -- Multi-farm safety: never apply another farm's notify into this peer's state.
+    if localFarm ~= nil and notifyFarmId ~= nil and notifyFarmId ~= localFarm then
+        return
+    end
+
     FieldToDoSync.applyOp(manager, op, payload, notifyFarmId, nil)
 end
 
@@ -836,12 +860,34 @@ function FieldToDoSync.applyState(state)
         return
     end
 
+    if state.schemaVersion ~= nil
+        and not FieldToDoSync.isCompatibleSchemaVersion(state.schemaVersion) then
+        if FieldToDoLog ~= nil then
+            FieldToDoLog.warning(
+                "FieldToDoSync.applyState: schema mismatch (got %s want %s)",
+                tostring(state.schemaVersion),
+                tostring(FieldToDoSync.SCHEMA_VERSION)
+            )
+        end
+        return
+    end
+
     local manager = FieldToDoSync.getManager()
     if manager == nil or manager.manualTasks == nil then
         return
     end
 
     local farmId = tonumber(state.farmId)
+    local localFarm = nil
+    if manager.getLocalFarmId ~= nil then
+        localFarm = manager:getLocalFarmId()
+    end
+
+    -- Ignore full-state for a different farm (or empty farm before join).
+    if localFarm ~= nil and (farmId == nil or farmId ~= localFarm) then
+        return
+    end
+
     if farmId ~= nil then
         for taskId, task in pairs(manager.manualTasks) do
             if tonumber(task.farmId) == farmId then

@@ -18,6 +18,11 @@ All notable changes to **FS25_FieldToDoList** are documented here.
 ### Fixed
 
 - **MP membership deny:** server edit gate resolves farm membership via `userBelongsToFarm`; remote requests with unknown membership are denied instead of falling back to host `getLocalFarmId()`.
+- **Farm-scoped edit grants on server:** `canEditFarmTodos` reads `ToDoManager.todoEditByFarmId` (not only the UI settings cache); unresolved remote UIDs fail closed.
+- **Notify/state farm guard:** clients ignore foreign-farm notifies and full-state payloads; listen-server host skips notify re-apply via `getIsServer()`.
+- **Sidecar save merge:** foreign farms' `farmTodoEdit` maps are preserved from disk like tasks; clients never write the sidecar (`canPersistSidecar`).
+- **Edit UI freshness:** DENY refreshes button disable state; online member list refreshes during deferred menu open; „Alle Worker“ also updates `defaultAllow`; dialog confirm callbacks re-check edit permission.
+- **Schema/ops:** request/notify/state reject mismatched schema versions; delete notify is idempotent; orphan tasks without `farmId` migrate to the local farm.
 
 ### Changed
 

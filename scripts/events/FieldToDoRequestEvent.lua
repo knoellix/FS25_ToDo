@@ -30,6 +30,17 @@ end
 
 function FieldToDoRequestEvent:readStream(streamId, connection)
     local version = streamReadUInt8(streamId)
+    if FieldToDoSync.isCompatibleSchemaVersion ~= nil
+        and not FieldToDoSync.isCompatibleSchemaVersion(version) then
+        if FieldToDoLog ~= nil then
+            FieldToDoLog.warning(
+                "FieldToDoRequestEvent: schema mismatch (got %s want %s)",
+                tostring(version),
+                tostring(FieldToDoSync.SCHEMA_VERSION)
+            )
+        end
+        return
+    end
     self.op = streamReadUInt8(streamId)
     self.payload = FieldToDoSync.readPayload(streamId, self.op)
     self:run(connection)

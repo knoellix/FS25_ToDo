@@ -302,6 +302,8 @@ function FieldToDoMenuFrame:notifyEditDenied()
     if FieldToDoLog ~= nil then
         FieldToDoLog.info(message)
     end
+
+    self:updateEditPermissionUi()
 end
 
 ---@return boolean
@@ -528,6 +530,7 @@ function FieldToDoMenuFrame:onFrameOpen()
     self:bindGuiControls()
     self:applyMiniButtonIcons()
     self:updateOptionalColumns()
+    self:updateEditPermissionUi()
     self:finalizeListLayout()
     if manager ~= nil and manager.consumeOwnedFieldsOverviewStale ~= nil and manager:consumeOwnedFieldsOverviewStale() then
         self:refreshLists(true)
@@ -616,10 +619,21 @@ function FieldToDoMenuFrame:onFrameUpdate(dt)
             self:refreshManualTaskList(true, true)
             self:resetFieldSuggestionIndices()
             self:updateOptionalColumns()
+            self:updateEditPermissionUi()
             self:refreshLists(false)
         end
         self:syncOwnedFieldsFromScan()
         self:updateFieldScanIndicator(dt, manager)
+    end
+
+    -- Keep online member grant list fresh even during deferred first-open reload.
+    self.listRefreshTimer = (self.listRefreshTimer or 0) + dt
+    local memberRefreshDue = self.listRefreshTimer >= 1000
+    if memberRefreshDue then
+        self.listRefreshTimer = 0
+        if self:canChangeWorkersEditSetting() then
+            self:refreshEditMemberListUi()
+        end
     end
 
     if self.deferredListReload then
@@ -644,18 +658,7 @@ function FieldToDoMenuFrame:onFrameUpdate(dt)
         return
     end
 
-    self.listRefreshTimer = self.listRefreshTimer + dt
-    if self.listRefreshTimer < 1000 then
-        return
-    end
-
-    self.listRefreshTimer = 0
-
-    if self:canChangeWorkersEditSetting() then
-        self:refreshEditMemberListUi()
-    end
-
-    self.fieldRescanTimer = (self.fieldRescanTimer or 0) + 1000
+    self.fieldRescanTimer = (self.fieldRescanTimer or 0) + dt
     local rescanMs = ToDoManager.OWNED_FIELDS_MENU_RESCAN_MS or 15000
     if self.fieldRescanTimer >= rescanMs then
         self.fieldRescanTimer = 0
@@ -1517,6 +1520,12 @@ function FieldToDoMenuFrame:onPlannedCropPicked(...)
         return
     end
 
+    if not self:requireEditPermission() then
+        self.pendingFieldForPlannedCrop = nil
+        self.pendingPlannedCropEntries = nil
+        return
+    end
+
     self.pendingFieldForPlannedCrop = nil
     self.pendingPlannedCropEntries = nil
 
@@ -1895,6 +1904,12 @@ function FieldToDoMenuFrame:onFieldTaskActionPicked(...)
         return
     end
 
+    if not self:requireEditPermission() then
+        self.pendingFieldForPicker = nil
+        self.pendingFieldTaskActions = nil
+        return
+    end
+
     self.pendingFieldForPicker = nil
     self.pendingFieldTaskActions = nil
 
@@ -1947,6 +1962,10 @@ function FieldToDoMenuFrame:onAddFieldTaskDialog(text, clickOk)
     self.pendingFieldForCustomTask = nil
 
     if not clickOk or string.isNilOrWhitespace(text) or field == nil then
+        return
+    end
+
+    if not self:requireEditPermission() then
         return
     end
 
@@ -2039,6 +2058,10 @@ function FieldToDoMenuFrame:onAddTaskDialog(text, clickOk)
         return
     end
 
+    if not self:requireEditPermission() then
+        return
+    end
+
     local manager = self:getManager()
     if manager == nil then
         return
@@ -2059,6 +2082,10 @@ function FieldToDoMenuFrame:onEditTaskDialog(text, clickOk)
     self.editingTaskId = nil
 
     if not clickOk or string.isNilOrWhitespace(text) or taskId == nil then
+        return
+    end
+
+    if not self:requireEditPermission() then
         return
     end
 
@@ -2139,6 +2166,10 @@ function FieldToDoMenuFrame:onConfirmDeleteTask(yes)
     self.deletingTaskId = nil
 
     if not yes or taskId == nil then
+        return
+    end
+
+    if not self:requireEditPermission() then
         return
     end
 

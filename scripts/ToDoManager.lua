@@ -346,7 +346,86 @@ function ToDoManager:syncForeignFarmTasksFromDisk(savegameDirectory)
     end
 end
 
---- Legacy tasks without farmId stay visible to every farm until rewritten.
+--- Before writing: keep other farms' todoEdit maps from disk (listen-server multi-farm).
+---@param savegameDirectory string
+function ToDoManager:syncForeignFarmTodoEditFromDisk(savegameDirectory)
+    local localFarm = self:getLocalFarmId()
+    if localFarm == nil or string.isNilOrWhitespace(savegameDirectory) then
+        return
+    end
+
+    local filePath = savegameDirectory .. "/" .. ToDoManager.XML_FILENAME
+    if not fileExists(filePath) then
+        return
+    end
+
+    ToDoManager.initXMLSchema()
+    local xmlFile = XMLFile.load("fieldToDoListEditMerge", filePath, xmlSchema)
+    if xmlFile == nil then
+        return
+    end
+
+    local diskForeign = {}
+    local index = 0
+    while true do
+        local farmKey = string.format("%s.farmTodoEdit(%d)", ToDoManager.XML_KEY, index)
+        local farmId = tonumber(xmlFile:getValue(farmKey .. "#farmId"))
+        if farmId == nil then
+            break
+        end
+
+        if farmId ~= localFarm then
+            local defaultAllow = xmlFile:getValue(farmKey .. "#defaultAllow")
+            local state = {
+                defaultAllow = defaultAllow ~= false,
+                byUniqueUserId = {},
+            }
+
+            local userIndex = 0
+            while true do
+                local userKey = string.format("%s.user(%d)", farmKey, userIndex)
+                local uniqueUserId = xmlFile:getValue(userKey .. "#uniqueUserId")
+                if uniqueUserId == nil or uniqueUserId == "" then
+                    break
+                end
+
+                state.byUniqueUserId[tostring(uniqueUserId)] = xmlFile:getValue(userKey .. "#mayEdit") == true
+                userIndex = userIndex + 1
+            end
+
+            diskForeign[farmId] = state
+        end
+
+        index = index + 1
+    end
+    xmlFile:delete()
+
+    for farmId in pairs(self.todoEditByFarmId) do
+        if farmId ~= localFarm then
+            self.todoEditByFarmId[farmId] = nil
+        end
+    end
+
+    for farmId, state in pairs(diskForeign) do
+        self.todoEditByFarmId[farmId] = state
+    end
+end
+
+--- Assign local farmId to legacy tasks missing it (once a local farm is known).
+function ToDoManager:migrateOrphanTaskFarmIds()
+    local localFarm = self:getLocalFarmId()
+    if localFarm == nil then
+        return
+    end
+
+    for _, task in pairs(self.manualTasks) do
+        if task.farmId == nil then
+            task.farmId = localFarm
+        end
+    end
+end
+
+--- Tasks without farmId are hidden once a local farm is known (assign on load/save).
 ---@param task table|nil
 ---@return boolean
 function ToDoManager:taskBelongsToLocalFarm(task)
@@ -355,11 +434,11 @@ function ToDoManager:taskBelongsToLocalFarm(task)
     end
 
     local taskFarm = tonumber(task.farmId)
+    local localFarm = self:getLocalFarmId()
     if taskFarm == nil then
-        return true
+        return localFarm == nil
     end
 
-    local localFarm = self:getLocalFarmId()
     if localFarm == nil then
         return true
     end
@@ -1105,7 +1184,11 @@ function ToDoManager:applyDeleteTask(payload, farmId, userId)
     end
 
     local task = self.manualTasks[taskId]
-    if task == nil or not self:taskBelongsToFarm(task, farmId) then
+    -- Idempotent: already gone counts as success (avoids deny storms on lagging clients).
+    if task == nil then
+        return { taskId = taskId, farmId = farmId }
+    end
+    if not self:taskBelongsToFarm(task, farmId) then
         return nil
     end
 
@@ -1283,7 +1366,11 @@ function ToDoManager:applySetWorkOrderPreset(payload, farmId, userId)
         return nil
     end
 
-    FieldAdvisorSettings.setWorkOrderPreset(payload.presetKey)
+    farmId = tonumber(farmId) or self:getLocalFarmId()
+    local localFarm = self:getLocalFarmId()
+    if localFarm == nil or farmId == localFarm then
+        FieldAdvisorSettings.setWorkOrderPreset(payload.presetKey)
+    end
     self:markManualTasksDirty()
     self:requestDebouncedSave()
 
@@ -1300,7 +1387,11 @@ function ToDoManager:applySetOrganicMultiPass(payload, farmId, userId)
         return nil
     end
 
-    FieldAdvisorSettings.setOrganicMultiPassEnabled(payload.enabled == true)
+    farmId = tonumber(farmId) or self:getLocalFarmId()
+    local localFarm = self:getLocalFarmId()
+    if localFarm == nil or farmId == localFarm then
+        FieldAdvisorSettings.setOrganicMultiPassEnabled(payload.enabled == true)
+    end
     self:markManualTasksDirty()
     self:requestDebouncedSave()
 
@@ -1317,7 +1408,11 @@ function ToDoManager:applySetMulching(payload, farmId, userId)
         return nil
     end
 
-    FieldAdvisorSettings.setMulchingEnabled(payload.enabled ~= false)
+    farmId = tonumber(farmId) or self:getLocalFarmId()
+    local localFarm = self:getLocalFarmId()
+    if localFarm == nil or farmId == localFarm then
+        FieldAdvisorSettings.setMulchingEnabled(payload.enabled ~= false)
+    end
     self:markManualTasksDirty()
     self:requestDebouncedSave()
 
@@ -1330,13 +1425,9 @@ end
 ---@return table|nil
 function ToDoManager:applySetWorkersMayEdit(payload, farmId, userId)
     payload = payload or {}
-    if FieldAdvisorSettings == nil then
-        return nil
-    end
 
     farmId = tonumber(farmId) or self:getLocalFarmId()
     local enabled = payload.enabled ~= false
-    FieldAdvisorSettings.setWorkersMayEditTodos(enabled)
     if farmId ~= nil then
         local state = self:getTodoEditStateForFarm(farmId)
         state.defaultAllow = enabled
@@ -1383,6 +1474,7 @@ function ToDoManager:applySetAllWorkersTodoEdit(payload, farmId, userId)
     local enabled = payload.enabled == true
     local ids = payload.uniqueUserIds or {}
     local state = self:getTodoEditStateForFarm(farmId)
+    state.defaultAllow = enabled
     for i = 1, #ids do
         local uid = tostring(ids[i])
         if uid ~= "" then
@@ -1990,6 +2082,7 @@ function ToDoManager:loadFromXMLFile(xmlFile, key)
         index = index + 1
     end
 
+    self:migrateOrphanTaskFarmIds()
     self:normalizeTaskSortIndices()
     self:pruneCompletedTasks()
     self:normalizeTaskSortIndices()
@@ -2137,7 +2230,9 @@ function ToDoManager:saveToSavegameDirectory(savegameDirectory)
         return false
     end
 
+    self:migrateOrphanTaskFarmIds()
     self:syncForeignFarmTasksFromDisk(savegameDirectory)
+    self:syncForeignFarmTodoEditFromDisk(savegameDirectory)
 
     ToDoManager.initXMLSchema()
 
@@ -2270,6 +2365,10 @@ end
 
 local function onSaveMission(missionInfo)
     if not isLoaded() or missionInfo == nil or missionInfo.isValid ~= true then
+        return
+    end
+
+    if todoManager.canPersistSidecar ~= nil and not todoManager:canPersistSidecar() then
         return
     end
 

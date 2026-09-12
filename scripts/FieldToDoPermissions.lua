@@ -136,6 +136,58 @@ function FieldToDoPermissions.resolveUniqueUserId(userId)
     return nil
 end
 
+--- Farm-scoped grant lookup. Prefers ToDoManager.todoEditByFarmId (server authority).
+---@param farmId number|nil
+---@param uniqueUserId string|nil
+---@param explicitUserId boolean|nil true when caller passed a remote userId
+---@return boolean
+function FieldToDoPermissions.getTodoEditAllowed(farmId, uniqueUserId, explicitUserId)
+    farmId = tonumber(farmId)
+
+    -- Headless fixtures inject grants via FieldAdvisorSettings + _testOverride.
+    if FieldToDoPermissions._testOverride ~= nil then
+        if FieldAdvisorSettings ~= nil and FieldAdvisorSettings.getTodoEditAllowedForUniqueUser ~= nil then
+            return FieldAdvisorSettings.getTodoEditAllowedForUniqueUser(uniqueUserId)
+        end
+        return true
+    end
+
+    local manager = nil
+    if FieldToDoSync ~= nil and FieldToDoSync.getManager ~= nil then
+        manager = FieldToDoSync.getManager()
+    elseif g_currentMission ~= nil then
+        manager = g_currentMission.fieldToDoList
+    end
+
+    if manager ~= nil and farmId ~= nil and manager.getTodoEditStateForFarm ~= nil then
+        local state = manager:getTodoEditStateForFarm(farmId)
+        if state ~= nil then
+            if (uniqueUserId == nil or uniqueUserId == "") and explicitUserId == true then
+                return false
+            end
+            if uniqueUserId == nil or uniqueUserId == "" then
+                return state.defaultAllow ~= false
+            end
+            local mapped = state.byUniqueUserId[tostring(uniqueUserId)]
+            if mapped == nil then
+                return state.defaultAllow ~= false
+            end
+            return mapped == true
+        end
+    end
+
+    -- UI / SP cache fallback when farm map not loaded yet.
+    if FieldAdvisorSettings ~= nil and FieldAdvisorSettings.getTodoEditAllowedForUniqueUser ~= nil then
+        return FieldAdvisorSettings.getTodoEditAllowedForUniqueUser(uniqueUserId)
+    end
+
+    -- Server without grant source: fail-closed. SP: allow.
+    if g_server ~= nil then
+        return false
+    end
+    return true
+end
+
 function FieldToDoPermissions.canEditFarmTodos(farmId, userId)
     if not FieldToDoPermissions.canAutoCompleteFarmTodos(farmId, userId) then
         return false
@@ -143,11 +195,9 @@ function FieldToDoPermissions.canEditFarmTodos(farmId, userId)
     if FieldToDoPermissions.isFarmManager(farmId, userId) then
         return true
     end
+    local explicitUserId = userId ~= nil
     local uniqueId = FieldToDoPermissions.resolveUniqueUserId(userId)
-    if FieldAdvisorSettings == nil or FieldAdvisorSettings.getTodoEditAllowedForUniqueUser == nil then
-        return true
-    end
-    return FieldAdvisorSettings.getTodoEditAllowedForUniqueUser(uniqueId)
+    return FieldToDoPermissions.getTodoEditAllowed(farmId, uniqueId, explicitUserId)
 end
 
 function FieldToDoPermissions.canManageTodoEditGrants(farmId, userId)
