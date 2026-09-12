@@ -7,10 +7,11 @@ All notable changes to **FS25_FieldToDoList** are documented here.
 ### Fixed
 
 - Field To-Do ESC tab scrolls into view when the tab strip overflows (best-effort via `pagingTabList.scrollTo` / `setSelectedIndex`; no GUI array mutation).
+- ESC tab bar mouse-wheel scroll when cursor is over the tab strip (best-effort: vanilla `mouseEvent` preferred; `setSliderValue` fallback; wired via `Input.MOUSE_BUTTON_WHEEL_*` when available).
 
 ### Known limitations
 
-- ESC tab bar mouse-wheel scroll not yet implemented (Giants input API TBD).
+- Tab-strip wheel scroll is best-effort only; if `pagingTabList` exposes `mouseEvent`, vanilla handles wheel and the slider fallback is skipped. Not verified in-game with many tab mods.
 
 ## [0.1.0.8] — 2026-09-10
 

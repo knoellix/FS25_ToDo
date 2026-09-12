@@ -372,6 +372,146 @@ function FieldToDoInGameMenuIntegration.ensureTabVisible(inGameMenu, screen)
     return false
 end
 
+---@return boolean
+local function isTabWheelInputAvailable()
+    return Input ~= nil
+        and Input.MOUSE_BUTTON_WHEEL_UP ~= nil
+        and Input.MOUSE_BUTTON_WHEEL_DOWN ~= nil
+        and type(Input.isMouseButtonPressed) == "function"
+end
+
+--- Wheel delta for this frame: -1 up, +1 down, 0 none (SmoothListElement convention).
+---@return number
+local function readMouseWheelDelta()
+    if not isTabWheelInputAvailable() then
+        return 0
+    end
+
+    if Input.isMouseButtonPressed(Input.MOUSE_BUTTON_WHEEL_UP) then
+        return -1
+    end
+    if Input.isMouseButtonPressed(Input.MOUSE_BUTTON_WHEEL_DOWN) then
+        return 1
+    end
+
+    return 0
+end
+
+---@param tabList table
+---@param mouseX number
+---@param mouseY number
+---@return boolean
+local function isMouseOverGuiElement(tabList, mouseX, mouseY)
+    if tabList == nil or mouseX == nil or mouseY == nil then
+        return false
+    end
+
+    if type(tabList.getIsVisible) == "function" then
+        local ok, visible = pcall(tabList.getIsVisible, tabList)
+        if ok and visible ~= true then
+            return false
+        end
+    elseif tabList.isVisible == false then
+        return false
+    end
+
+    local absX, absY, absW, absH
+    if tabList.absPosition ~= nil and tabList.absSize ~= nil then
+        absX = tabList.absPosition[1]
+        absY = tabList.absPosition[2]
+        absW = tabList.absSize[1]
+        absH = tabList.absSize[2]
+    else
+        return false
+    end
+
+    if GuiUtils ~= nil and type(GuiUtils.checkOverlayOverlap) == "function" then
+        local ok, overlap = pcall(
+            GuiUtils.checkOverlayOverlap,
+            mouseX,
+            mouseY,
+            absX,
+            absY,
+            absW,
+            absH
+        )
+        if ok then
+            return overlap == true
+        end
+    end
+
+    return mouseX > absX and mouseX < absX + absW and mouseY > absY and mouseY < absY + absH
+end
+
+---@param inGameMenu table|nil
+---@return boolean
+local function isMouseOverTabList(inGameMenu)
+    if inGameMenu == nil or g_inputBinding == nil then
+        return false
+    end
+
+    local mouseX = g_inputBinding.mousePosXLast
+    local mouseY = g_inputBinding.mousePosYLast
+    if mouseX == nil or mouseY == nil then
+        return false
+    end
+
+    return isMouseOverGuiElement(inGameMenu.pagingTabList, mouseX, mouseY)
+end
+
+--- Best-effort horizontal scroll on the ESC tab strip (slider fallback only).
+---@param inGameMenu table|nil
+---@param delta number|nil
+function FieldToDoInGameMenuIntegration.onTabListMouseWheel(inGameMenu, delta)
+    if inGameMenu == nil or delta == nil or delta == 0 then
+        return
+    end
+
+    local tabList = inGameMenu.pagingTabList
+    if tabList == nil then
+        return
+    end
+
+    if type(tabList.mouseEvent) == "function" then
+        -- Prefer letting list handle wheel if API exists; otherwise adjust slider.
+        return
+    end
+
+    if type(tabList.setSliderValue) == "function" and type(tabList.getSliderValue) == "function" then
+        local ok, value = pcall(tabList.getSliderValue, tabList)
+        if ok and type(value) == "number" then
+            pcall(tabList.setSliderValue, tabList, value - delta)
+        end
+    end
+end
+
+--- Poll wheel input while ESC is open and cursor is over the tab strip.
+---@param inGameMenu table|nil
+function FieldToDoInGameMenuIntegration.pollTabListMouseWheel(inGameMenu)
+    if not FieldToDoInGameMenuIntegration._tabWheelInputAvailable then
+        return
+    end
+
+    if inGameMenu == nil or g_gui == nil then
+        return
+    end
+
+    if g_gui.currentGui ~= inGameMenu then
+        return
+    end
+
+    if not isMouseOverTabList(inGameMenu) then
+        return
+    end
+
+    local delta = readMouseWheelDelta()
+    if delta ~= 0 then
+        pcall(FieldToDoInGameMenuIntegration.onTabListMouseWheel, inGameMenu, delta)
+    end
+end
+
+FieldToDoInGameMenuIntegration._tabWheelInputAvailable = isTabWheelInputAvailable()
+
 ---@param modDirectory string
 ---@return boolean
 function FieldToDoInGameMenuIntegration.performRegistration(modDirectory)
@@ -562,6 +702,9 @@ end
 if InGameMenu ~= nil and InGameMenu.update ~= nil then
     InGameMenu.update = Utils.appendedFunction(InGameMenu.update, function(menu, dt)
         FieldToDoInGameMenuIntegration.updateMenuFrame(menu, dt)
+        if FieldToDoInGameMenuIntegration._tabWheelInputAvailable then
+            pcall(FieldToDoInGameMenuIntegration.pollTabListMouseWheel, menu)
+        end
     end)
 end
 
