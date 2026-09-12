@@ -62,6 +62,66 @@ function FieldToDoPermissions.userBelongsToFarm(farmId, userId)
         end
     end
 
+    -- Fallback: farm user lists may contain ids or User objects (same as getActiveUsers).
+    if farm ~= nil then
+        local list = nil
+        if farm.getUsers ~= nil then
+            local ok, users = pcall(farm.getUsers, farm)
+            if ok then
+                list = users
+            end
+        end
+        if list == nil and farm.getActiveUsers ~= nil then
+            local ok, users = pcall(farm.getActiveUsers, farm)
+            if ok then
+                list = users
+            end
+        end
+        if type(list) == "table" then
+            for _, entry in pairs(list) do
+                local uid = FieldToDoPermissions.extractUserIdFromFarmUserEntry(entry)
+                if uid ~= nil and (uid == userId or tonumber(uid) == tonumber(userId)) then
+                    return true
+                end
+            end
+            return false
+        end
+    end
+
+    return nil
+end
+
+--- Extract numeric/string user id from farm user list entries (id or User object).
+---@param entry any
+---@return number|string|nil
+function FieldToDoPermissions.extractUserIdFromFarmUserEntry(entry)
+    if entry == nil then
+        return nil
+    end
+    if type(entry) == "number" or type(entry) == "string" then
+        return entry
+    end
+    if type(entry) ~= "table" then
+        return nil
+    end
+    if entry.getUserId ~= nil then
+        local ok, uid = pcall(entry.getUserId, entry)
+        if ok and uid ~= nil then
+            return uid
+        end
+    end
+    if entry.getId ~= nil then
+        local ok, uid = pcall(entry.getId, entry)
+        if ok and uid ~= nil and type(uid) ~= "table" then
+            return uid
+        end
+    end
+    if entry.userId ~= nil and type(entry.userId) ~= "table" then
+        return entry.userId
+    end
+    if entry.id ~= nil and type(entry.id) ~= "table" then
+        return entry.id
+    end
     return nil
 end
 
@@ -139,7 +199,7 @@ end
 --- Farm-scoped grant lookup. Prefers ToDoManager.todoEditByFarmId (server authority).
 ---@param farmId number|nil
 ---@param uniqueUserId string|nil
----@param explicitUserId boolean|nil true when caller passed a remote userId
+---@param explicitUserId boolean|nil true when caller passed a remote userId (unused; kept for call sites)
 ---@return boolean
 function FieldToDoPermissions.getTodoEditAllowed(farmId, uniqueUserId, explicitUserId)
     farmId = tonumber(farmId)
@@ -162,9 +222,8 @@ function FieldToDoPermissions.getTodoEditAllowed(farmId, uniqueUserId, explicitU
     if manager ~= nil and farmId ~= nil and manager.getTodoEditStateForFarm ~= nil then
         local state = manager:getTodoEditStateForFarm(farmId)
         if state ~= nil then
-            if (uniqueUserId == nil or uniqueUserId == "") and explicitUserId == true then
-                return false
-            end
+            -- Missing uniqueUserId: cannot apply per-user overrides → honor farm defaultAllow.
+            -- (Do not fail-closed here; dedicated servers often lack uniqueUserId APIs.)
             if uniqueUserId == nil or uniqueUserId == "" then
                 return state.defaultAllow ~= false
             end
@@ -181,7 +240,7 @@ function FieldToDoPermissions.getTodoEditAllowed(farmId, uniqueUserId, explicitU
         return FieldAdvisorSettings.getTodoEditAllowedForUniqueUser(uniqueUserId)
     end
 
-    -- Server without grant source: fail-closed. SP: allow.
+    -- No grant source at all: server fail-closed, client/SP allow.
     if g_server ~= nil then
         return false
     end

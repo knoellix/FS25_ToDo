@@ -502,13 +502,31 @@ function FieldToDoSync.resolveFarmIdForUser(userId)
                     return tonumber(farm.farmId)
                 end
             end
+
+            local list = nil
             if farm.getUsers ~= nil then
                 local ok, users = pcall(farm.getUsers, farm)
-                if ok and type(users) == "table" then
-                    for _, uid in pairs(users) do
-                        if tonumber(uid) == userId then
-                            return tonumber(farm.farmId)
-                        end
+                if ok then
+                    list = users
+                end
+            end
+            if list == nil and farm.getActiveUsers ~= nil then
+                local ok, users = pcall(farm.getActiveUsers, farm)
+                if ok then
+                    list = users
+                end
+            end
+            if type(list) == "table" then
+                for _, entry in pairs(list) do
+                    local uid = entry
+                    if FieldToDoPermissions ~= nil
+                        and FieldToDoPermissions.extractUserIdFromFarmUserEntry ~= nil then
+                        uid = FieldToDoPermissions.extractUserIdFromFarmUserEntry(entry)
+                    elseif type(entry) == "table" then
+                        uid = nil
+                    end
+                    if uid ~= nil and (tonumber(uid) == tonumber(userId) or uid == userId) then
+                        return tonumber(farm.farmId)
                     end
                 end
             end
@@ -624,6 +642,23 @@ function FieldToDoSync.executeOnServer(op, payload, farmId, userId)
     end
 
     if not FieldToDoSync.canExecuteOp(op, farmId, userId) then
+        local isManager = FieldToDoPermissions ~= nil
+            and FieldToDoPermissions.isFarmManager ~= nil
+            and FieldToDoPermissions.isFarmManager(farmId, userId)
+        local uniqueId = FieldToDoPermissions ~= nil
+            and FieldToDoPermissions.resolveUniqueUserId ~= nil
+            and FieldToDoPermissions.resolveUniqueUserId(userId)
+            or nil
+        if FieldToDoLog ~= nil then
+            FieldToDoLog.warning(
+                "FieldToDoSync: canExecuteOp=false op=%s farmId=%s userId=%s manager=%s uniqueUserId=%s",
+                tostring(op),
+                tostring(farmId),
+                tostring(userId),
+                tostring(isManager),
+                tostring(uniqueId)
+            )
+        end
         return false, "denied"
     end
 

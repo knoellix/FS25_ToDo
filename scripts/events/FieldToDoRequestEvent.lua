@@ -39,6 +39,9 @@ function FieldToDoRequestEvent:readStream(streamId, connection)
                 tostring(FieldToDoSync.SCHEMA_VERSION)
             )
         end
+        if FieldToDoSync.sendDeny ~= nil then
+            FieldToDoSync.sendDeny(connection, 0, "schema_mismatch")
+        end
         return
     end
     self.op = streamReadUInt8(streamId)
