@@ -10,6 +10,8 @@
 ---@class FieldToDoMenuFrame : TabbedMenuFrameElement
 ---@field taskList SmoothList
 ---@field fieldList SmoothList
+---@field editMemberList SmoothList
+---@field editMemberRows table[]
 ---@field categoryHeaderText Text
 ---@field selectedTaskId number|nil
 FieldToDoMenuFrame = {}
@@ -49,6 +51,7 @@ function FieldToDoMenuFrame.new()
     self.deferredListReloadTimer = 0
     self.deferredListReloadAttempts = 0
     self.fieldScanBlinkTimer = 0
+    self.editMemberRows = {}
 
     return self
 end
@@ -115,6 +118,10 @@ function FieldToDoMenuFrame:finalizeListLayout()
 
     if self.fieldList ~= nil and self.fieldList.updateAbsolutePosition ~= nil then
         self.fieldList:updateAbsolutePosition()
+    end
+
+    if self.editMemberList ~= nil and self.editMemberList.updateAbsolutePosition ~= nil then
+        self.editMemberList:updateAbsolutePosition()
     end
 
     if self.updateAbsolutePosition ~= nil then
@@ -213,6 +220,11 @@ function FieldToDoMenuFrame:onGuiSetupFinished()
         self.fieldList.delegate = self
     end
 
+    if self.editMemberList ~= nil then
+        self.editMemberList.dataSource = self
+        self.editMemberList.delegate = self
+    end
+
     self:updateSettingsWorkOrderLabel()
     self:applyMiniButtonIcons()
 end
@@ -302,10 +314,150 @@ function FieldToDoMenuFrame:requireEditPermission()
     return false
 end
 
+---@param userId number|string|nil
+---@return string
+function FieldToDoMenuFrame:resolveMemberNickname(userId)
+    local nickname = tostring(userId)
+
+    if g_currentMission == nil or g_currentMission.userManager == nil then
+        return nickname
+    end
+
+    local um = g_currentMission.userManager
+    if um.getUserByUserId == nil then
+        return nickname
+    end
+
+    local ok, user = pcall(um.getUserByUserId, um, userId)
+    if not ok or user == nil then
+        return nickname
+    end
+
+    if user.getNickname ~= nil then
+        local okNick, value = pcall(user.getNickname, user)
+        if okNick and value ~= nil and value ~= "" then
+            return tostring(value)
+        end
+    end
+
+    if user.getName ~= nil then
+        local okName, value = pcall(user.getName, user)
+        if okName and value ~= nil and value ~= "" then
+            return tostring(value)
+        end
+    end
+
+    return nickname
+end
+
+---@param label string
+---@return string
+function FieldToDoMenuFrame:shortToggleLabel(label)
+    if label == nil then
+        return "-"
+    end
+    return label:match(": (.+)$") or label
+end
+
+---@param row table|nil
+---@return string
+function FieldToDoMenuFrame:formatEditMemberToggleLabel(row)
+    if row == nil then
+        return "-"
+    end
+
+    if row.mayEdit then
+        return self:shortToggleLabel(FieldToDoL10n.getText("ftdl_edit_all_workers_on", "Alle Worker: an"))
+    end
+
+    return self:shortToggleLabel(FieldToDoL10n.getText("ftdl_edit_all_workers_off", "Alle Worker: aus"))
+end
+
+---@return table[]
+function FieldToDoMenuFrame:listOnlineFarmMembersForEditUi()
+    local rows = {}
+    local manager = self:getManager()
+    local farmId = manager ~= nil and manager:getLocalFarmId() or nil
+    if farmId == nil or g_farmManager == nil then
+        return rows
+    end
+
+    local farm = g_farmManager:getFarmById(farmId)
+    if farm == nil or farm.getActiveUsers == nil then
+        return rows
+    end
+
+    local ok, users = pcall(farm.getActiveUsers, farm)
+    if not ok or type(users) ~= "table" then
+        return rows
+    end
+
+    for _, userId in pairs(users) do
+        local uid = tonumber(userId) or userId
+        local uniqueId = FieldToDoPermissions.resolveUniqueUserId(uid)
+        local isManager = FieldToDoPermissions.isFarmManager(farmId, uid)
+        local mayEdit = isManager or FieldAdvisorSettings.getTodoEditAllowedForUniqueUser(uniqueId)
+        rows[#rows + 1] = {
+            userId = uid,
+            uniqueUserId = uniqueId,
+            nickname = self:resolveMemberNickname(uid),
+            isManager = isManager,
+            mayEdit = mayEdit,
+        }
+    end
+
+    if #rows == 0 then
+        local localUserId = nil
+        if g_currentMission ~= nil and g_currentMission.playerUserId ~= nil then
+            localUserId = g_currentMission.playerUserId
+        elseif g_localPlayer ~= nil and g_localPlayer.userId ~= nil then
+            localUserId = g_localPlayer.userId
+        end
+
+        if localUserId ~= nil then
+            local uniqueId = FieldToDoPermissions.resolveUniqueUserId(localUserId)
+            local isManager = FieldToDoPermissions.isFarmManager(farmId, localUserId)
+            local mayEdit = isManager or FieldAdvisorSettings.getTodoEditAllowedForUniqueUser(uniqueId)
+            rows[1] = {
+                userId = localUserId,
+                uniqueUserId = uniqueId,
+                nickname = self:resolveMemberNickname(localUserId),
+                isManager = isManager,
+                mayEdit = mayEdit,
+            }
+        end
+    end
+
+    return rows
+end
+
+---@return boolean
+function FieldToDoMenuFrame:areAllListedWorkersMayEdit()
+    local hasWorker = false
+    for _, row in ipairs(self.editMemberRows or {}) do
+        if not row.isManager then
+            hasWorker = true
+            if not row.mayEdit then
+                return false
+            end
+        end
+    end
+    return hasWorker
+end
+
+---@return string
+function FieldToDoMenuFrame:getAllWorkersEditLabel()
+    if self:areAllListedWorkersMayEdit() then
+        return FieldToDoL10n.getText("ftdl_edit_all_workers_off", "Alle Worker: aus")
+    end
+    return FieldToDoL10n.getText("ftdl_edit_all_workers_on", "Alle Worker: an")
+end
+
 function FieldToDoMenuFrame:updateEditPermissionUi()
     local canEdit = self:canEditLocal()
     local canSetting = self:canChangeWorkersEditSetting()
     self.editControlsEnabled = canEdit
+    self.editMemberRows = self:listOnlineFarmMembersForEditUi()
 
     self:setButtonDisabled(self.btnAdd, not canEdit)
     self:setButtonDisabled(self.btnEdit, not canEdit)
@@ -321,9 +473,19 @@ function FieldToDoMenuFrame:updateEditPermissionUi()
     self:setButtonDisabled(self.btnAddFieldTask, not canEdit)
     self:setButtonDisabled(self.btnWorkersEdit, not canSetting)
 
-    if self.workersEditBtnText ~= nil and FieldAdvisorSettings ~= nil then
-        self.workersEditBtnText:setText(FieldAdvisorSettings.getWorkersMayEditLabel())
-        self:applyToggleBtnColor(self.workersEditBtnText, FieldAdvisorSettings.isWorkersMayEditTodos())
+    self:setElementVisible(self.editMembersHeader, canSetting)
+    self:setElementVisible(self.editMembersListWrapper, canSetting)
+    self:setElementVisible(self.workersEditBtnBg, canSetting)
+    self:setElementVisible(self.workersEditBtnText, canSetting)
+    self:setElementVisible(self.btnWorkersEdit, canSetting)
+
+    if self.workersEditBtnText ~= nil then
+        self.workersEditBtnText:setText(self:getAllWorkersEditLabel())
+        self:applyToggleBtnColor(self.workersEditBtnText, self:areAllListedWorkersMayEdit())
+    end
+
+    if self.editMemberList ~= nil and self.editMemberList.reloadData ~= nil then
+        self.editMemberList:reloadData()
     end
 
     if self.fieldList ~= nil and self.fieldList.reloadVisibleItems ~= nil then
@@ -708,6 +870,10 @@ function FieldToDoMenuFrame:getNumberOfItemsInSection(list, section)
         return #self.ownedFields
     end
 
+    if list == self.editMemberList then
+        return #(self.editMemberRows or {})
+    end
+
     return 0
 end
 
@@ -748,6 +914,29 @@ function FieldToDoMenuFrame:populateCellForItemInSection(list, section, index, c
         end
 
         cell.ftdlTaskId = task.id
+
+        return
+    end
+
+    if list == self.editMemberList then
+        local row = self.editMemberRows[index]
+        if row == nil then
+            return
+        end
+
+        local nicknameElement = cell:getAttribute("nickname")
+        if nicknameElement ~= nil then
+            nicknameElement:setText(row.nickname or tostring(row.userId))
+        end
+
+        local toggleElement = cell:getAttribute("editToggle")
+        if toggleElement ~= nil then
+            toggleElement:setText(self:formatEditMemberToggleLabel(row))
+            self:applyToggleBtnColor(toggleElement, row.mayEdit == true)
+        end
+
+        cell.ftdlEditMemberIndex = index
+        cell.ftdlEditMemberIsManager = row.isManager == true
 
         return
     end
@@ -1407,7 +1596,7 @@ function FieldToDoMenuFrame:onClickToggleMulching()
 end
 
 function FieldToDoMenuFrame:onClickToggleWorkersEdit()
-    if FieldAdvisorSettings == nil or FieldToDoSync == nil then
+    if FieldToDoSync == nil then
         return
     end
 
@@ -1416,8 +1605,52 @@ function FieldToDoMenuFrame:onClickToggleWorkersEdit()
         return
     end
 
-    FieldToDoSync.request(FieldToDoSync.OP.SET_WORKERS_EDIT, {
-        enabled = not FieldAdvisorSettings.isWorkersMayEditTodos(),
+    self.editMemberRows = self:listOnlineFarmMembersForEditUi()
+    local uniqueUserIds = {}
+    local allOn = true
+    for _, row in ipairs(self.editMemberRows) do
+        if not row.isManager and row.uniqueUserId ~= nil and row.uniqueUserId ~= "" then
+            uniqueUserIds[#uniqueUserIds + 1] = row.uniqueUserId
+            if not row.mayEdit then
+                allOn = false
+            end
+        end
+    end
+
+    FieldToDoSync.request(FieldToDoSync.OP.SET_ALL_WORKERS_TODO_EDIT, {
+        enabled = not allOn,
+        uniqueUserIds = uniqueUserIds,
+    })
+end
+
+---@param listItem ListItemElement|nil
+function FieldToDoMenuFrame:onClickEditMemberRow(listItem)
+    if FieldToDoSync == nil then
+        return
+    end
+
+    if not self:canChangeWorkersEditSetting() then
+        self:notifyEditDenied()
+        return
+    end
+
+    local index = listItem ~= nil and listItem.ftdlEditMemberIndex or nil
+    if index == nil and self.editMemberList ~= nil then
+        index = self.editMemberList.selectedIndex
+    end
+
+    local row = index ~= nil and self.editMemberRows[index] or nil
+    if row == nil or row.isManager then
+        return
+    end
+
+    if row.uniqueUserId == nil or row.uniqueUserId == "" then
+        return
+    end
+
+    FieldToDoSync.request(FieldToDoSync.OP.SET_USER_TODO_EDIT, {
+        uniqueUserId = row.uniqueUserId,
+        enabled = not row.mayEdit,
     })
 end
 

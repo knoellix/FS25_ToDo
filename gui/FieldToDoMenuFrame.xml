@@ -21,7 +21,7 @@
                         <Text profile="ftdlColHeader" position="56px 0px" size="360px 24px" text="$l10n_ftdl_col_task"/>
                     </GuiElement>
 
-                    <GuiElement profile="ftdlListWrapper" position="0px -72px" width="420px" height="540px">
+                    <GuiElement profile="ftdlListWrapper" position="0px -72px" width="420px" height="420px">
                         <SmoothList id="taskList" profile="ftdlSmoothList"
                                     startClipperElementName="todoListStart"
                                     endClipperElementName="todoListEnd"
@@ -39,6 +39,25 @@
                     <Text profile="ftdlEmptyHint" id="todoEmptyHint"
                           text="$l10n_ftdl_empty_tasks"
                           position="10px -320px" size="400px 28px" visible="false"/>
+
+                    <Text profile="ftdlSettingsLabel" id="editMembersHeader"
+                          text="$l10n_ftdl_todo_edit_user"
+                          position="10px -502px" size="400px 22px" visible="false"/>
+
+                    <GuiElement profile="ftdlListWrapper" id="editMembersListWrapper"
+                                position="0px -528px" width="420px" height="60px" visible="false">
+                        <SmoothList id="editMemberList" profile="ftdlSmoothList"
+                                    startClipperElementName="editMembersListStart"
+                                    endClipperElementName="editMembersListEnd">
+                            <ListItem profile="ftdlListRow" name="editMemberRowTemplate" onClick="onClickEditMemberRow">
+                                <Bitmap profile="ftdlRowBg" name="alternating"/>
+                                <Text profile="ftdlCellLeft" name="nickname" position="8px 0px" size="250px 30px" textLayoutMode="scrolling"/>
+                                <Text profile="ftdlCellCenter" name="editToggle" position="270px 0px" size="140px 30px"/>
+                            </ListItem>
+                        </SmoothList>
+                        <Bitmap profile="fs25_secondaryMenuStartClipper" name="editMembersListStart"/>
+                        <Bitmap profile="fs25_secondaryMenuStopClipper" name="editMembersListEnd"/>
+                    </GuiElement>
 
                     <Bitmap profile="ftdlMiniBtnBg" position="0px -580px"/>
                     <Button profile="ftdlMiniBtnIconText" id="btnAdd" position="0px -580px" onClick="onClickAddTask" text="$l10n_ftdl_btn_add"/>
@@ -139,9 +158,9 @@
                     <Button profile="ftdlMiniBtnHitWide" id="btnMulch" position="284px -580px" onClick="onClickToggleMulching"/>
 
                     <!-- Wide buttons: organic 126–276, mulch 284–434, edit 442–592 (8px gap). -->
-                    <Bitmap profile="ftdlMiniBtnBgWide" position="442px -580px"/>
-                    <Text profile="ftdlMiniBtnTextSmall" id="workersEditBtnText" position="442px -580px" size="150px 34px" text="$l10n_ftdl_edit_all"/>
-                    <Button profile="ftdlMiniBtnHitWide" id="btnWorkersEdit" position="442px -580px" onClick="onClickToggleWorkersEdit"/>
+                    <Bitmap profile="ftdlMiniBtnBgWide" id="workersEditBtnBg" position="442px -580px" visible="false"/>
+                    <Text profile="ftdlMiniBtnTextSmall" id="workersEditBtnText" position="442px -580px" size="150px 34px" text="$l10n_ftdl_edit_all_workers_on" visible="false"/>
+                    <Button profile="ftdlMiniBtnHitWide" id="btnWorkersEdit" position="442px -580px" onClick="onClickToggleWorkersEdit" visible="false"/>
 
                     <Bitmap profile="ftdlMiniBtnBg" position="0px -616px"/>
                     <Text profile="ftdlMiniBtnText" position="0px -616px" text="$l10n_ftdl_btn_visit"/>

@@ -166,6 +166,9 @@
 
         <text name="ftdl_edit_all" text="Edit: all"/>
         <text name="ftdl_edit_managers" text="Edit: managers"/>
+        <text name="ftdl_edit_all_workers_on" text="All workers: on"/>
+        <text name="ftdl_edit_all_workers_off" text="All workers: off"/>
+        <text name="ftdl_todo_edit_user" text="Edit to-dos"/>
         <text name="ftdl_edit_denied" text="No permission to change to-dos"/>
     </texts>
 </l10n>
