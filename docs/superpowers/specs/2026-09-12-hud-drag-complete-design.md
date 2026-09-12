@@ -1,7 +1,8 @@
 # HUD: drag position + click-to-complete
 
 **Date:** 2026-09-12  
-**Status:** approved design (pending implementation)  
+**Status:** implemented  
+**Plan:** [2026-09-12-hud-drag-complete.md](../plans/2026-09-12-hud-drag-complete.md)  
 **Mod:** FS25_FieldToDoList  
 **Builds on:** In-world HUD (`FieldToDoHudOverlay` / `FieldToDoHudInput`), MP sync + edit gate  
 

@@ -9,6 +9,8 @@ All notable changes to **FS25_FieldToDoList** are documented here.
 - **Per-user To-Do edit grants:** farm managers toggle edit for each **online same-farm** member on the Field To-Do ESC page; managers always edit.
 - **Alle Worker an/aus:** farm-wide toggle for all listed non-manager rows (replaces ambiguous **Edit: alle / Manager**).
 - Farm-scoped persistence keyed by `uniqueUserId`; sync schema **v2** with manager-only ops (opcodes 15/16).
+- **Draggable To-Do HUD:** with mouse cursor visible, drag the green title bar; position saved client-side under `modSettings/FS25_FieldToDoList/hud.xml`.
+- **HUD click-to-complete:** left-click an open row to mark it done (edit permission + existing sync path).
 
 ### Improved
 
@@ -33,6 +35,7 @@ All notable changes to **FS25_FieldToDoList** are documented here.
 
 - Tab-strip wheel scroll is best-effort only (slider API on `pagingTabList`); not verified in-game with many tab mods.
 - Offline same-farm members are not listed; grant/revoke requires them to be online.
+- HUD drag/click needs unlocked mouse cursor; gamepad look mode unchanged.
 
 ## [0.1.0.8] — 2026-09-10
 
