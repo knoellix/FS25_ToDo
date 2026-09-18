@@ -17,7 +17,7 @@
 ]]
 
 FieldToDoSync = {}
-FieldToDoSync.SCHEMA_VERSION = 2
+FieldToDoSync.SCHEMA_VERSION = 4
 FieldToDoSync.lastRequest = nil
 FieldToDoSync.lastDeny = nil
 FieldToDoSync.lastNotify = nil
@@ -150,6 +150,21 @@ end
 -- ============================================================================
 
 ---@param streamId number
+---@param payload table|nil
+local function writePayloadFarmId(streamId, payload)
+    streamWriteInt32(streamId, tonumber(payload ~= nil and payload.farmId) or 0)
+end
+
+---@param streamId number
+---@param payload table
+local function readPayloadFarmId(streamId, payload)
+    local farmId = streamReadInt32(streamId)
+    if farmId ~= 0 then
+        payload.farmId = farmId
+    end
+end
+
+---@param streamId number
 ---@param op number
 ---@param payload table|nil
 function FieldToDoSync.writePayload(streamId, op, payload)
@@ -161,6 +176,7 @@ function FieldToDoSync.writePayload(streamId, op, payload)
         local sortIndex = tonumber(payload.sortIndex) or (payload.task ~= nil and tonumber(payload.task.sortIndex)) or 0
         streamWriteInt32(streamId, taskId)
         streamWriteInt32(streamId, sortIndex)
+        writePayloadFarmId(streamId, payload)
     elseif op == OP.ADD_FIELD then
         streamWriteInt32(streamId, tonumber(payload.fieldId) or 0)
         FieldToDoSync.writeString(streamId, payload.actionType)
@@ -175,11 +191,14 @@ function FieldToDoSync.writePayload(streamId, op, payload)
         local sortIndex = tonumber(payload.sortIndex) or (payload.task ~= nil and tonumber(payload.task.sortIndex)) or 0
         streamWriteInt32(streamId, taskId)
         streamWriteInt32(streamId, sortIndex)
+        writePayloadFarmId(streamId, payload)
     elseif op == OP.UPDATE_TEXT then
         streamWriteInt32(streamId, tonumber(payload.taskId) or 0)
         FieldToDoSync.writeString(streamId, payload.text)
+        writePayloadFarmId(streamId, payload)
     elseif op == OP.DELETE then
         streamWriteInt32(streamId, tonumber(payload.taskId) or 0)
+        writePayloadFarmId(streamId, payload)
     elseif op == OP.MOVE then
         streamWriteInt32(streamId, tonumber(payload.taskId) or 0)
         streamWriteInt32(streamId, tonumber(payload.delta) or 0)
@@ -190,28 +209,37 @@ function FieldToDoSync.writePayload(streamId, op, payload)
         streamWriteInt32(streamId, tonumber(swapA.sortIndex) or 0)
         streamWriteInt32(streamId, tonumber(swapB.id) or 0)
         streamWriteInt32(streamId, tonumber(swapB.sortIndex) or 0)
+        writePayloadFarmId(streamId, payload)
     elseif op == OP.TOGGLE_DONE then
         streamWriteInt32(streamId, tonumber(payload.taskId) or 0)
         streamWriteBool(streamId, payload.completed == true)
         streamWriteInt32(streamId, tonumber(payload.sortIndex) or 0)
+        writePayloadFarmId(streamId, payload)
     elseif op == OP.AUTO_COMPLETE then
         streamWriteInt32(streamId, tonumber(payload.taskId) or 0)
         streamWriteBool(streamId, payload.completed == true)
         streamWriteInt32(streamId, tonumber(payload.sortIndex) or 0)
+        writePayloadFarmId(streamId, payload)
     elseif op == OP.SET_PRESET then
         FieldToDoSync.writeString(streamId, payload.presetKey)
+        writePayloadFarmId(streamId, payload)
     elseif op == OP.SET_ORGANIC then
         streamWriteBool(streamId, payload.enabled == true)
+        writePayloadFarmId(streamId, payload)
     elseif op == OP.SET_MULCH then
         streamWriteBool(streamId, payload.enabled == true)
+        writePayloadFarmId(streamId, payload)
     elseif op == OP.SET_WORKERS_EDIT then
         streamWriteBool(streamId, payload.enabled == true)
+        writePayloadFarmId(streamId, payload)
     elseif op == OP.SET_PLANNED_CROP then
         streamWriteInt32(streamId, tonumber(payload.fieldId) or 0)
         streamWriteInt32(streamId, tonumber(payload.fruitTypeIndex) or 0)
+        writePayloadFarmId(streamId, payload)
     elseif op == OP.SET_USER_TODO_EDIT then
         FieldToDoSync.writeString(streamId, payload.uniqueUserId)
         streamWriteBool(streamId, payload.enabled == true)
+        writePayloadFarmId(streamId, payload)
     elseif op == OP.SET_ALL_WORKERS_TODO_EDIT then
         streamWriteBool(streamId, payload.enabled == true)
         local uniqueUserIds = payload.uniqueUserIds or {}
@@ -219,6 +247,7 @@ function FieldToDoSync.writePayload(streamId, op, payload)
         for i = 1, #uniqueUserIds do
             FieldToDoSync.writeString(streamId, uniqueUserIds[i])
         end
+        writePayloadFarmId(streamId, payload)
     elseif op == OP.DENY then
         streamWriteUInt8(streamId, tonumber(payload.deniedOp) or 0)
         FieldToDoSync.writeString(streamId, payload.reason)
@@ -235,6 +264,7 @@ function FieldToDoSync.readPayload(streamId, op)
         payload.text = FieldToDoSync.readString(streamId)
         payload.taskId = streamReadInt32(streamId)
         payload.sortIndex = streamReadInt32(streamId)
+        readPayloadFarmId(streamId, payload)
     elseif op == OP.ADD_FIELD then
         payload.fieldId = streamReadInt32(streamId)
         payload.actionType = FieldToDoSync.readString(streamId)
@@ -247,11 +277,14 @@ function FieldToDoSync.readPayload(streamId, op)
         payload.suggestion = FieldToDoSync.readString(streamId)
         payload.taskId = streamReadInt32(streamId)
         payload.sortIndex = streamReadInt32(streamId)
+        readPayloadFarmId(streamId, payload)
     elseif op == OP.UPDATE_TEXT then
         payload.taskId = streamReadInt32(streamId)
         payload.text = FieldToDoSync.readString(streamId)
+        readPayloadFarmId(streamId, payload)
     elseif op == OP.DELETE then
         payload.taskId = streamReadInt32(streamId)
+        readPayloadFarmId(streamId, payload)
     elseif op == OP.MOVE then
         payload.taskId = streamReadInt32(streamId)
         payload.delta = streamReadInt32(streamId)
@@ -265,28 +298,37 @@ function FieldToDoSync.readPayload(streamId, op)
                 { id = swapBId, sortIndex = swapBSort },
             }
         end
+        readPayloadFarmId(streamId, payload)
     elseif op == OP.TOGGLE_DONE then
         payload.taskId = streamReadInt32(streamId)
         payload.completed = streamReadBool(streamId)
         payload.sortIndex = streamReadInt32(streamId)
+        readPayloadFarmId(streamId, payload)
     elseif op == OP.AUTO_COMPLETE then
         payload.taskId = streamReadInt32(streamId)
         payload.completed = streamReadBool(streamId)
         payload.sortIndex = streamReadInt32(streamId)
+        readPayloadFarmId(streamId, payload)
     elseif op == OP.SET_PRESET then
         payload.presetKey = FieldToDoSync.readString(streamId)
+        readPayloadFarmId(streamId, payload)
     elseif op == OP.SET_ORGANIC then
         payload.enabled = streamReadBool(streamId)
+        readPayloadFarmId(streamId, payload)
     elseif op == OP.SET_MULCH then
         payload.enabled = streamReadBool(streamId)
+        readPayloadFarmId(streamId, payload)
     elseif op == OP.SET_WORKERS_EDIT then
         payload.enabled = streamReadBool(streamId)
+        readPayloadFarmId(streamId, payload)
     elseif op == OP.SET_PLANNED_CROP then
         payload.fieldId = streamReadInt32(streamId)
         payload.fruitTypeIndex = streamReadInt32(streamId)
+        readPayloadFarmId(streamId, payload)
     elseif op == OP.SET_USER_TODO_EDIT then
         payload.uniqueUserId = FieldToDoSync.readString(streamId)
         payload.enabled = streamReadBool(streamId)
+        readPayloadFarmId(streamId, payload)
     elseif op == OP.SET_ALL_WORKERS_TODO_EDIT then
         payload.enabled = streamReadBool(streamId)
         local idCount = streamReadInt32(streamId) or 0
@@ -294,6 +336,7 @@ function FieldToDoSync.readPayload(streamId, op)
         for _ = 1, idCount do
             payload.uniqueUserIds[#payload.uniqueUserIds + 1] = FieldToDoSync.readString(streamId)
         end
+        readPayloadFarmId(streamId, payload)
     elseif op == OP.DENY then
         payload.deniedOp = streamReadUInt8(streamId)
         payload.reason = FieldToDoSync.readString(streamId)
@@ -707,7 +750,27 @@ function FieldToDoSync.sendDeny(connection, deniedOp, reason)
         FieldToDoLog.warning("FieldToDoSync: denying op=%s reason=%s", tostring(deniedOp), reason)
     end
 
-    if connection == nil or FieldToDoNotifyEvent == nil then
+    -- Local/SP deny (no connection): still surface UI feedback.
+    if connection == nil then
+        if FieldToDoInGameMenuIntegration ~= nil and FieldToDoInGameMenuIntegration.menuScreen ~= nil then
+            local screen = FieldToDoInGameMenuIntegration.menuScreen
+            if screen.notifyEditDenied ~= nil then
+                pcall(screen.notifyEditDenied, screen, reason)
+            end
+        elseif InfoDialog ~= nil and InfoDialog.show ~= nil then
+            local message = reason
+            if FieldToDoL10n ~= nil and FieldToDoL10n.getText ~= nil then
+                message = FieldToDoL10n.getText("ftdl_edit_denied", "No permission to change to-dos")
+                if reason ~= nil and reason ~= "" and reason ~= "denied" then
+                    message = message .. " (" .. reason .. ")"
+                end
+            end
+            pcall(InfoDialog.show, message)
+        end
+        return
+    end
+
+    if FieldToDoNotifyEvent == nil then
         return
     end
 
@@ -724,15 +787,20 @@ function FieldToDoSync.request(op, payload)
     payload = payload or {}
     recordSyncDebug("lastRequest", op, nil, nil)
 
-    if not FieldToDoSync.isRunningAsServer()
-        and g_client ~= nil
-        and g_client.getServerConnection ~= nil
-        and FieldToDoRequestEvent ~= nil then
-        local connection = g_client:getServerConnection()
-        if connection ~= nil then
-            connection:sendEvent(FieldToDoRequestEvent.new(op, payload))
-            return
+    if not FieldToDoSync.isRunningAsServer() then
+        if g_client ~= nil
+            and g_client.getServerConnection ~= nil
+            and FieldToDoRequestEvent ~= nil then
+            local connection = g_client:getServerConnection()
+            if connection ~= nil then
+                connection:sendEvent(FieldToDoRequestEvent.new(op, payload))
+                return
+            end
         end
+
+        -- Pure client without a server connection must not mint tasks locally.
+        FieldToDoSync.sendDeny(nil, op, "no_connection")
+        return
     end
 
     -- SP / host: apply locally, no network round trip.
@@ -835,13 +903,28 @@ function FieldToDoSync.applyNotify(op, payload)
 
     -- Multi-farm safety: never apply another farm's notify into this peer's state.
     if localFarm ~= nil and notifyFarmId ~= nil and notifyFarmId ~= localFarm then
+        if FieldToDoLog ~= nil then
+            FieldToDoLog.warning(
+                "FieldToDoSync: drop notify op=%s notifyFarmId=%s localFarm=%s",
+                tostring(op),
+                tostring(notifyFarmId),
+                tostring(localFarm)
+            )
+        end
         return
     end
 
     local applied = FieldToDoSync.applyOp(manager, op, payload, notifyFarmId, nil)
     if applied then
-        recordSyncDebug("lastNotify", op, nil, notifyFarmId)
+        recordSyncDebug("lastNotify", op, nil, notifyFarmId or localFarm)
         FieldToDoSync.refreshAfterNotify(op)
+    elseif FieldToDoLog ~= nil then
+        FieldToDoLog.warning(
+            "FieldToDoSync: applyNotify failed op=%s farmId=%s taskId=%s",
+            tostring(op),
+            tostring(notifyFarmId or localFarm),
+            tostring(payload.taskId)
+        )
     end
 end
 

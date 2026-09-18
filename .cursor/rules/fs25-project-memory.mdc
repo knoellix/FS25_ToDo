@@ -62,12 +62,14 @@ alwaysApply: true
 
 ## Multiplayer / edit grants
 
-- Server-authoritative sync (`FieldToDoSync` + request/notify/state events). Schema version bumps must stay client/server matched.
+- Server-authoritative sync (`FieldToDoSync` + request/notify/state events). Schema version bumps must stay client/server matched (**current: v4**).
 - **World read vs mutate:** overview/crop/grass = **client-local** `FieldState`; task/settings mutations = **server** + sidecar. Dedicated does not run overview scan.
-- **Edit gate:** managers always; workers via vanilla **Farm.PERMISSION** `ftdlEditTodos` (default **on**) when registered; else fallback `defaultAllow` / `todoEditByFarmId`. Auto-complete stays allowed for same-farm members.
-- **ESC grants retired:** no per-user list / „Alle Worker“ in Field To-Do tab — use Hofverwaltung checkbox.
-- **FarmId:** `FieldToDoPermissions.resolveLocalFarmId()` (mission / localPlayer / farmManager) for scan + local edit UI.
+- **FarmId on wire:** every mutation notify/request payload (except DENY) carries trailing `farmId` Int32 — required so pure clients can apply grants/settings and multi-farm guards work.
+- **Edit gate:** managers always; workers via vanilla **Farm.PERMISSION** `ftdlEditTodos` when registered, else fallback `defaultAllow` / `todoEditByFarmId`. Auto-complete stays allowed for same-farm members.
+- **ESC grants:** kept for managers until Hofverwaltung shows custom permissions reliably; registration of `ftdlEditTodos` remains best-effort.
+- **FarmId:** `FieldToDoPermissions.resolveLocalFarmId()` for scan + local edit UI. Notify upserts must resolve farmId (nil farmId tasks are hidden once a local farm is known).
 - **Sync UX:** DENY → InfoDialog + reason; successful notify → refresh ESC list (`refreshAfterNotify`). Debug: `ftdlSync`, `ftdlOwned`.
+- **Owned non-crop parcels:** field-less owned farmlands (Hof/Windrad/…) appear as Hof-style overview rows.
 - **Dedicated:** missing `uniqueUserId` must **honor `defaultAllow`** / farm permission, not fail-closed.
 - **Farm user lists:** `getUsers` / `getActiveUsers` may return **User objects** — always use `FieldToDoPermissions.extractUserIdFromFarmUserEntry`.
 - **Membership:** remote ops resolve farm via `resolveFarmIdForUser` / `userBelongsToFarm`; unknown membership → deny (no host `getLocalFarmId()` fallback).

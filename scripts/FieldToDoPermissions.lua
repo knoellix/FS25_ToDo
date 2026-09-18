@@ -64,61 +64,62 @@ function FieldToDoPermissions.resolveLocalFarmId()
 end
 
 --- Register custom farm permission for vanilla Hofverwaltung checkbox (pcall-safe, idempotent).
+---@return boolean registered
 function FieldToDoPermissions.registerFarmPermission()
-    if FieldToDoPermissions._farmPermissionRegistered then
-        return
-    end
-
     local key = FieldToDoPermissions.PERMISSION_KEY
-    local ok = pcall(function()
+    local registered = false
+
+    local ok, err = pcall(function()
         if Farm == nil or type(Farm) ~= "table" then
             return
         end
 
         if type(Farm.PERMISSION) ~= "table" then
-            Farm.PERMISSION = Farm.PERMISSION or {}
+            Farm.PERMISSION = {}
         end
-
         Farm.PERMISSION.FTDL_EDIT_TODOS = key
 
-        if type(Farm.PERMISSIONS) == "table" then
-            local found = false
-            for i = 1, #Farm.PERMISSIONS do
-                if Farm.PERMISSIONS[i] == key then
-                    found = true
-                    break
-                end
-            end
-            if not found then
-                Farm.PERMISSIONS[#Farm.PERMISSIONS + 1] = key
-            end
+        if type(Farm.PERMISSIONS) ~= "table" then
+            Farm.PERMISSIONS = {}
         end
 
-        if type(Farm.DEFAULT_PERMISSIONS) == "table" then
-            if Farm.DEFAULT_PERMISSIONS[key] == nil then
-                Farm.DEFAULT_PERMISSIONS[key] = true
+        local found = false
+        for i = 1, #Farm.PERMISSIONS do
+            if Farm.PERMISSIONS[i] == key then
+                found = true
+                break
             end
+        end
+        if not found then
+            Farm.PERMISSIONS[#Farm.PERMISSIONS + 1] = key
+        end
+
+        if type(Farm.DEFAULT_PERMISSIONS) ~= "table" then
+            Farm.DEFAULT_PERMISSIONS = {}
+        end
+        if Farm.DEFAULT_PERMISSIONS[key] == nil then
+            Farm.DEFAULT_PERMISSIONS[key] = true
         end
 
         if g_i18n ~= nil and g_i18n.setText ~= nil then
-            local de = "Feld-To-Dos bearbeiten"
-            local en = "Edit field to-dos"
-            local label = en
-            if g_i18n.getText ~= nil then
-                local okLang, lang = pcall(g_i18n.getText, g_i18n, "ui_language")
-                if okLang and type(lang) == "string" and string.find(string.lower(lang), "de", 1, true) then
-                    label = de
-                end
+            local label = "Edit field to-dos"
+            if FieldToDoL10n ~= nil and FieldToDoL10n.getText ~= nil then
+                label = FieldToDoL10n.getText("ui_permission_ftdlEditTodos", label)
             end
             pcall(g_i18n.setText, g_i18n, "ui_permission_" .. key, label)
             pcall(g_i18n.setText, g_i18n, "farm_permission_" .. key, label)
             pcall(g_i18n.setText, g_i18n, key, label)
         end
+
+        registered = true
     end)
 
-    if ok then
-        FieldToDoPermissions._farmPermissionRegistered = true
+    if not ok and FieldToDoLog ~= nil then
+        FieldToDoLog.warning("registerFarmPermission failed: %s", tostring(err))
     end
+
+    FieldToDoPermissions._farmPermissionRegistered = registered == true
+    return registered == true
 end
 
 --- Read vanilla farm user permission for To-Do edit. nil = API unavailable.

@@ -2,6 +2,20 @@
 
 All notable changes to **FS25_FieldToDoList** are documented here.
 
+## [0.1.0.12] — 2026-09-18
+
+### Fixed
+
+- **Adopt / field-todo invisible on MP client:** notify upsert used nil `farmId` (not on the wire) so tasks were stored but filtered out of the ESC list. Resolve local farm on upsert; serialize `farmId` on mutation payloads (sync schema **v4**).
+- **ESC grant notify on pure clients:** `SET_USER_TODO_EDIT` / `SET_ALL_WORKERS_TODO_EDIT` now carry `farmId` and fall back to `getLocalFarmId()` so worker grant toggles mirror.
+- **Hof/Windrad single-row refresh:** `refreshFieldRecordSync` / `getFieldById` keep non-crop parcels as Hof (no crop advisor); auto-complete skips those parcels.
+- **Owned Hof / Windrad parcels:** field-less owned farmlands are listed as Hof-style rows even without crop ground at the indicator.
+- **Local deny feedback:** denials without a network connection show InfoDialog; pure clients no longer apply mutations locally when the server connection is missing.
+
+### Changed
+
+- **ESC worker grants restored** for managers (FS25 Hofverwaltung does not reliably show custom `Farm.PERMISSION` entries yet). `ftdlEditTodos` registration remains as best-effort.
+
 ## [0.1.0.11] — 2026-09-18
 
 ### Fixed

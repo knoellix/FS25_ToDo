@@ -788,7 +788,7 @@ function ToDoManager:advanceOwnedFieldsScan(maxBatch)
     while processed < batchSize and scanIndex <= #queue do
         local candidate = queue[scanIndex]
         local ok, record = pcall(function()
-            return self.fieldScanner:normalizeField(candidate.field, candidate.forceInclude)
+            return self.fieldScanner:normalizeOwnedCandidate(candidate)
         end)
         if not ok then
             if FieldToDoLog ~= nil then
@@ -852,13 +852,8 @@ function ToDoManager:refreshFieldRecordSync(fieldId)
         return nil
     end
 
-    local engineField = self.fieldScanner:getEngineFieldById(fieldId)
-    if engineField == nil then
-        return nil
-    end
-
     local ok, record = pcall(function()
-        return self.fieldScanner:normalizeField(engineField, true)
+        return self.fieldScanner:normalizeFieldById(fieldId, true)
     end)
     if not ok or record == nil then
         return nil
@@ -992,6 +987,8 @@ end
 function ToDoManager:applyAddManualTask(payload, farmId, userId)
     payload = payload or {}
 
+    farmId = tonumber(farmId) or tonumber(payload.farmId) or self:getLocalFarmId()
+
     local taskId = tonumber(payload.taskId) or (payload.task ~= nil and tonumber(payload.task.id)) or nil
     if taskId ~= nil and taskId > 0 then
         local task = payload.task or {
@@ -1012,8 +1009,6 @@ function ToDoManager:applyAddManualTask(payload, farmId, userId)
     if string.isNilOrWhitespace(text) then
         return nil
     end
-
-    farmId = tonumber(farmId) or self:getLocalFarmId()
 
     local task = {
         id = self.nextTaskId,
@@ -1068,6 +1063,10 @@ end
 function ToDoManager:applyAddFieldTask(payload, farmId, userId)
     payload = payload or {}
 
+    -- Notify payloads may omit farmId (not always on the wire); never upsert with nil
+    -- farmId while a local farm is known — getManualTasks would hide the task.
+    farmId = tonumber(farmId) or tonumber(payload.farmId) or self:getLocalFarmId()
+
     local taskId = tonumber(payload.taskId) or (payload.task ~= nil and tonumber(payload.task.id)) or nil
     if taskId ~= nil and taskId > 0 then
         local task = payload.task
@@ -1099,7 +1098,6 @@ function ToDoManager:applyAddFieldTask(payload, farmId, userId)
         return nil
     end
 
-    farmId = tonumber(farmId) or self:getLocalFarmId()
     local fieldId = tonumber(payload.fieldId)
     if fieldId == nil then
         return nil
@@ -1452,7 +1450,7 @@ end
 ---@return table|nil
 function ToDoManager:applySetUserTodoEdit(payload, farmId, userId)
     payload = payload or {}
-    farmId = tonumber(farmId)
+    farmId = tonumber(farmId) or tonumber(payload.farmId) or self:getLocalFarmId()
     local uniqueUserId = payload.uniqueUserId ~= nil and tostring(payload.uniqueUserId) or ""
     if farmId == nil or uniqueUserId == "" then
         return nil
@@ -1473,7 +1471,7 @@ end
 ---@return table|nil
 function ToDoManager:applySetAllWorkersTodoEdit(payload, farmId, userId)
     payload = payload or {}
-    farmId = tonumber(farmId)
+    farmId = tonumber(farmId) or tonumber(payload.farmId) or self:getLocalFarmId()
     if farmId == nil then
         return nil
     end
@@ -1698,6 +1696,42 @@ function ToDoManager:addCustomFieldTask(fieldRecord, text, actionType, autoCompl
     return self.manualTasks[result.task.id]
 end
 
+--- Skip auto-complete probing for Hof / non-crop farmland pseudo parcels.
+---@param fieldId number|nil
+---@return boolean
+function ToDoManager:shouldSkipFieldAutoComplete(fieldId)
+    fieldId = tonumber(fieldId)
+    if fieldId == nil then
+        return true
+    end
+
+    if FieldPlannedCrop ~= nil and FieldPlannedCrop.isFarmyard(fieldId) then
+        return true
+    end
+
+    local cached = self.ownedFieldsCacheById ~= nil and self.ownedFieldsCacheById[fieldId] or nil
+    if cached ~= nil and cached.isFarmyard == true then
+        return true
+    end
+
+    if FieldScanner ~= nil
+        and FieldScanner.isFarmlandPseudoId ~= nil
+        and FieldScanner.isFarmlandPseudoId(fieldId)
+        and self.fieldScanner ~= nil then
+        local field = self.fieldScanner:getEngineFieldById(fieldId)
+        if field == nil then
+            return true
+        end
+        local posX, posZ = FieldAdvisor.getFieldCenterWorldPosition(field)
+        local okGround, ground = pcall(self.fieldScanner.farmlandCenterIsFieldGround, self.fieldScanner, posX, posZ)
+        if not (okGround and ground == true) then
+            return true
+        end
+    end
+
+    return false
+end
+
 ---@return number
 function ToDoManager:updateAutoCompletion()
     if self.fieldScanner == nil then
@@ -1723,7 +1757,7 @@ function ToDoManager:updateAutoCompletion()
     end
 
     for fieldId, taskIds in pairs(tasksByFieldId) do
-        if FieldPlannedCrop == nil or not FieldPlannedCrop.isFarmyard(fieldId) then
+        if not self:shouldSkipFieldAutoComplete(fieldId) then
             local field = self.fieldScanner:getEngineFieldById(fieldId)
             local fieldCache = nil
 
@@ -1739,7 +1773,7 @@ function ToDoManager:updateAutoCompletion()
                     fieldCache.fingerprintMatch = previousCheck ~= nil
                         and previousCheck.fingerprint == fieldCache.fingerprint
                     if fieldCache.fingerprintMatch and previousCheck.ratios ~= nil then
-                        fieldCache.ratios = previousCheck.ratios
+                        fieldCache.ratios = previousCheck.votes
                     end
                 end
             end

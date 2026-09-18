@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
 <modDesc descVersion="98">
     <author>knoellix</author>
-    <version>0.1.0.11</version>
+    <version>0.1.0.12</version>
 
     <title>
         <en>Field To-Do List</en>
@@ -22,7 +22,7 @@ Field work list and To-Dos for Farming Simulator 25.
 
 Optional: Precision Farming (pH / nitrogen columns). Seasonal Crop Stress: not fully supported yet.
 
-Version 0.1.0.11 — dedicated MP: grass scan fix, sync feedback, farm permission checkbox.
+Version 0.1.0.12 — dedicated MP: adopt farmId fix, Hof/Windrad parcels, sync schema v4.
         ]]></en>
         <de><![CDATA[
 Feld-Arbeitsliste und To-Dos für Farming Simulator 25.
@@ -37,7 +37,7 @@ Feld-Arbeitsliste und To-Dos für Farming Simulator 25.
 
 Optional: Precision Farming (pH / Stickstoff). Seasonal Crop Stress: noch nicht voll unterstützt.
 
-Version 0.1.0.11 — Dedicated-MP: Gras-Scan-Fix, Sync-Feedback, Hof-Berechtigung.
+Version 0.1.0.12 — Dedicated-MP: Adopt-farmId-Fix, Hof/Windrad-Parzellen, Sync-Schema v4.
         ]]></de>
     </description>
 

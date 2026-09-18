@@ -4,7 +4,7 @@
 
 **Author:** Christian Möllmann ([knoellix](https://github.com/knoellix))  
 **License:** [GNU GPL v3](LICENSE)  
-**Version:** `0.1.0.11`  
+**Version:** `0.1.0.12`  
 **Repository:** [github.com/knoellix/FS25_ToDo](https://github.com/knoellix/FS25_ToDo)
 
 ## Features
@@ -122,7 +122,8 @@ Use issue templates for bug reports, feature requests, and translations:
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
-**0.1.0.11** — dedicated MP: grass scan reentrancy fix; visible sync deny + list refresh after adopt; `ftdlSync`/`ftdlOwned`; Farm.PERMISSION `ftdlEditTodos` (ESC grants hidden).
+**0.1.0.12** — dedicated MP: adopt/field-todo farmId on notify (schema v4); list Hof/Windrad parcels; restore ESC worker grants.
+**0.1.0.11** — grass scan reentrancy fix; visible sync deny + list refresh; `ftdlSync`/`ftdlOwned`; Farm.PERMISSION registration attempt.
 **0.1.0.10** — dedicated MP: honor `defaultAllow` without uniqueUserId; farm User-id extract; register `todoEditDefaultAllow` schema.
 
 **0.1.0.9** — per-user online edit grants, ESC tab scroll (ensure-visible + mouse wheel).

@@ -310,8 +310,9 @@ end
 
 ---@return boolean
 function FieldToDoMenuFrame:shouldShowWorkersEditUi()
-    -- ESC grant UI retired — edit rights live in vanilla Hofverwaltung (Farm.PERMISSION).
-    return false
+    -- Farm.PERMISSION checkbox is not reliably visible in FS25 Hofverwaltung yet;
+    -- keep manager ESC grants as the working toggle until that lands.
+    return self:isMultiplayerSession() and self:canChangeWorkersEditSetting()
 end
 
 ---@param reason string|nil

@@ -359,9 +359,9 @@ function FieldScanner:getOwnedFarmlandIds(farmId)
     return ids
 end
 
---- Add owned farmland parcels without a predefined field (and with real field ground at center)
---- as pseudo-field candidates. Parcels that already carry an engine field are skipped cheaply
---- via farmland.field; only the remaining few are probed once at their center.
+--- Add owned farmland parcels without a predefined engine field as pseudo-field candidates.
+--- Field-ground parcels become normal scan rows; yard/production parcels (Hof, Windrad, …)
+--- are still listed as Hof-style rows so owned non-crop land is visible.
 ---@param candidates table[]
 ---@param seenIds table<number, boolean>
 function FieldScanner:appendFarmlandPseudoCandidates(candidates, seenIds)
@@ -380,14 +380,18 @@ function FieldScanner:appendFarmlandPseudoCandidates(candidates, seenIds)
             local pseudoField = self:buildFarmlandPseudoFieldById(farmlandId)
             if pseudoField ~= nil then
                 local posX, posZ = pseudoField.getCenterOfFieldWorldPosition()
-                if self:farmlandCenterIsFieldGround(posX, posZ) then
-                    candidates[#candidates + 1] = {
-                        field = pseudoField,
-                        forceInclude = true,
-                        id = pseudoId,
-                    }
-                    seenIds[pseudoId] = true
+                local isFieldGround = false
+                if posX ~= nil and posZ ~= nil then
+                    local okGround, ground = pcall(self.farmlandCenterIsFieldGround, self, posX, posZ)
+                    isFieldGround = okGround and ground == true
                 end
+                candidates[#candidates + 1] = {
+                    field = pseudoField,
+                    forceInclude = true,
+                    id = pseudoId,
+                    nonCropParcel = not isFieldGround,
+                }
+                seenIds[pseudoId] = true
             end
         end
     end
@@ -409,8 +413,11 @@ function FieldScanner:buildPlaceholderFieldRecord(candidate)
         fieldName = string.format("Feld %d", fieldId)
     end
 
-    if FieldPlannedCrop ~= nil and FieldPlannedCrop.isFarmyard(fieldId) then
-        return FieldPlannedCrop.buildFarmyardFieldRecord(fieldId, fieldName, posX, posZ, field.areaHa)
+    if candidate.nonCropParcel == true
+        or (FieldPlannedCrop ~= nil and FieldPlannedCrop.isFarmyard(fieldId)) then
+        if FieldPlannedCrop ~= nil and FieldPlannedCrop.buildFarmyardFieldRecord ~= nil then
+            return FieldPlannedCrop.buildFarmyardFieldRecord(fieldId, fieldName, posX, posZ, field.areaHa)
+        end
     end
 
     return {
@@ -431,6 +438,106 @@ function FieldScanner:buildPlaceholderFieldRecord(candidate)
         showPrecisionFarming = PrecisionFarmingReader ~= nil and PrecisionFarmingReader.isRuntimeReady(),
         showCropStress = SeasonalCropStressReader ~= nil and SeasonalCropStressReader.isRuntimeReady(),
     }
+end
+
+--- Normalize a collectOwnedFieldCandidates entry (honors nonCropParcel / Hof parcels).
+---@param candidate table|nil
+---@return table|nil
+function FieldScanner:normalizeOwnedCandidate(candidate)
+    if candidate == nil or candidate.field == nil then
+        return nil
+    end
+
+    if candidate.nonCropParcel == true then
+        local field = candidate.field
+        local fieldId = candidate.id
+        local posX, posZ = FieldAdvisor.getFieldCenterWorldPosition(field)
+        local fieldName = field.name
+        if string.isNilOrWhitespace(fieldName) then
+            fieldName = string.format("Grundstück %d", fieldId)
+        end
+        if FieldPlannedCrop ~= nil and FieldPlannedCrop.buildFarmyardFieldRecord ~= nil then
+            return FieldPlannedCrop.buildFarmyardFieldRecord(fieldId, fieldName, posX, posZ, field.areaHa)
+        end
+        -- Fail closed: never run crop advisor on non-crop parcels.
+        return {
+            id = fieldId,
+            name = fieldName,
+            worldX = posX,
+            worldZ = posZ,
+            areaHa = field.areaHa or 0,
+            fruit = "-",
+            plannedSow = "-",
+            growthState = "-",
+            expectedHarvest = "-",
+            weed = "-",
+            stones = "-",
+            lime = "-",
+            roller = "-",
+            suggestion = "Hof",
+            suggestionDetails = {},
+            actionType = "none",
+            autoComplete = false,
+            isFarmyard = true,
+            showPrecisionFarming = false,
+            showCropStress = false,
+        }
+    end
+
+    return self:normalizeField(candidate.field, candidate.forceInclude)
+end
+
+--- Build ownership candidate for a single field id (pseudo Hof/Windrad keep nonCropParcel).
+---@param fieldId number|nil
+---@param forceInclude boolean|nil
+---@return table|nil
+function FieldScanner:buildOwnedCandidateById(fieldId, forceInclude)
+    fieldId = tonumber(fieldId)
+    if fieldId == nil then
+        return nil
+    end
+
+    local field = self:getEngineFieldById(fieldId)
+    if field == nil then
+        return nil
+    end
+
+    local candidate = {
+        field = field,
+        forceInclude = forceInclude == true,
+        id = fieldId,
+        nonCropParcel = false,
+    }
+
+    if FieldPlannedCrop ~= nil and FieldPlannedCrop.isFarmyard(fieldId) then
+        candidate.nonCropParcel = true
+        return candidate
+    end
+
+    if FieldScanner.isFarmlandPseudoId(fieldId) then
+        local posX, posZ = FieldAdvisor.getFieldCenterWorldPosition(field)
+        local isFieldGround = false
+        if posX ~= nil and posZ ~= nil then
+            local okGround, ground = pcall(self.farmlandCenterIsFieldGround, self, posX, posZ)
+            isFieldGround = okGround and ground == true
+        end
+        candidate.nonCropParcel = not isFieldGround
+        candidate.forceInclude = true
+    end
+
+    return candidate
+end
+
+--- Normalize by field id (single-row refresh / getFieldById) without dropping Hof/Windrad.
+---@param fieldId number|nil
+---@param forceInclude boolean|nil
+---@return table|nil
+function FieldScanner:normalizeFieldById(fieldId, forceInclude)
+    local candidate = self:buildOwnedCandidateById(fieldId, forceInclude)
+    if candidate == nil then
+        return nil
+    end
+    return self:normalizeOwnedCandidate(candidate)
 end
 
 ---@param records table[]
@@ -562,7 +669,7 @@ function FieldScanner:scanOwnedFields()
 
     for _, candidate in ipairs(candidates) do
         local ok, record = pcall(function()
-            return self:normalizeField(candidate.field, candidate.forceInclude)
+            return self:normalizeOwnedCandidate(candidate)
         end)
         if ok and record ~= nil then
             fields[#fields + 1] = record
@@ -579,13 +686,8 @@ function FieldScanner:getFieldById(fieldId)
         return nil
     end
 
-    local engineField = self:getEngineFieldById(fieldId)
-    if engineField == nil then
-        return nil
-    end
-
     local ok, record = pcall(function()
-        return self:normalizeField(engineField)
+        return self:normalizeFieldById(fieldId, true)
     end)
     if ok then
         return record

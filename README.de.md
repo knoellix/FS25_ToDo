@@ -4,7 +4,7 @@
 
 **Autor:** Christian Möllmann ([knoellix](https://github.com/knoellix))  
 **Lizenz:** [GNU GPL v3](LICENSE)  
-**Version:** `0.1.0.11`  
+**Version:** `0.1.0.12`  
 **Repository:** [github.com/knoellix/FS25_ToDo](https://github.com/knoellix/FS25_ToDo)
 
 ## Funktionen
@@ -111,7 +111,8 @@ Beiträge sind willkommen (Bugfixes, Features, Übersetzungen).
 
 Siehe [CHANGELOG.md](CHANGELOG.md).
 
-**0.1.0.11:** Dedicated-MP — Gras-Scan-Fix; sichtbares Sync-Deny + Listen-Refresh nach Übernehmen; `ftdlSync`/`ftdlOwned`; Hof-Recht `ftdlEditTodos` (ESC-Grants weg).
+**0.1.0.12:** Dedicated-MP — Adopt/Feld-Todo farmId im Notify (Schema v4); Hof/Windrad-Parzellen; ESC-Worker-Grants wieder da.
+**0.1.0.11:** Gras-Scan-Fix; Sync-Deny + Listen-Refresh; `ftdlSync`/`ftdlOwned`; Farm.PERMISSION-Versuch.
 **0.1.0.10:** Dedicated-MP — `defaultAllow` ohne uniqueUserId; Hof-User-IDs; Sidecar-Schema `todoEditDefaultAllow`.
 
 **0.1.0.9:** Pro-Spieler-Bearbeitungsrechte (online), ESC-Tab-Leiste scrollbar (sichtbar halten + Mausrad).
