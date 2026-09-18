@@ -183,6 +183,20 @@ if type(FieldAdvisor) == "table" and type(FieldAdvisor.estimateNonSeasonalPeriod
   FieldAdvisor.hasActiveCrop = oldActive
 end
 
+io.write("\n")
+local groundFixtures = dofile(here .. "/ground_type_fixtures.lua")
+for _, c in ipairs(groundFixtures.resolveCases) do
+  local ok, got = pcall(FieldAdvisor.resolveGroundTypeName, c.raw)
+  if ok and got == c.expected then
+    pass = pass + 1
+    io.write(string.format(GREEN .. "PASS" .. RESET .. " %-44s -> %s\n", c.name, tostring(got)))
+  else
+    fail = fail + 1
+    local detail = ok and tostring(got) or ("error: " .. tostring(got))
+    io.write(string.format(RED .. "FAIL" .. RESET .. " %-44s expected %s got %s\n", c.name, c.expected, detail))
+  end
+end
+
 -- FieldToDoPermissions contract (MP farm edit gates).
 local permFixtures = dofile(here .. "/permissions_fixtures.lua")
 dofile(repoRoot .. "/scripts/FieldAdvisorSettings.lua")
