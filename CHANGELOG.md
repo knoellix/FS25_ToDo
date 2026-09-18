@@ -2,6 +2,12 @@
 
 All notable changes to **FS25_FieldToDoList** are documented here.
 
+## [Unreleased]
+
+### Fixed
+
+- **Grass overview scan:** `getGroundTypeName` reentrancy / stack overflow on some FieldState objects (e.g. meadow field 17 on dedicated MP client) — scan completes instead of aborting the field.
+
 ## [0.1.0.10] — 2026-09-12
 
 ### Fixed

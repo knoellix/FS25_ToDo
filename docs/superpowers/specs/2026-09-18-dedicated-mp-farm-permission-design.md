@@ -49,6 +49,8 @@ Server: FieldToDoSync → canExecuteOp (farm + manager|permission) → apply + s
 
 **Problem:** Overview scan errors with `stack overflow` at `FieldAdvisor.getGroundTypeName` / `resolveGroundTypeName` for grass field 17 → empty/broken suggestions → adopt feels dead.
 
+**Status:** implemented (code); in-game verify pending
+
 **In scope**
 
 - Find and break the recursion (likely `FieldState:getGroundType` / `FieldGroundType` enumeration / groundType metamethod interaction on map/MP).
