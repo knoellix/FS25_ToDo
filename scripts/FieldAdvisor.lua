@@ -307,6 +307,9 @@ function FieldAdvisor.resolveGroundTypeName(raw)
     return ""
 end
 
+FieldAdvisor._getGroundTypeNameDepth = 0
+FieldAdvisor._getGroundTypeNameReentered = false
+
 ---@param fieldState table|nil
 ---@return string
 function FieldAdvisor.getGroundTypeName(fieldState)
@@ -314,12 +317,27 @@ function FieldAdvisor.getGroundTypeName(fieldState)
         return ""
     end
 
-    local raw = fieldState.groundType
-    if raw == nil and type(fieldState.getGroundType) == "function" then
-        local ok, groundType = pcall(fieldState.getGroundType, fieldState)
-        if ok then
-            raw = groundType
+    if FieldAdvisor._getGroundTypeNameDepth > 0 then
+        FieldAdvisor._getGroundTypeNameReentered = true
+        return ""
+    end
+
+    FieldAdvisor._getGroundTypeNameDepth = FieldAdvisor._getGroundTypeNameDepth + 1
+    local raw = nil
+    local okRead, errRead = pcall(function()
+        raw = fieldState.groundType
+        if raw == nil and type(fieldState.getGroundType) == "function" then
+            local ok, groundType = pcall(fieldState.getGroundType, fieldState)
+            if ok then
+                raw = groundType
+            end
         end
+    end)
+    FieldAdvisor._getGroundTypeNameDepth = FieldAdvisor._getGroundTypeNameDepth - 1
+
+    if not okRead or FieldAdvisor._getGroundTypeNameReentered then
+        FieldAdvisor._getGroundTypeNameReentered = false
+        return ""
     end
 
     return FieldAdvisor.resolveGroundTypeName(raw)

@@ -11,4 +11,24 @@ M.resolveCases = {
     { name = "table_raw", raw = {}, expected = "" },
 }
 
+--- Proxy fieldState whose groundType getter re-enters getGroundTypeName.
+function M.makeReentrantFieldState()
+    local state = {}
+    local calls = { n = 0 }
+    setmetatable(state, {
+        __index = function(t, key)
+            if key == "groundType" then
+                calls.n = calls.n + 1
+                FieldAdvisor.getGroundTypeName(t)
+                return "GRASS"
+            end
+            if key == "getGroundType" then
+                return nil
+            end
+            return rawget(t, key)
+        end,
+    })
+    return state, calls
+end
+
 return M

@@ -197,6 +197,20 @@ for _, c in ipairs(groundFixtures.resolveCases) do
   end
 end
 
+do
+    local state, calls = groundFixtures.makeReentrantFieldState()
+    local ok, got = pcall(FieldAdvisor.getGroundTypeName, state)
+    local passReentry = ok and got == "" and calls.n >= 1
+    if passReentry then
+        pass = pass + 1
+        io.write(string.format(GREEN .. "PASS" .. RESET .. " %-44s -> reentrancy guarded\n", "getGroundTypeName_reentrant"))
+    else
+        fail = fail + 1
+        io.write(string.format(RED .. "FAIL" .. RESET .. " %-44s ok=%s got=%s calls=%s\n",
+            "getGroundTypeName_reentrant", tostring(ok), tostring(got), tostring(calls and calls.n)))
+    end
+end
+
 -- FieldToDoPermissions contract (MP farm edit gates).
 local permFixtures = dofile(here .. "/permissions_fixtures.lua")
 dofile(repoRoot .. "/scripts/FieldAdvisorSettings.lua")
