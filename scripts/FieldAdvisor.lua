@@ -284,17 +284,28 @@ function FieldAdvisor.resolveGroundTypeName(raw)
 
     if FieldGroundType ~= nil then
         if FieldAdvisor.groundTypeNameByValue == nil then
-            FieldAdvisor.groundTypeNameByValue = {}
-
-            for name, enumValue in pairs(FieldGroundType) do
-                if type(name) == "string" and type(enumValue) == "number" then
-                    FieldAdvisor.groundTypeNameByValue[enumValue] = name
-                elseif type(enumValue) == "string" and FieldGroundType.getValueByType ~= nil then
-                    local ok, resolvedValue = pcall(FieldGroundType.getValueByType, FieldGroundType, enumValue)
-                    if ok and resolvedValue ~= nil then
-                        FieldAdvisor.groundTypeNameByValue[resolvedValue] = enumValue
+            local map = {}
+            local okEnum = pcall(function()
+                for name, enumValue in pairs(FieldGroundType) do
+                    if type(name) == "string" and type(enumValue) == "number" then
+                        map[enumValue] = name
+                    elseif type(name) == "string" and type(enumValue) == "string"
+                        and FieldGroundType.getValueByType ~= nil then
+                        local ok, resolvedValue = pcall(
+                            FieldGroundType.getValueByType,
+                            FieldGroundType,
+                            enumValue
+                        )
+                        if ok and type(resolvedValue) == "number" then
+                            map[resolvedValue] = name
+                        end
                     end
                 end
+            end)
+            -- Always assign (even empty) so we never rebuild forever on throw.
+            FieldAdvisor.groundTypeNameByValue = map
+            if not okEnum and FieldToDoLog ~= nil then
+                FieldToDoLog.warning("FieldAdvisor: FieldGroundType enum cache failed")
             end
         end
 
