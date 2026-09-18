@@ -1,7 +1,7 @@
 # Dedicated MP reliability + vanilla farm To-Do permission
 
 **Date:** 2026-09-18  
-**Status:** approved (pending implementation plans per phase)  
+**Status:** Phases A–E done; smoke-tested on dedicated MP (0.1.0.11)  
 **Mod:** FS25_FieldToDoList  
 **Builds on:** MP live sync (`2026-09-10-mp-live-sync-design.md`), per-user ESC grants (`2026-09-12-esc-tabs-per-user-edit-design.md`)  
 **Evidence:** Client `log.txt` — overview scan `3 field(s)`; repeated `FieldAdvisor.lua` **stack overflow** on field **17** (grass). Server log silent for overview (expected: scan is client-local).
@@ -49,7 +49,7 @@ Server: FieldToDoSync → canExecuteOp (farm + manager|permission) → apply + s
 
 **Problem:** Overview scan errors with `stack overflow` at `FieldAdvisor.getGroundTypeName` / `resolveGroundTypeName` for grass field 17 → empty/broken suggestions → adopt feels dead.
 
-**Status:** implemented (code); in-game verify pending
+**Status:** implemented (code); smoke-tested
 
 **In scope**
 
@@ -62,6 +62,8 @@ Server: FieldToDoSync → canExecuteOp (farm + manager|permission) → apply + s
 **Done when:** Opening ESC on dedicated MP logs no stack overflow for field 17; grass row shows sensible crop/suggestion or explicit „Alles ok“, not scan error.
 
 ## Phase B — Sync visibility + “nothing happens”
+
+**Status:** implemented (code); smoke-tested
 
 **Problem:** Adopt / field-todo request path returns immediately (`errorKey == nil` after `FieldToDoSync.request`); deny/success often invisible → user sees no change.
 
@@ -81,6 +83,8 @@ Server: FieldToDoSync → canExecuteOp (farm + manager|permission) → apply + s
 
 ## Phase C — Fix adopt / field-todo on dedicated
 
+**Status:** implemented (code); smoke-tested
+
 **Problem:** Mutations appear to do nothing (user: adopt + field todo; free-text manual not tested yet).
 
 **In scope**
@@ -92,6 +96,8 @@ Server: FieldToDoSync → canExecuteOp (farm + manager|permission) → apply + s
 **Done when:** Manager on dedicated can adopt + create field todo + free-text todo; worker with permission on can; worker with permission off gets visible deny.
 
 ## Phase D — Missing owned fields (−2)
+
+**Status:** implemented (diagnostics via ftdlOwned + farmId harden); smoke-tested
 
 **Problem:** User expects **~5** owned fields; scan reports **3** (17 grass, ~104 farmyard, windrad/production). Two missing.
 
@@ -105,6 +111,8 @@ Server: FieldToDoSync → canExecuteOp (farm + manager|permission) → apply + s
 **Done when:** Either 5 candidates appear, or documented reason why the two are excluded (with farmland ids).
 
 ## Phase E — Vanilla farm permission
+
+**Status:** implemented (code); Hofverwaltung checkbox depends on Farm.PERMISSION APIs; smoke-tested
 
 **Problem:** ESC grant UI is wrong place; user wants checkbox in vanilla farm rights list.
 

@@ -18,6 +18,33 @@
 
 FieldToDoSync = {}
 FieldToDoSync.SCHEMA_VERSION = 2
+FieldToDoSync.lastRequest = nil
+FieldToDoSync.lastDeny = nil
+FieldToDoSync.lastNotify = nil
+
+---@return number
+local function syncNow()
+    if g_time ~= nil then
+        return g_time
+    end
+    if g_currentMission ~= nil and g_currentMission.time ~= nil then
+        return g_currentMission.time
+    end
+    return 0
+end
+
+---@param bucketName string
+---@param op number|nil
+---@param reason string|nil
+---@param farmId number|nil
+local function recordSyncDebug(bucketName, op, reason, farmId)
+    FieldToDoSync[bucketName] = {
+        op = op,
+        reason = reason,
+        farmId = farmId,
+        time = syncNow(),
+    }
+end
 
 ---@param version number|nil
 ---@return boolean
@@ -675,6 +702,7 @@ end
 ---@param reason string|nil
 function FieldToDoSync.sendDeny(connection, deniedOp, reason)
     reason = tostring(reason or "denied")
+    recordSyncDebug("lastDeny", deniedOp, reason, nil)
     if FieldToDoLog ~= nil then
         FieldToDoLog.warning("FieldToDoSync: denying op=%s reason=%s", tostring(deniedOp), reason)
     end
@@ -694,6 +722,7 @@ end
 ---@param payload table|nil
 function FieldToDoSync.request(op, payload)
     payload = payload or {}
+    recordSyncDebug("lastRequest", op, nil, nil)
 
     if not FieldToDoSync.isRunningAsServer()
         and g_client ~= nil
@@ -766,18 +795,29 @@ function FieldToDoSync.applyNotify(op, payload)
     payload = payload or {}
 
     if op == OP.DENY then
+        local reason = tostring(payload.reason or "denied")
+        recordSyncDebug("lastDeny", payload.deniedOp, reason, tonumber(payload.farmId))
         if FieldToDoLog ~= nil then
             FieldToDoLog.warning(
                 "FieldToDoSync: request denied by server (op=%s reason=%s)",
                 tostring(payload.deniedOp),
-                tostring(payload.reason or "?")
+                reason
             )
         end
         if FieldToDoInGameMenuIntegration ~= nil and FieldToDoInGameMenuIntegration.menuScreen ~= nil then
             local screen = FieldToDoInGameMenuIntegration.menuScreen
             if screen.notifyEditDenied ~= nil then
-                pcall(screen.notifyEditDenied, screen)
+                pcall(screen.notifyEditDenied, screen, reason)
             end
+        elseif InfoDialog ~= nil and InfoDialog.show ~= nil then
+            local message = reason
+            if FieldToDoL10n ~= nil and FieldToDoL10n.getText ~= nil then
+                message = FieldToDoL10n.getText("ftdl_edit_denied", "No permission to change to-dos")
+                if reason ~= nil and reason ~= "" and reason ~= "denied" then
+                    message = message .. " (" .. reason .. ")"
+                end
+            end
+            pcall(InfoDialog.show, message)
         end
         return
     end
@@ -798,7 +838,87 @@ function FieldToDoSync.applyNotify(op, payload)
         return
     end
 
-    FieldToDoSync.applyOp(manager, op, payload, notifyFarmId, nil)
+    local applied = FieldToDoSync.applyOp(manager, op, payload, notifyFarmId, nil)
+    if applied then
+        recordSyncDebug("lastNotify", op, nil, notifyFarmId)
+        FieldToDoSync.refreshAfterNotify(op)
+    end
+end
+
+--- Refresh ESC/HUD after a successful mutation notify (fixes silent adopt on MP client).
+---@param op number|nil
+function FieldToDoSync.refreshAfterNotify(op)
+    local manager = FieldToDoSync.getManager()
+    if manager ~= nil then
+        if manager.markManualTasksDirty ~= nil then
+            manager:markManualTasksDirty()
+        end
+        if op == OP.SET_PLANNED_CROP or op == OP.SET_PRESET or op == OP.SET_ORGANIC or op == OP.SET_MULCH then
+            if manager.markOwnedFieldsOverviewStale ~= nil then
+                manager:markOwnedFieldsOverviewStale()
+            end
+        end
+    end
+
+    if FieldToDoHudOverlay ~= nil and FieldToDoHudOverlay.instance ~= nil then
+        FieldToDoHudOverlay.instance.displayRows = {}
+    end
+
+    if FieldToDoInGameMenuIntegration ~= nil and FieldToDoInGameMenuIntegration.menuScreen ~= nil then
+        local screen = FieldToDoInGameMenuIntegration.menuScreen
+        if screen.refreshManualTaskList ~= nil then
+            pcall(screen.refreshManualTaskList, screen, false, true)
+        end
+        if screen.updateEditPermissionUi ~= nil then
+            pcall(screen.updateEditPermissionUi, screen)
+        end
+    end
+end
+
+--- Log sync/farm/edit diagnostics for ftdlSync.
+function FieldToDoSync.dumpDebugSummary()
+    local function fmtEntry(entry)
+        if entry == nil then
+            return "nil"
+        end
+        return string.format(
+            "op=%s reason=%s farmId=%s time=%s",
+            tostring(entry.op),
+            tostring(entry.reason),
+            tostring(entry.farmId),
+            tostring(entry.time)
+        )
+    end
+
+    local manager = FieldToDoSync.getManager()
+    local farmId = nil
+    if FieldToDoPermissions ~= nil and FieldToDoPermissions.resolveLocalFarmId ~= nil then
+        farmId = FieldToDoPermissions.resolveLocalFarmId()
+    end
+    if farmId == nil and manager ~= nil and manager.getLocalFarmId ~= nil then
+        farmId = manager:getLocalFarmId()
+    end
+
+    local canEdit = FieldToDoPermissions ~= nil and FieldToDoPermissions.canEditLocal ~= nil
+        and FieldToDoPermissions.canEditLocal() or false
+    local isServer = FieldToDoSync.isRunningAsServer()
+    local isClient = g_client ~= nil
+    local dedicated = g_dedicatedServer ~= nil
+
+    if FieldToDoLog ~= nil then
+        FieldToDoLog.info("SYNC schema=%s isServer=%s isClient=%s dedicated=%s farmId=%s manager=%s canEdit=%s",
+            tostring(FieldToDoSync.SCHEMA_VERSION),
+            tostring(isServer),
+            tostring(isClient),
+            tostring(dedicated),
+            tostring(farmId),
+            tostring(manager ~= nil),
+            tostring(canEdit)
+        )
+        FieldToDoLog.info("SYNC lastRequest %s", fmtEntry(FieldToDoSync.lastRequest))
+        FieldToDoLog.info("SYNC lastDeny %s", fmtEntry(FieldToDoSync.lastDeny))
+        FieldToDoLog.info("SYNC lastNotify %s", fmtEntry(FieldToDoSync.lastNotify))
+    end
 end
 
 --- Server -> all clients (requester included). SP (no g_server) applies locally via applyNotify.
@@ -1033,6 +1153,11 @@ end
 
 --- Non-host clients request authoritative farm state after savegame load.
 function FieldToDoSync.onMissionStarted()
+    if FieldToDoPermissions ~= nil and FieldToDoPermissions.registerFarmPermission ~= nil then
+        FieldToDoPermissions._farmPermissionRegistered = false
+        FieldToDoPermissions.registerFarmPermission()
+    end
+
     if g_currentMission ~= nil and g_currentMission.getIsServer ~= nil and g_currentMission:getIsServer() then
         return
     end

@@ -8,7 +8,8 @@ alwaysApply: true
 ## Release and Build
 
 - Keep `modDesc.xml` version unchanged unless the user explicitly requests a release bump.
-- Build: `python3 tools/generate_assets.py && ./build.sh`. After mod updates: **full FS25 restart**.
+- Build: `python3 tools/generate_assets.py && ./build.sh`. After mod updates: **full FS25 restart** (dedicated: restart **server and clients**).
+- GitHub release: tag `vX.Y.Z.W` must match `<version>` in `modDesc.xml`; workflow `.github/workflows/release.yml` builds/uploads `FS25_FieldToDoList.zip` (`docs/RELEASE.md`).
 
 ## Maintainer shell (fish)
 
@@ -56,6 +57,25 @@ alwaysApply: true
 - Order by `sortIndex`; guard list selection by task id (`ignoreTaskSelectionChanged`).
 - Open above completed; completed cap 10; `moveTask` stays within open/completed group.
 - HUD: manual tasks only, max 5. Logging via `FieldToDoLog` / `Logging`, not `print()`.
+- **HUD drag / click:** title-bar drag + row click-to-complete need unlocked mouse cursor; position in client `modSettings/FS25_FieldToDoList/hud.xml` (not savegame sidecar).
+- **HUD update gate:** run `FieldToDoHudOverlay:update(dt)` **before** `areGameFieldsReady()` early-return in `ToDoManager:update` — draw is not fields-gated; mouse/drag must not wait on field map.
+
+## Multiplayer / edit grants
+
+- Server-authoritative sync (`FieldToDoSync` + request/notify/state events). Schema version bumps must stay client/server matched.
+- **World read vs mutate:** overview/crop/grass = **client-local** `FieldState`; task/settings mutations = **server** + sidecar. Dedicated does not run overview scan.
+- **Edit gate:** managers always; workers via vanilla **Farm.PERMISSION** `ftdlEditTodos` (default **on**) when registered; else fallback `defaultAllow` / `todoEditByFarmId`. Auto-complete stays allowed for same-farm members.
+- **ESC grants retired:** no per-user list / „Alle Worker“ in Field To-Do tab — use Hofverwaltung checkbox.
+- **FarmId:** `FieldToDoPermissions.resolveLocalFarmId()` (mission / localPlayer / farmManager) for scan + local edit UI.
+- **Sync UX:** DENY → InfoDialog + reason; successful notify → refresh ESC list (`refreshAfterNotify`). Debug: `ftdlSync`, `ftdlOwned`.
+- **Dedicated:** missing `uniqueUserId` must **honor `defaultAllow`** / farm permission, not fail-closed.
+- **Farm user lists:** `getUsers` / `getActiveUsers` may return **User objects** — always use `FieldToDoPermissions.extractUserIdFromFarmUserEntry`.
+- **Membership:** remote ops resolve farm via `resolveFarmIdForUser` / `userBelongsToFarm`; unknown membership → deny (no host `getLocalFarmId()` fallback).
+- **Sidecar write:** only server (`canPersistSidecar`); clients never write `fieldToDoList.xml`.
+- **XML schema:** every attribute written by `setValue` must be `schema:register`’d.
+## Windows buddy updater
+
+- Single-file helper: `tools/Update-FS25_FieldToDoList.bat` (no `.ps1`). Compares local mods zip to GitHub latest release; replaces when newer. Ship/document as optional install path.
 
 ## Advisor (classification, harvest, weed)
 
@@ -74,7 +94,7 @@ alwaysApply: true
 
 ## Debug (manual only)
 
-- **F9** / LCtrl+F9: `ftdlHelp`, `ftdlDump <id>`, `ftdlStrawScan <id> [x z]`, `ftdlAll`, `ftdlFruits`.
+- **F9** / LCtrl+F9: `ftdlHelp`, `ftdlDump <id>`, `ftdlStrawScan <id> [x z]`, `ftdlAll`, `ftdlFruits`, `ftdlSync`, `ftdlOwned`.
 - Log: `[FS25_FieldToDoList] DUMP` / `STRAW_SCAN`. No auto-dump on menu open or load.
 - Straw UI check: `strawResidue: hasWindrow fillApiReady centerFill crossFillMax` in dump; API matrix in `STRAW_SCAN`.
 
@@ -83,3 +103,4 @@ alwaysApply: true
 - Plowed empty ≠ grass (Field 14 class); lucerne cut ≠ re-mow; harvest-ready cereals flagged; dead weed ≤5% live → no combat.
 - Körnermais Apr growth 1 → Ernte **Okt**, not Jul.
 - **Stroh:** visible swaths → `hasWindrow=true` → „Stroh pressen“ before mulch; yard bales not counted on field.
+- **Dedicated MP:** with `defaultAllow` on, Planfrucht / add / adopt must work without per-user grants; `fieldToDoList.xml` save must not log unregistered `#todoEditDefaultAllow`.

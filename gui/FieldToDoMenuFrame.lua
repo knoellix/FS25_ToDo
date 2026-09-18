@@ -310,17 +310,26 @@ end
 
 ---@return boolean
 function FieldToDoMenuFrame:shouldShowWorkersEditUi()
-    return self:isMultiplayerSession() and self:canChangeWorkersEditSetting()
+    -- ESC grant UI retired — edit rights live in vanilla Hofverwaltung (Farm.PERMISSION).
+    return false
 end
 
-function FieldToDoMenuFrame:notifyEditDenied()
+---@param reason string|nil
+function FieldToDoMenuFrame:notifyEditDenied(reason)
     local message = FieldToDoL10n.getText(
         "ftdl_edit_denied",
         "No permission to change to-dos"
     )
+    if reason ~= nil and reason ~= "" and reason ~= "denied" then
+        message = message .. " (" .. tostring(reason) .. ")"
+    end
 
     if FieldToDoLog ~= nil then
         FieldToDoLog.info(message)
+    end
+
+    if InfoDialog ~= nil and InfoDialog.show ~= nil then
+        pcall(InfoDialog.show, message)
     end
 
     self:updateEditPermissionUi()

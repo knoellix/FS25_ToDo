@@ -74,11 +74,24 @@ end
 ---@param field table
 ---@return number|nil
 function FieldScanner:getPlayerFarmId()
+    if FieldToDoPermissions ~= nil and FieldToDoPermissions.resolveLocalFarmId ~= nil then
+        local farmId = FieldToDoPermissions.resolveLocalFarmId()
+        if farmId ~= nil then
+            return farmId
+        end
+    end
+
     if self.mission == nil or self.mission.getFarmId == nil then
         return nil
     end
 
-    return self.mission:getFarmId()
+    local ok, farmId = pcall(self.mission.getFarmId, self.mission)
+    farmId = tonumber(farmId)
+    if ok and farmId ~= nil and farmId > 0 then
+        return farmId
+    end
+
+    return nil
 end
 
 ---@param farmland table|number|nil

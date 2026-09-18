@@ -1,5 +1,7 @@
 FieldToDoPermissions = {}
 FieldToDoPermissions._testOverride = nil
+FieldToDoPermissions.PERMISSION_KEY = "ftdlEditTodos"
+FieldToDoPermissions._farmPermissionRegistered = false
 
 local function resolveUserId(userId)
     if userId ~= nil then
@@ -14,6 +16,152 @@ local function resolveUserId(userId)
     if g_localPlayer ~= nil and g_localPlayer.userId ~= nil then
         return g_localPlayer.userId
     end
+    return nil
+end
+
+--- Local peer farm id (MP client / SP). Tries several engine sources.
+---@return number|nil
+function FieldToDoPermissions.resolveLocalFarmId()
+    local override = FieldToDoPermissions._testOverride
+    if override ~= nil and override.resolveFarmId ~= nil then
+        return tonumber(override.resolveFarmId)
+    end
+
+    local candidates = {}
+
+    local mission = g_currentMission
+    if mission ~= nil and mission.getFarmId ~= nil then
+        local ok, farmId = pcall(mission.getFarmId, mission)
+        if ok then
+            candidates[#candidates + 1] = farmId
+        end
+    end
+
+    if g_localPlayer ~= nil then
+        candidates[#candidates + 1] = g_localPlayer.farmId
+    end
+
+    if mission ~= nil and mission.player ~= nil then
+        candidates[#candidates + 1] = mission.player.farmId
+    end
+
+    local userId = resolveUserId(nil)
+    if userId ~= nil and g_farmManager ~= nil and g_farmManager.getFarmByUserId ~= nil then
+        local ok, farm = pcall(g_farmManager.getFarmByUserId, g_farmManager, userId)
+        if ok and farm ~= nil then
+            candidates[#candidates + 1] = farm.farmId
+        end
+    end
+
+    for i = 1, #candidates do
+        local farmId = tonumber(candidates[i])
+        if farmId ~= nil and farmId > 0 then
+            return farmId
+        end
+    end
+
+    return nil
+end
+
+--- Register custom farm permission for vanilla Hofverwaltung checkbox (pcall-safe, idempotent).
+function FieldToDoPermissions.registerFarmPermission()
+    if FieldToDoPermissions._farmPermissionRegistered then
+        return
+    end
+
+    local key = FieldToDoPermissions.PERMISSION_KEY
+    local ok = pcall(function()
+        if Farm == nil or type(Farm) ~= "table" then
+            return
+        end
+
+        if type(Farm.PERMISSION) ~= "table" then
+            Farm.PERMISSION = Farm.PERMISSION or {}
+        end
+
+        Farm.PERMISSION.FTDL_EDIT_TODOS = key
+
+        if type(Farm.PERMISSIONS) == "table" then
+            local found = false
+            for i = 1, #Farm.PERMISSIONS do
+                if Farm.PERMISSIONS[i] == key then
+                    found = true
+                    break
+                end
+            end
+            if not found then
+                Farm.PERMISSIONS[#Farm.PERMISSIONS + 1] = key
+            end
+        end
+
+        if type(Farm.DEFAULT_PERMISSIONS) == "table" then
+            if Farm.DEFAULT_PERMISSIONS[key] == nil then
+                Farm.DEFAULT_PERMISSIONS[key] = true
+            end
+        end
+
+        if g_i18n ~= nil and g_i18n.setText ~= nil then
+            local de = "Feld-To-Dos bearbeiten"
+            local en = "Edit field to-dos"
+            local label = en
+            if g_i18n.getText ~= nil then
+                local okLang, lang = pcall(g_i18n.getText, g_i18n, "ui_language")
+                if okLang and type(lang) == "string" and string.find(string.lower(lang), "de", 1, true) then
+                    label = de
+                end
+            end
+            pcall(g_i18n.setText, g_i18n, "ui_permission_" .. key, label)
+            pcall(g_i18n.setText, g_i18n, "farm_permission_" .. key, label)
+            pcall(g_i18n.setText, g_i18n, key, label)
+        end
+    end)
+
+    if ok then
+        FieldToDoPermissions._farmPermissionRegistered = true
+    end
+end
+
+--- Read vanilla farm user permission for To-Do edit. nil = API unavailable.
+---@param farmId number|nil
+---@param userId number|nil
+---@return boolean|nil
+function FieldToDoPermissions.hasFarmTodoEditPermission(farmId, userId)
+    farmId = tonumber(farmId)
+    userId = resolveUserId(userId)
+    if farmId == nil or userId == nil or g_farmManager == nil then
+        return nil
+    end
+
+    local key = FieldToDoPermissions.PERMISSION_KEY
+    local farm = g_farmManager.getFarmById ~= nil and g_farmManager:getFarmById(farmId) or nil
+    if farm == nil then
+        return nil
+    end
+
+    if farm.getUserPermission ~= nil then
+        local ok, result = pcall(farm.getUserPermission, farm, userId, key)
+        if ok and result ~= nil then
+            return result == true
+        end
+    end
+
+    if farm.hasUserPermission ~= nil then
+        local ok, result = pcall(farm.hasUserPermission, farm, userId, key)
+        if ok and result ~= nil then
+            return result == true
+        end
+    end
+
+    if farm.users ~= nil then
+        local entry = farm.users[userId] or farm.users[tostring(userId)]
+        if type(entry) == "table" and type(entry.permissions) == "table" then
+            local mapped = entry.permissions[key]
+            if mapped ~= nil then
+                return mapped == true
+            end
+        end
+    end
+
     return nil
 end
 
@@ -254,6 +402,12 @@ function FieldToDoPermissions.canEditFarmTodos(farmId, userId)
     if FieldToDoPermissions.isFarmManager(farmId, userId) then
         return true
     end
+
+    local farmPerm = FieldToDoPermissions.hasFarmTodoEditPermission(farmId, userId)
+    if farmPerm ~= nil then
+        return farmPerm
+    end
+
     local explicitUserId = userId ~= nil
     local uniqueId = FieldToDoPermissions.resolveUniqueUserId(userId)
     return FieldToDoPermissions.getTodoEditAllowed(farmId, uniqueId, explicitUserId)
@@ -271,9 +425,11 @@ function FieldToDoPermissions.canChangeWorkersEditSetting(farmId, userId)
 end
 
 function FieldToDoPermissions.canEditLocal()
-    local farmId = nil
-    if g_currentMission ~= nil and g_currentMission.fieldToDoList ~= nil then
+    local farmId = FieldToDoPermissions.resolveLocalFarmId()
+    if farmId == nil and g_currentMission ~= nil and g_currentMission.fieldToDoList ~= nil then
         farmId = g_currentMission.fieldToDoList:getLocalFarmId()
     end
     return FieldToDoPermissions.canEditFarmTodos(farmId, nil)
 end
+
+FieldToDoPermissions.registerFarmPermission()

@@ -224,6 +224,13 @@ end
 
 ---@return number|nil
 function ToDoManager:getLocalFarmId()
+    if FieldToDoPermissions ~= nil and FieldToDoPermissions.resolveLocalFarmId ~= nil then
+        local farmId = FieldToDoPermissions.resolveLocalFarmId()
+        if farmId ~= nil then
+            return farmId
+        end
+    end
+
     local mission = self.mission or g_currentMission
     if mission == nil or mission.getFarmId == nil then
         return nil

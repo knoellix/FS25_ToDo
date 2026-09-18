@@ -1017,6 +1017,98 @@ function FieldDebugDump:consoleStrawScan(args)
     return string.format("Straw scan failed for field %d — see log.txt.", fieldId)
 end
 
+function FieldDebugDump:consoleSync()
+    if FieldToDoSync == nil or FieldToDoSync.dumpDebugSummary == nil then
+        return "FieldToDoSync not loaded."
+    end
+    FieldToDoSync.dumpDebugSummary()
+    return "Sync debug written to log.txt (search 'SYNC')."
+end
+
+function FieldDebugDump.dumpOwnedDiagnostics()
+    local farmId = nil
+    if FieldToDoPermissions ~= nil and FieldToDoPermissions.resolveLocalFarmId ~= nil then
+        farmId = FieldToDoPermissions.resolveLocalFarmId()
+    end
+    local missionFarm = nil
+    if g_currentMission ~= nil and g_currentMission.getFarmId ~= nil then
+        local ok, id = pcall(g_currentMission.getFarmId, g_currentMission)
+        if ok then
+            missionFarm = tonumber(id)
+        end
+    end
+    local localPlayerFarm = g_localPlayer ~= nil and tonumber(g_localPlayer.farmId) or nil
+
+    out(string.format(
+        "===== OWNED DIAG farmId=%s mission:getFarmId=%s g_localPlayer.farmId=%s =====",
+        stringify(farmId),
+        stringify(missionFarm),
+        stringify(localPlayerFarm)
+    ))
+
+    local manager = g_currentMission ~= nil and g_currentMission.fieldToDoList or nil
+    local owned = nil
+    if manager ~= nil and manager.getOwnedFields ~= nil then
+        owned = manager:getOwnedFields(false)
+    end
+    local ownedCount = owned ~= nil and #owned or 0
+    out(string.format("ownedFields count=%s", stringify(ownedCount)))
+    if owned ~= nil then
+        for i = 1, math.min(ownedCount, 40) do
+            local rec = owned[i]
+            if rec ~= nil then
+                out(string.format(
+                    "owned[%d] id=%s name=%s fruit=%s pending=%s",
+                    i,
+                    stringify(rec.id),
+                    stringify(rec.name),
+                    stringify(rec.fruit),
+                    stringify(rec.pendingScan)
+                ))
+            end
+        end
+    end
+
+    if manager ~= nil then
+        out(string.format(
+            "scanActive=%s overviewStale=%s",
+            stringify(manager.ownedFieldsScanActive),
+            stringify(manager.ownedFieldsOverviewStale)
+        ))
+    end
+
+    local scanner = manager ~= nil and manager.fieldScanner or nil
+    if g_fieldManager ~= nil and g_fieldManager.fields ~= nil and scanner ~= nil then
+        local n = 0
+        for _, field in pairs(g_fieldManager.fields) do
+            if field ~= nil and n < 40 then
+                n = n + 1
+                local id = field.fieldId or field.id
+                local ownedFlag = scanner:isPlayerOwnedField(field)
+                local owner = field.fieldState ~= nil and field.fieldState.ownerFarmId or nil
+                out(string.format(
+                    "engineField id=%s owned=%s ownerFarmId=%s farmIdUsed=%s",
+                    stringify(id),
+                    stringify(ownedFlag),
+                    stringify(owner),
+                    stringify(scanner:getPlayerFarmId())
+                ))
+            end
+        end
+        out(string.format("engineFieldsListed=%d (cap 40)", n))
+    end
+
+    out("===== END OWNED DIAG =====")
+    return true
+end
+
+function FieldDebugDump:consoleOwned()
+    if FieldDebugDump.dumpOwnedDiagnostics() then
+        return "Owned-field diagnostics written to log.txt (search 'OWNED DIAG' / 'DUMP')."
+    end
+    return "Owned diagnostics failed — see log.txt."
+end
+
 function FieldDebugDump.register()
     if addConsoleCommand == nil then
         return
@@ -1030,6 +1122,8 @@ function FieldDebugDump.register()
         "consoleStrawScan",
         FieldDebugDump
     )
+    addConsoleCommand("ftdlSync", "Dump FieldToDo sync/farm/edit diagnostics", "consoleSync", FieldDebugDump)
+    addConsoleCommand("ftdlOwned", "Dump owned-field / farmId diagnostics", "consoleOwned", FieldDebugDump)
 end
 
 function FieldDebugDump.unregister()
@@ -1040,5 +1134,7 @@ function FieldDebugDump.unregister()
     removeConsoleCommand("ftdlFruits")
     removeConsoleCommand("ftdlFarmlands")
     removeConsoleCommand("ftdlStrawScan")
+    removeConsoleCommand("ftdlSync")
+    removeConsoleCommand("ftdlOwned")
     FieldDebugDump.lastDumpedFieldId = nil
 end

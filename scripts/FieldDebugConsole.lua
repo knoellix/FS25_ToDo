@@ -78,6 +78,8 @@ function FieldDebugConsole.getHelpText()
         "ftdlStrawScan <fieldId> [x z] — probe all straw/windrow APIs (search STRAW_SCAN in log.txt)",
         "ftdlFruits — list fruit types to log.txt",
         "ftdlAll — dump all owned fields to log.txt",
+        "ftdlSync — sync/farm/edit diagnostics (search SYNC)",
+        "ftdlOwned — owned-field / farmId diagnostics (search OWNED DIAG)",
         "Other lines are passed to executeConsoleCommand when available.",
     }, "\n")
 end
@@ -126,6 +128,14 @@ function FieldDebugConsole.executeLine(line)
         return "Field dump failed — see log.txt."
     end
 
+    if command == "ftdlsync" and FieldDebugDump ~= nil and FieldDebugDump.consoleSync ~= nil then
+        return FieldDebugDump:consoleSync()
+    end
+
+    if command == "ftdlowned" and FieldDebugDump ~= nil and FieldDebugDump.consoleOwned ~= nil then
+        return FieldDebugDump:consoleOwned()
+    end
+
     if command == "ftdlopen" then
         FieldDebugConsole.openCommandDialog()
         return "Debug dialog opened."
@@ -144,7 +154,7 @@ function FieldDebugConsole.executeLine(line)
     end
 
     return string.format(
-        "Unknown command '%s'. Try: ftdlHelp, ftdlDump <id>, ftdlStrawScan <id>, ftdlFruits, ftdlAll",
+        "Unknown command '%s'. Try: ftdlHelp, ftdlDump <id>, ftdlStrawScan <id>, ftdlFruits, ftdlAll, ftdlSync, ftdlOwned",
         command
     )
 end

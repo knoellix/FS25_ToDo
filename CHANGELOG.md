@@ -2,11 +2,23 @@
 
 All notable changes to **FS25_FieldToDoList** are documented here.
 
-## [Unreleased]
+## [0.1.0.11] — 2026-09-18
 
 ### Fixed
 
 - **Grass overview scan:** `getGroundTypeName` reentrancy / stack overflow on some FieldState objects (e.g. meadow field 17 on dedicated MP client) — scan completes instead of aborting the field.
+- **Adopt / field-todo on MP client:** successful notify refreshes the ESC task list (no longer silent after `FieldToDoSync.request`).
+- **Edit deny feedback:** InfoDialog shows deny reason (was log-only).
+- **Local farmId:** resolve via mission / `g_localPlayer` / farmManager for owned-field scan and edit gates.
+
+### Added
+
+- **Debug:** `ftdlSync` / `ftdlOwned` (F9 + console) for sync/farm/ownership diagnostics.
+- **Farm permission:** register `ftdlEditTodos` for vanilla Hofverwaltung; managers always edit; workers follow checkbox (default on). Fallback to sidecar `defaultAllow` when Farm.PERMISSION APIs are unavailable.
+
+### Changed
+
+- **ESC grant UI removed** (per-user list / „Alle Worker“ hidden). Prefer Hofverwaltung checkbox.
 
 ## [0.1.0.10] — 2026-09-12
 

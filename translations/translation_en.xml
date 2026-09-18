@@ -171,5 +171,8 @@
         <text name="ftdl_todo_edit_user" text="Edit to-dos"/>
         <text name="ftdl_edit_member_unknown" text="Player"/>
         <text name="ftdl_edit_denied" text="No permission to change to-dos"/>
+        <text name="ui_permission_ftdlEditTodos" text="Edit field to-dos"/>
+        <text name="farm_permission_ftdlEditTodos" text="Edit field to-dos"/>
+        <text name="ftdlEditTodos" text="Edit field to-dos"/>
     </texts>
 </l10n>
