@@ -3,7 +3,7 @@
     Modular auto-complete: vanilla-style field coverage (98%) vs point/grass/straw handlers.
 
     Point strategy (grass_mow, grass_bale*, straw_bale*): completion from FieldAdvisor context
-    (field-local bales, post-mow signals). No phase re-derivation here — see FieldAdvisor pipeline.
+    (field-local bales; grass_mow = ≥98% post-mow sample coverage). No phase re-derivation here.
 ]]
 
 FieldTaskCompletion = {}
@@ -426,6 +426,68 @@ function FieldTaskCompletion.getContextBaleCount(context)
     return tonumber(context.baleSummary.total) or 0
 end
 
+--- Fraction of grass-relevant sample probes that look post-mow (cut ground / cut growth / shred).
+--- Standing harvestable/growing grass counts against completion so half-mowed fields stay open.
+---@param field table|nil
+---@param fieldId number|nil
+---@param worldX number|nil
+---@param worldZ number|nil
+---@param gridSteps number|nil
+---@return number|nil
+function FieldTaskCompletion.getGrassMowCutRatio(field, fieldId, worldX, worldZ, gridSteps)
+    if field == nil or worldX == nil or worldZ == nil or FieldAdvisor == nil then
+        return nil
+    end
+
+    local points = FieldTaskCompletion.collectSamplePoints(
+        field,
+        worldX,
+        worldZ,
+        gridSteps or FieldTaskCompletion.SAMPLE_GRID_STEPS
+    )
+    if #points == 0 then
+        return nil
+    end
+
+    local relevant = 0
+    local cut = 0
+    local threshold = FieldTaskCompletion.getThreshold()
+    local pointCount = #points
+
+    for pointIndex, point in ipairs(points) do
+        local sampleState = FieldAdvisor.getEnrichedFieldState(field, fieldId, point.x, point.z)
+        local situation = FieldAdvisor.classifyProbe(sampleState, field)
+        local ground = FieldAdvisor.getGroundTypeName(sampleState)
+        local postMow = FieldAdvisor.isGrassPostMowState(sampleState, field, nil)
+            or FieldAdvisor.isGrassCutGroundType(ground)
+        local standingGrass = situation == FieldAdvisor.PROBE_SITUATION.GRASS and not postMow
+
+        if postMow or standingGrass then
+            relevant = relevant + 1
+            if postMow then
+                cut = cut + 1
+            end
+        end
+
+        if relevant >= FieldTaskCompletion.SAMPLE_EARLY_EXIT_MIN then
+            local remaining = pointCount - pointIndex
+            if remaining > 0 and (cut + remaining) / (relevant + remaining) < threshold then
+                break
+            end
+        end
+    end
+
+    if field.fieldState ~= nil and field.fieldState.update ~= nil then
+        pcall(field.fieldState.update, field.fieldState, worldX, worldZ)
+    end
+
+    if relevant <= 0 then
+        return nil
+    end
+
+    return cut / relevant
+end
+
 ---@param actionType string
 ---@param context table
 ---@param actionMeta table|nil
@@ -458,8 +520,6 @@ function FieldTaskCompletion.isGrassLogisticsComplete(actionType, context, actio
         end
     end
 
-    local baleCount = FieldTaskCompletion.getContextBaleCount(context)
-
     if actionType == "straw_bale" then
         local strawNow = FieldAdvisor.getTrackedBaleCountForAction(context.baleSummary, actionType)
         local baselineStraw = baseline ~= nil and tonumber(baseline.baleStrawCount) or 0
@@ -471,29 +531,21 @@ function FieldTaskCompletion.isGrassLogisticsComplete(actionType, context, actio
     end
 
     if actionType == "grass_mow" then
-        local aggregation = nil
-        if field ~= nil and context.worldX ~= nil and context.worldZ ~= nil then
-            aggregation = FieldAdvisor.aggregateFieldProbes(
-                field,
-                context.fieldId,
-                fieldState,
-                context.worldX,
-                context.worldZ,
-                FieldTaskCompletion.OVERVIEW_SAMPLE_GRID_STEPS
-            )
-        end
-
-        if FieldAdvisor.fieldHasPostMowGrassSignal(aggregation, fieldState, field, nil) then
-            return true
-        end
-
-        if aggregation ~= nil
-            and FieldAdvisor.getGrassMeadowPhase(fieldState, field, aggregation) == "cut" then
-            return true
+        -- Require nearly full-field post-mow coverage (≥98%). A single cut probe /
+        -- meadowPhase=cut / fieldHasPostMowGrassSignal used to complete at ~50% mowed.
+        local ratio = FieldTaskCompletion.getGrassMowCutRatio(
+            field,
+            context.fieldId,
+            context.worldX,
+            context.worldZ,
+            FieldTaskCompletion.SAMPLE_GRID_STEPS
+        )
+        if ratio ~= nil then
+            return ratio >= FieldTaskCompletion.getThreshold()
         end
 
         return FieldAdvisor.isGrassPostMowState(fieldState, field, nil)
-            or FieldAdvisor.isGrassCut(fieldState, field, aggregation)
+            or FieldAdvisor.isGrassCut(fieldState, field, nil)
     end
 
     -- grass_swath / grass_collect: strategy "none" in REGISTRY — never routed here (manual only).
@@ -627,22 +679,26 @@ function FieldTaskCompletion.isActionComplete(actionType, context, actionMeta)
     end
 
     if actionType == "pf_n" then
-        if not PrecisionFarmingReader.isRuntimeReady() then
-            return true
-        end
-
-        if pfSample == nil or pfSample.nitrogenValue == nil then
+        local advice = FieldAdvisor.getFertilizerAdviceFromContext(context)
+        if advice.source == "none" then
             return false
         end
 
-        local nitrogen = tonumber(pfSample.nitrogenValue) or 0
         if actionMeta ~= nil and actionMeta.fertPass ~= nil then
             local passTotal = tonumber(actionMeta.fertPassTotal) or 1
+            local level = tonumber(advice.level) or 0
+            if advice.source == "spray" then
+                local target = FertilizerAdvice ~= nil
+                    and FertilizerAdvice.getSprayPassTarget(actionMeta.fertPass, passTotal, advice.max)
+                    or FieldAdvisor.getOrganicFertilizerPassTarget(actionMeta.fertPass, passTotal, advice.max or 2)
+                return level >= target
+            end
+
             local target = FieldAdvisor.getOrganicFertilizerPassTarget(actionMeta.fertPass, passTotal, 80)
-            return nitrogen >= target
+            return level >= target
         end
 
-        return nitrogen >= 80
+        return advice.done == true
     end
 
     if actionType == "scs_moisture" or actionType == "scs_stress_high" or actionType == "scs_stress_watch" then

@@ -2,6 +2,21 @@
 
 All notable changes to **FS25_FieldToDoList** are documented here.
 
+## [0.1.0.13] — 2026-09-20
+
+### Fixed
+
+- **Grass labeled Luzerne:** removed growth-score `+20` bias for ALFALFA/CLOVER; refine/disambiguate/votes keep generic GRASS on equal scores (specific crops still via density/residue/field hint).
+- **grass_mow completes mid-field:** auto-complete now requires ≥98% post-mow sample coverage (`getGrassMowCutRatio`), not the first cut probe / meadowPhase shortcut.
+
+### Added
+
+- **Fertilize without Precision Farming:** suggest/complete `pf_n` from vanilla `sprayLevel` vs game spray max (adapts to 1× fertilizer mods). With PF ready, nitrogen map still wins.
+
+### Changed
+
+- **Mod / ESC icons:** mod list `icon.dds` = green paper / black frame / light-gray checklist on transparent; ESC `menuIcon.dds` = vanilla-style white outline (readable on dark + green selected tabs).
+
 ## [0.1.0.12] — 2026-09-18
 
 ### Fixed

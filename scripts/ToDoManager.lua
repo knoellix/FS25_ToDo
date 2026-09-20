@@ -2378,6 +2378,9 @@ local function onStartMission(mission)
         if FieldAdvisor ~= nil and FieldAdvisor.invalidateDensityMapHeightUtil ~= nil then
             FieldAdvisor.invalidateDensityMapHeightUtil()
         end
+        if FieldAdvisor ~= nil and FieldAdvisor.invalidateSprayLevelMax ~= nil then
+            FieldAdvisor.invalidateSprayLevelMax()
+        end
     end
 
     if FieldToDoLog ~= nil then

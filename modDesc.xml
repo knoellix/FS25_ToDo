@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
 <modDesc descVersion="98">
     <author>knoellix</author>
-    <version>0.1.0.12</version>
+    <version>0.1.0.13</version>
 
     <title>
         <en>Field To-Do List</en>
@@ -22,7 +22,7 @@ Field work list and To-Dos for Farming Simulator 25.
 
 Optional: Precision Farming (pH / nitrogen columns). Seasonal Crop Stress: not fully supported yet.
 
-Version 0.1.0.12 — dedicated MP: adopt farmId fix, Hof/Windrad parcels, sync schema v4.
+Version 0.1.0.13 — grass≠lucerne / mow coverage; fertilize via sprayLevel without PF; logo refresh.
         ]]></en>
         <de><![CDATA[
 Feld-Arbeitsliste und To-Dos für Farming Simulator 25.
@@ -37,7 +37,7 @@ Feld-Arbeitsliste und To-Dos für Farming Simulator 25.
 
 Optional: Precision Farming (pH / Stickstoff). Seasonal Crop Stress: noch nicht voll unterstützt.
 
-Version 0.1.0.12 — Dedicated-MP: Adopt-farmId-Fix, Hof/Windrad-Parzellen, Sync-Schema v4.
+Version 0.1.0.13 — Gras≠Luzerne / Mäh-Abdeckung; Düngen via sprayLevel ohne PF; Logo-Refresh.
         ]]></de>
     </description>
 
@@ -65,6 +65,7 @@ Version 0.1.0.12 — Dedicated-MP: Adopt-farmId-Fix, Hof/Windrad-Parzellen, Sync
         <sourceFile filename="scripts/FieldGameRules.lua"/>
         <sourceFile filename="scripts/FieldPhase.lua"/>
         <sourceFile filename="scripts/WeedAdvice.lua"/>
+        <sourceFile filename="scripts/FertilizerAdvice.lua"/>
         <sourceFile filename="scripts/PrecisionFarmingBridge.lua"/>
         <sourceFile filename="scripts/PrecisionFarmingReader.lua"/>
         <sourceFile filename="scripts/FieldToDoL10n.lua"/>

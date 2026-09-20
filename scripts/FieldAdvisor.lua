@@ -1158,9 +1158,10 @@ function FieldAdvisor.aggregateFieldProbes(field, fieldId, centerState, worldX, 
         for fruitIndex, voteCount in pairs(grassFruitVotes) do
             local beats = voteCount > dominantGrassVotes
             if voteCount == dominantGrassVotes and dominantGrassFruit ~= nil then
+                -- Equal votes: prefer generic GRASS over ALFALFA/CLOVER (avoids Luzerne label).
                 local curGeneric = FieldAdvisor.isGenericGrassFruitIndex(dominantGrassFruit)
                 local newGeneric = FieldAdvisor.isGenericGrassFruitIndex(fruitIndex)
-                beats = not newGeneric and curGeneric
+                beats = newGeneric and not curGeneric
             end
             if beats then
                 dominantGrassVotes = voteCount
@@ -2496,6 +2497,113 @@ function FieldAdvisor.invalidateDensityMapHeightUtil()
     FieldAdvisor._densityMapHeightUtil = nil
     FieldAdvisor._densityMapHeightFillMethod = nil
     FieldAdvisor._densityMapHeightNeedsSelf = false
+end
+
+FieldAdvisor._sprayLevelMax = nil
+FieldAdvisor._sprayLevelMaxResolved = false
+
+function FieldAdvisor.invalidateSprayLevelMax()
+    FieldAdvisor._sprayLevelMax = nil
+    FieldAdvisor._sprayLevelMaxResolved = false
+end
+
+--- Game density-map max for fertilizer spray stages (1× mods lower this).
+---@return number
+function FieldAdvisor.resolveSprayLevelMax()
+    if FieldAdvisor._sprayLevelMaxResolved then
+        return FieldAdvisor._sprayLevelMax
+            or (FertilizerAdvice ~= nil and FertilizerAdvice.SPRAY_LEVEL_MAX_FALLBACK)
+            or 2
+    end
+
+    FieldAdvisor._sprayLevelMaxResolved = true
+    FieldAdvisor._sprayLevelMax = nil
+
+    local groundSystem = nil
+    if g_currentMission ~= nil then
+        groundSystem = g_currentMission.fieldGroundSystem or g_currentMission.groundSystem
+    end
+    if groundSystem == nil and g_fieldManager ~= nil then
+        groundSystem = g_fieldManager.fieldGroundSystem or g_fieldManager.groundSystem
+    end
+
+    local sprayKey = nil
+    if FieldDensityMap ~= nil then
+        sprayKey = FieldDensityMap.SPRAY_LEVEL
+    end
+
+    if groundSystem ~= nil and sprayKey ~= nil and groundSystem.getMaxValue ~= nil then
+        local ok, value = pcall(groundSystem.getMaxValue, groundSystem, sprayKey)
+        local maxValue = ok and tonumber(value) or nil
+        if maxValue ~= nil and maxValue >= 1 then
+            FieldAdvisor._sprayLevelMax = math.floor(maxValue)
+            return FieldAdvisor._sprayLevelMax
+        end
+    end
+
+    local fallback = FertilizerAdvice ~= nil and FertilizerAdvice.SPRAY_LEVEL_MAX_FALLBACK or 2
+    FieldAdvisor._sprayLevelMax = fallback
+    return fallback
+end
+
+--- Facts for FertilizerAdvice.deriveFertilizerAdvice (PF nitrogen or vanilla sprayLevel).
+---@param fieldState table|nil
+---@param pfSample table|nil
+---@param isGrass boolean|nil
+---@return table
+function FieldAdvisor.buildFertilizerAdviceFacts(fieldState, pfSample, isGrass)
+    local pfReady = PrecisionFarmingReader ~= nil
+        and PrecisionFarmingReader.isRuntimeReady ~= nil
+        and PrecisionFarmingReader.isRuntimeReady()
+    local nitrogenValue = pfSample ~= nil and tonumber(pfSample.nitrogenValue) or nil
+    local sprayLevel = nil
+    if fieldState ~= nil then
+        sprayLevel = FieldAdvisor.getStateNumber(fieldState, "sprayLevel")
+    end
+
+    return {
+        isGrass = isGrass == true,
+        pfReady = pfReady == true,
+        nitrogenValue = nitrogenValue,
+        sprayLevel = sprayLevel,
+        sprayLevelMax = FieldAdvisor.resolveSprayLevelMax(),
+    }
+end
+
+---@param fieldState table|nil
+---@param pfSample table|nil
+---@param isGrass boolean|nil
+---@return table
+function FieldAdvisor.deriveFieldFertilizerAdvice(fieldState, pfSample, isGrass)
+    if FertilizerAdvice == nil or FertilizerAdvice.deriveFertilizerAdvice == nil then
+        return {
+            needsFertilizer = false,
+            done = false,
+            source = "none",
+            level = nil,
+            max = nil,
+        }
+    end
+
+    return FertilizerAdvice.deriveFertilizerAdvice(
+        FieldAdvisor.buildFertilizerAdviceFacts(fieldState, pfSample, isGrass)
+    )
+end
+
+---@param context table|nil
+---@return table
+function FieldAdvisor.getFertilizerAdviceFromContext(context)
+    if context == nil then
+        return FieldAdvisor.deriveFieldFertilizerAdvice(nil, nil, false)
+    end
+
+    local isGrass = context.isGrass == true
+    if not isGrass and context.field ~= nil and context.fieldState ~= nil then
+        isGrass = FieldAdvisor.classifyProbe(context.fieldState, context.field)
+            == FieldAdvisor.PROBE_SITUATION.GRASS
+    end
+
+    return FieldAdvisor.deriveFieldFertilizerAdvice(context.fieldState, context.pfSample, isGrass)
 end
 
 --- FS25 exposes DensityMapHeightUtil as a script global, not always via rawget(_G, …).
@@ -4531,10 +4639,9 @@ function FieldAdvisor.scoreGrassFruitGrowthMatch(fruitTypeIndex, fieldState)
         score = score + 50
     end
 
-    if not FieldAdvisor.isGenericGrassFruitIndex(fruitTypeIndex) then
-        score = score + 20
-    end
-
+    -- No +bonus for ALFALFA/CLOVER/etc.: growth flags alone often match generic GRASS equally,
+    -- and a tie-break bias turned every meadow into Luzerne. Specific crops win only via
+    -- density/residue/field hints or a strictly higher growth score.
     return score
 end
 
@@ -4552,20 +4659,29 @@ function FieldAdvisor.disambiguateGrassFruitTypeIndex(fieldState, field, probeIn
     local bestScore = 0
     for _, fruitTypeIndex in ipairs(FieldAdvisor.getGrassFruitTypeIndices()) do
         local score = FieldAdvisor.scoreGrassFruitGrowthMatch(fruitTypeIndex, fieldState)
-        if score > bestScore
-            or (score == bestScore
-                and bestIndex ~= nil
-                and FieldAdvisor.isGenericGrassFruitIndex(bestIndex)
-                and not FieldAdvisor.isGenericGrassFruitIndex(fruitTypeIndex)) then
+        if score > bestScore then
             bestScore = score
             bestIndex = fruitTypeIndex
+        elseif score == bestScore and bestIndex ~= nil then
+            -- On equal growth match, keep generic GRASS rather than inventing Luzerne/Klee.
+            local curGeneric = FieldAdvisor.isGenericGrassFruitIndex(bestIndex)
+            local newGeneric = FieldAdvisor.isGenericGrassFruitIndex(fruitTypeIndex)
+            if newGeneric and not curGeneric then
+                bestIndex = fruitTypeIndex
+            end
         end
     end
 
     if bestIndex ~= nil and bestScore > 0 then
-        if probeIndex == nil
-            or FieldAdvisor.isGenericGrassFruitIndex(probeIndex)
-            or bestScore >= FieldAdvisor.scoreGrassFruitGrowthMatch(probeIndex, fieldState) then
+        if probeIndex == nil then
+            return bestIndex
+        end
+        local probeScore = FieldAdvisor.scoreGrassFruitGrowthMatch(probeIndex, fieldState)
+        -- Only replace a generic probe when the candidate scores strictly higher.
+        if FieldAdvisor.isGenericGrassFruitIndex(probeIndex) and bestScore > probeScore then
+            return bestIndex
+        end
+        if not FieldAdvisor.isGenericGrassFruitIndex(probeIndex) and bestScore >= probeScore then
             return bestIndex
         end
     end
@@ -4688,7 +4804,8 @@ function FieldAdvisor.refineGrassFruitTypeIndex(fieldState, field, fruitTypeInde
                 local specificScore = FieldAdvisor.scoreGrassFruitGrowthMatch(specificIndex, fieldState)
                 local genericScore = fruitTypeIndex ~= nil
                     and FieldAdvisor.scoreGrassFruitGrowthMatch(fruitTypeIndex, fieldState) or 0
-                if specificScore > 0 and specificScore >= genericScore then
+                -- Strict > only: equal harvestReady scores must not upgrade GRASS → Luzerne.
+                if specificScore > 0 and specificScore > genericScore then
                     fruitTypeIndex = specificIndex
                     break
                 end
@@ -5894,14 +6011,22 @@ end
 
 ---@param actions table[]
 ---@param pfSample table|nil
+---@param sprayLevel number|nil
 ---@return table[]
-function FieldAdvisor.expandOrganicFertilizerPasses(actions, pfSample)
+function FieldAdvisor.expandOrganicFertilizerPasses(actions, pfSample, sprayLevel)
     if actions == nil or not FieldAdvisorSettings.isOrganicMultiPassEnabled() then
         return actions
     end
 
     local nitrogen = pfSample ~= nil and tonumber(pfSample.nitrogenValue) or nil
-    local passCount = FieldAdvisor.getOrganicFertilizerPassCount(nitrogen)
+    local passCount
+    if nitrogen ~= nil then
+        passCount = FieldAdvisor.getOrganicFertilizerPassCount(nitrogen)
+    elseif FertilizerAdvice ~= nil and FertilizerAdvice.getSprayPassCount ~= nil then
+        passCount = FertilizerAdvice.getSprayPassCount(sprayLevel, FieldAdvisor.resolveSprayLevelMax())
+    else
+        passCount = 1
+    end
     if passCount <= 1 then
         return actions
     end
@@ -6096,9 +6221,10 @@ end
 
 ---@param actions table[]
 ---@param pfSample table|nil
+---@param sprayLevel number|nil
 ---@return table[]
-function FieldAdvisor.finishActionCandidates(actions, pfSample)
-    actions = FieldAdvisor.expandOrganicFertilizerPasses(actions, pfSample)
+function FieldAdvisor.finishActionCandidates(actions, pfSample, sprayLevel)
+    actions = FieldAdvisor.expandOrganicFertilizerPasses(actions, pfSample, sprayLevel)
 
     if FieldAdvisorSettings.isOrganicMultiPassEnabled() then
         return FieldAdvisor.interleaveFertilizerPasses(actions)
@@ -6369,7 +6495,8 @@ function FieldAdvisor.addGrowingActions(actions, ctx)
         })
     end
 
-    if not ctx.isGrass and ctx.pfSample ~= nil and ctx.pfSample.nitrogenValue ~= nil and ctx.pfSample.nitrogenValue < 80 then
+    local fertAdvice = FieldAdvisor.deriveFieldFertilizerAdvice(ctx.fieldState, ctx.pfSample, ctx.isGrass)
+    if fertAdvice.needsFertilizer then
         FieldAdvisor_addAction(actions, {
             actionType = "pf_n",
             label = FieldAdvisor.text("ftdl_action_fert_n", "Düngen (N)"),
@@ -6536,6 +6663,15 @@ function FieldAdvisor.addEmptyOrPostHarvestActions(actions, ctx)
             autoComplete = true,
         })
     end
+
+    local fertAdvice = FieldAdvisor.deriveFieldFertilizerAdvice(ctx.fieldState, ctx.pfSample, ctx.isGrass)
+    if fertAdvice.needsFertilizer then
+        FieldAdvisor_addAction(actions, {
+            actionType = "pf_n",
+            label = FieldAdvisor.text("ftdl_action_fert_n", "Düngen (N)"),
+            autoComplete = true,
+        })
+    end
 end
 
 -- One builder per crop phase. resolveActionCandidates derives the final phase once, then
@@ -6632,7 +6768,11 @@ function FieldAdvisor.resolveActionCandidates(field, fieldState, pfSample, scsSa
         }
     end
 
-    return FieldAdvisor.finishActionCandidates(actions, pfSample)
+    return FieldAdvisor.finishActionCandidates(
+        actions,
+        pfSample,
+        FieldAdvisor.getStateNumber(fieldState, "sprayLevel")
+    )
 end
 
 ---@param field table
@@ -7041,6 +7181,7 @@ function FieldAdvisor.captureTaskBaseline(field, fieldId, worldX, worldZ)
         baleStrawCount = context.baleSummary ~= nil and (context.baleSummary.straw or 0) or 0,
         phValue = context.pfSample ~= nil and context.pfSample.pHValue or nil,
         nitrogenValue = context.pfSample ~= nil and context.pfSample.nitrogenValue or nil,
+        sprayLevel = FieldAdvisor.getStateNumber(fieldState, "sprayLevel"),
     }
 end
 
@@ -7110,8 +7251,15 @@ function FieldAdvisor.hasCompletionProgress(task, context)
         return tonumber(context.pfSample.pHValue) > tonumber(baseline.phValue)
     end
 
-    if actionType == "pf_n" and context.pfSample ~= nil and context.pfSample.nitrogenValue ~= nil and baseline.nitrogenValue ~= nil then
-        return tonumber(context.pfSample.nitrogenValue) > tonumber(baseline.nitrogenValue)
+    if actionType == "pf_n" then
+        if context.pfSample ~= nil and context.pfSample.nitrogenValue ~= nil and baseline.nitrogenValue ~= nil then
+            return tonumber(context.pfSample.nitrogenValue) > tonumber(baseline.nitrogenValue)
+        end
+        local sprayNow = FieldAdvisor.getStateNumber(context.fieldState, "sprayLevel")
+        local sprayBase = baseline.sprayLevel
+        if sprayBase ~= nil and sprayNow > tonumber(sprayBase) then
+            return true
+        end
     end
 
     return false

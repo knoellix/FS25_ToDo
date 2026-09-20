@@ -85,8 +85,10 @@ alwaysApply: true
 - Dual-window maize: `isFruitPrimaryHarvestInPeriod` + grain-ready (`minHarvestingGrowthState`), not first silage window alone.
 - Bare worked soil (`PLOWED`/`CULTIVATED`/`SEEDBED`, growth 0): crop display `-`, no grass fallback.
 - Plow done: `PLOWED` + `needsPlowing == false` (ignore stale `plowLevel` alone).
-- Grass cut: no re-mow; specific grass names (Luzerne etc.) even with partial soil work.
+- Grass cut: no re-mow; specific grass names (Luzerne etc.) only with density/residue/field hint — never via equal growth-score tie / `+20` bonus.
+- **grass_mow complete:** `getGrassMowCutRatio` ≥ 0.98 — not first post-mow probe / meadowPhase shortcut.
 - Weed: `WeedAdvice.deriveWeedAdvice`; coverage wins when `weedSummary.total > 0`; dead min state 6; spray only at state ≥3 or live ≥10%.
+- **Fertilize:** `FertilizerAdvice.deriveFertilizerAdvice` — PF nitrogen when ready, else `sprayLevel` vs `resolveSprayLevelMax()` (fallback 2; 1× mods lower max).
 - Bale counts field-local only.
 
 ## Consolidation
@@ -103,6 +105,8 @@ alwaysApply: true
 ## Validation snapshots
 
 - Plowed empty ≠ grass (Field 14 class); lucerne cut ≠ re-mow; harvest-ready cereals flagged; dead weed ≤5% live → no combat.
+- Standing meadow GRASS must not display as Luzerne without residue/density/field hint.
+- Half-mowed grass_mow stays open until ≥98% post-mow sample coverage.
 - Körnermais Apr growth 1 → Ernte **Okt**, not Jul.
 - **Stroh:** visible swaths → `hasWindrow=true` → „Stroh pressen“ before mulch; yard bales not counted on field.
 - **Dedicated MP:** with `defaultAllow` on, Planfrucht / add / adopt must work without per-user grants; `fieldToDoList.xml` save must not log unregistered `#todoEditDefaultAllow`.

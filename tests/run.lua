@@ -76,6 +76,61 @@ else
   end
 end
 
+-- FertilizerAdvice contract (PF nitrogen vs vanilla sprayLevel fallback).
+local fertFixtures = dofile(here .. "/fertilizer_fixtures.lua")
+local okFert, FertilizerAdvice = pcall(function() return dofile(repoRoot .. "/scripts/FertilizerAdvice.lua") end)
+
+if not okFert or type(FertilizerAdvice) ~= "table" or type(FertilizerAdvice.deriveFertilizerAdvice) ~= "function" then
+  io.write(RED .. "PENDING: scripts/FertilizerAdvice.lua not implemented yet.\n" .. RESET)
+  fail = fail + #fertFixtures
+else
+  io.write("\n")
+  for _, c in ipairs(fertFixtures) do
+    if c.kind == "passCount" then
+      local ok, got = pcall(FertilizerAdvice.getSprayPassCount, c.level, c.max)
+      if ok and got == c.expectCount then
+        pass = pass + 1
+        io.write(string.format(GREEN .. "PASS" .. RESET .. " %-44s -> %s\n", c.name, tostring(got)))
+      else
+        fail = fail + 1
+        io.write(string.format(RED .. "FAIL" .. RESET .. " %-44s expected %s got %s\n",
+          c.name, tostring(c.expectCount), ok and tostring(got) or ("error: " .. tostring(got))))
+      end
+    elseif c.kind == "passTarget" then
+      local ok, got = pcall(FertilizerAdvice.getSprayPassTarget, c.pass, c.passTotal, c.max)
+      if ok and got == c.expectTarget then
+        pass = pass + 1
+        io.write(string.format(GREEN .. "PASS" .. RESET .. " %-44s -> %s\n", c.name, tostring(got)))
+      else
+        fail = fail + 1
+        io.write(string.format(RED .. "FAIL" .. RESET .. " %-44s expected %s got %s\n",
+          c.name, tostring(c.expectTarget), ok and tostring(got) or ("error: " .. tostring(got))))
+      end
+    else
+      local ok, advice = pcall(FertilizerAdvice.deriveFertilizerAdvice, c.facts)
+      local mismatch = nil
+      if not ok then
+        mismatch = "error: " .. tostring(advice)
+      else
+        for key, want in pairs(c.expect) do
+          local got = advice[key]
+          if want ~= got then
+            mismatch = string.format("%s expected %s got %s", key, tostring(want), tostring(got))
+            break
+          end
+        end
+      end
+      if mismatch == nil then
+        pass = pass + 1
+        io.write(string.format(GREEN .. "PASS" .. RESET .. " %-44s -> advice ok\n", c.name))
+      else
+        fail = fail + 1
+        io.write(string.format(RED .. "FAIL" .. RESET .. " %-44s %s\n", c.name, mismatch))
+      end
+    end
+  end
+end
+
 -- Grass loose vs swath layout (classifyGrassMaterialLayout).
 dofile(repoRoot .. "/scripts/FieldAdvisor.lua")
 if type(FieldAdvisor) == "table" and type(FieldAdvisor.classifyGrassMaterialLayout) == "function" then
@@ -140,6 +195,109 @@ if type(FieldAdvisor) == "table" and type(FieldAdvisor.classifyBaleKind) == "fun
       io.write(string.format(RED .. "FAIL" .. RESET .. " %-44s expected %s got %s\n", c.name, c.expected, tostring(got)))
     end
   end
+end
+
+-- Grass crop scoring must not prefer ALFALFA over GRASS on equal growth flags.
+if type(FieldAdvisor) == "table" and type(FieldAdvisor.scoreGrassFruitGrowthMatch) == "function" then
+  io.write("\n")
+  local oldGrowth = FieldAdvisor.getEffectiveGrowthState
+  local oldEval = FieldAdvisor.evaluateFruitGrowth
+  local oldGround = FieldAdvisor.getGroundTypeName
+  local oldGeneric = FieldAdvisor.isGenericGrassFruitIndex
+
+  FieldAdvisor.getEffectiveGrowthState = function() return 3 end
+  FieldAdvisor.getGroundTypeName = function() return "GRASS" end
+  FieldAdvisor.evaluateFruitGrowth = function()
+    return {
+      isCut = false,
+      isHarvestReady = true,
+      isHarvestable = true,
+      isGrowing = false,
+      isWithered = false,
+    }
+  end
+  FieldAdvisor.isGenericGrassFruitIndex = function(idx) return idx == 1 end
+
+  local grassScore = FieldAdvisor.scoreGrassFruitGrowthMatch(1, {})
+  local alfalfaScore = FieldAdvisor.scoreGrassFruitGrowthMatch(2, {})
+  if grassScore == alfalfaScore and grassScore > 0 then
+    pass = pass + 1
+    io.write(string.format(GREEN .. "PASS" .. RESET .. " %-44s -> score=%s\n",
+      "grass_score_no_alfalfa_bias", tostring(grassScore)))
+  else
+    fail = fail + 1
+    io.write(string.format(RED .. "FAIL" .. RESET .. " %-44s grass=%s alfalfa=%s\n",
+      "grass_score_no_alfalfa_bias", tostring(grassScore), tostring(alfalfaScore)))
+  end
+
+  FieldAdvisor.getEffectiveGrowthState = oldGrowth
+  FieldAdvisor.evaluateFruitGrowth = oldEval
+  FieldAdvisor.getGroundTypeName = oldGround
+  FieldAdvisor.isGenericGrassFruitIndex = oldGeneric
+end
+
+-- grass_mow cut ratio: half post-mow must stay below completion threshold.
+dofile(repoRoot .. "/scripts/FieldTaskCompletion.lua")
+if type(FieldTaskCompletion) == "table" and type(FieldTaskCompletion.getGrassMowCutRatio) == "function" then
+  io.write("\n")
+  local oldCollect = FieldTaskCompletion.collectSamplePoints
+  local oldEnrich = FieldAdvisor.getEnrichedFieldState
+  local oldClassify = FieldAdvisor.classifyProbe
+  local oldPostMow = FieldAdvisor.isGrassPostMowState
+  local oldCutGround = FieldAdvisor.isGrassCutGroundType
+  local oldGround = FieldAdvisor.getGroundTypeName
+
+  FieldTaskCompletion.collectSamplePoints = function()
+    return {
+      { x = 1, z = 1 }, { x = 2, z = 2 }, { x = 3, z = 3 }, { x = 4, z = 4 },
+      { x = 5, z = 5 }, { x = 6, z = 6 }, { x = 7, z = 7 }, { x = 8, z = 8 },
+      { x = 9, z = 9 }, { x = 10, z = 10 },
+    }
+  end
+  FieldAdvisor.getEnrichedFieldState = function(_, _, x)
+    return { x = x }
+  end
+  FieldAdvisor.classifyProbe = function()
+    return FieldAdvisor.PROBE_SITUATION.GRASS
+  end
+  FieldAdvisor.getGroundTypeName = function() return "GRASS" end
+  FieldAdvisor.isGrassCutGroundType = function() return false end
+  -- First 5 cut, last 5 standing → ratio 0.5
+  FieldAdvisor.isGrassPostMowState = function(state)
+    return state.x <= 5
+  end
+
+  local halfRatio = FieldTaskCompletion.getGrassMowCutRatio({}, 17, 0, 0, 5)
+  local threshold = FieldTaskCompletion.getThreshold()
+  -- Early-exit may return >0.5 once standing probes make ≥98% unreachable; still must stay open.
+  if halfRatio ~= nil and halfRatio < threshold then
+    pass = pass + 1
+    io.write(string.format(GREEN .. "PASS" .. RESET .. " %-44s -> ratio=%.2f\n",
+      "grass_mow_half_field_not_complete", halfRatio))
+  else
+    fail = fail + 1
+    io.write(string.format(RED .. "FAIL" .. RESET .. " %-44s got %s (threshold %s)\n",
+      "grass_mow_half_field_not_complete", tostring(halfRatio), tostring(threshold)))
+  end
+
+  FieldAdvisor.isGrassPostMowState = function() return true end
+  local fullRatio = FieldTaskCompletion.getGrassMowCutRatio({}, 17, 0, 0, 5)
+  if fullRatio ~= nil and fullRatio >= threshold then
+    pass = pass + 1
+    io.write(string.format(GREEN .. "PASS" .. RESET .. " %-44s -> ratio=%.2f\n",
+      "grass_mow_full_field_complete", fullRatio))
+  else
+    fail = fail + 1
+    io.write(string.format(RED .. "FAIL" .. RESET .. " %-44s got %s\n",
+      "grass_mow_full_field_complete", tostring(fullRatio)))
+  end
+
+  FieldTaskCompletion.collectSamplePoints = oldCollect
+  FieldAdvisor.getEnrichedFieldState = oldEnrich
+  FieldAdvisor.classifyProbe = oldClassify
+  FieldAdvisor.isGrassPostMowState = oldPostMow
+  FieldAdvisor.isGrassCutGroundType = oldCutGround
+  FieldAdvisor.getGroundTypeName = oldGround
 end
 
 -- P4: harvest ETA uses FruitTypeDesc only (nil when neither API nor minHarvest).

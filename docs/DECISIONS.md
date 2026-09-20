@@ -15,6 +15,16 @@ Datum  Thema: Regel (kurz, technisch).
 
 ## Einträge
 
+2026-09-20  **Düngen ohne PF: sprayLevel vs Max** — Ohne Precision Farming (kein N-Sample): Vorschlag/Auto-Complete über `FieldState.sprayLevel < resolveSprayLevelMax()` (`fieldGroundSystem:getMaxValue(SPRAY_LEVEL)`, Fallback 2). Mit PF weiterhin N&lt;80. Eine Entscheidung: `FertilizerAdvice.deriveFertilizerAdvice`. 1×-Düng-Mods senken das Map-Max → eine Gabe reicht.
+            Entscheidende Funktion: `FertilizerAdvice.deriveFertilizerAdvice` / `FieldAdvisor.resolveSprayLevelMax`.
+
+2026-09-20  **Gras ≠ Luzerne ohne Beleg** — Growth-Score darf ALFALFA/CLOVER nicht pauschal belohnen (`+20` entfernt). `refineGrassFruitTypeIndex` upgraded nur bei **streng höherem** Score; Disambiguation/Votes bei Gleichstand → generisches GRASS. Echte Luzerne weiter über Density/Windrow/Feld-Hint.
+            Entscheidende Funktion: `scoreGrassFruitGrowthMatch` / `refineGrassFruitTypeIndex` / `disambiguateGrassFruitTypeIndex`.
+            Quelle: Feld 17 + MP-Bericht „Gras zeigt Luzerne“.
+
+2026-09-20  **grass_mow Auto-Complete = Feldabdeckung** — Fertig erst bei ≥98% post-mow Proben (`getGrassMowCutRatio`), nicht bei erstem Cut-Signal / `meadowPhase=cut` / `fieldHasPostMowGrassSignal` (halb gemäht ≠ fertig).
+            Entscheidende Funktion: `FieldTaskCompletion.getGrassMowCutRatio` / `isGrassLogisticsComplete`.
+
 2026-09-10  **MP-Härtung (ohne Event-Sync)** — Tasks tragen `farmId`; UI/Auto-Complete nur lokale Farm; Save merged andere Farmen aus Disk (`syncForeignFarmTasksFromDisk`). FieldVisit nur `g_localPlayer`, kein mission-weites leave/interrupt, kein `setWorldTranslation`. HUD braucht `g_localPlayer`.
             Entscheidende Funktion: `ToDoManager:taskBelongsToLocalFarm` / `syncForeignFarmTasksFromDisk` / `FieldVisit.getLocalPlayer`.
 

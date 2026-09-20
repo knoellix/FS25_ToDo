@@ -29,25 +29,21 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 GUI_DIR = ROOT / "gui"
 
-# Light glyph for dark in-game menu sidebars (FS25 tab icons)
+# ESC tab: vanilla-style white outline on transparent (engine shows it on dark + green selected tabs).
+# Do NOT use green fill here — selected tabs are green and would hide the paper.
 MENU_ICON_SVG = """<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
   <rect width="1024" height="1024" fill="none"/>
-  <!-- Clipboard -->
+  <!-- Clipboard frame + clip (white outline) -->
   <rect x="280" y="200" width="464" height="620" rx="48" fill="none" stroke="#F2F2F2" stroke-width="44"/>
   <rect x="392" y="140" width="240" height="88" rx="36" fill="none" stroke="#F2F2F2" stroke-width="40"/>
-  <!-- Checklist lines -->
-  <path d="M360 380 L420 440 L540 320" fill="none" stroke="#8BC34A" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/>
-  <line x1="580" y1="380" x2="680" y2="380" stroke="#D8D8D8" stroke-width="32" stroke-linecap="round"/>
-  <path d="M360 520 L420 580 L540 460" fill="none" stroke="#8BC34A" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/>
-  <line x1="580" y1="520" x2="720" y2="520" stroke="#D8D8D8" stroke-width="32" stroke-linecap="round"/>
-  <circle cx="400" cy="660" r="28" fill="none" stroke="#B0B0B0" stroke-width="28"/>
-  <line x1="580" y1="660" x2="700" y2="660" stroke="#B0B0B0" stroke-width="32" stroke-linecap="round"/>
-  <!-- Small field grid (field overview hint) -->
-  <rect x="720" y="720" width="180" height="120" rx="12" fill="none" stroke="#8BC34A" stroke-width="24"/>
-  <line x1="780" y1="720" x2="780" y2="840" stroke="#8BC34A" stroke-width="16"/>
-  <line x1="840" y1="720" x2="840" y2="840" stroke="#8BC34A" stroke-width="16"/>
-  <line x1="720" y1="780" x2="900" y2="780" stroke="#8BC34A" stroke-width="16"/>
+  <!-- Checklist (same light tone as vanilla glyphs) -->
+  <path d="M360 380 L420 440 L540 320" fill="none" stroke="#F2F2F2" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="580" y1="380" x2="700" y2="380" stroke="#F2F2F2" stroke-width="32" stroke-linecap="round"/>
+  <path d="M360 520 L420 580 L540 460" fill="none" stroke="#F2F2F2" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="580" y1="520" x2="720" y2="520" stroke="#F2F2F2" stroke-width="32" stroke-linecap="round"/>
+  <circle cx="400" cy="660" r="28" fill="none" stroke="#F2F2F2" stroke-width="28"/>
+  <line x1="580" y1="660" x2="700" y2="660" stroke="#F2F2F2" stroke-width="32" stroke-linecap="round"/>
 </svg>
 """
 
@@ -85,23 +81,18 @@ BUTTON_ICONS: dict[str, str] = {
 
 LOGO_SVG = """<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <defs>
-    <linearGradient id="field" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#3d6b2e"/>
-      <stop offset="100%" style="stop-color:#6fa84a"/>
-    </linearGradient>
-  </defs>
-  <rect width="512" height="512" rx="64" fill="url(#field)"/>
-  <rect x="96" y="72" width="220" height="300" rx="24" fill="none" stroke="#ffffff" stroke-width="16"/>
-  <rect x="156" y="48" width="100" height="40" rx="12" fill="none" stroke="#ffffff" stroke-width="14"/>
-  <path d="M128 160 L156 188 L200 132" fill="none" stroke="#c8e6c9" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
-  <line x1="220" y1="160" x2="280" y2="160" stroke="#ffffff" stroke-width="12" stroke-linecap="round"/>
-  <path d="M128 220 L156 248 L200 192" fill="none" stroke="#c8e6c9" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
-  <line x1="220" y1="220" x2="300" y2="220" stroke="#ffffff" stroke-width="12" stroke-linecap="round"/>
-  <rect x="300" y="300" width="120" height="80" rx="8" fill="none" stroke="#e8f5e9" stroke-width="10"/>
-  <line x1="340" y1="300" x2="340" y2="380" stroke="#e8f5e9" stroke-width="6"/>
-  <line x1="380" y1="300" x2="380" y2="380" stroke="#e8f5e9" stroke-width="6"/>
-  <line x1="300" y1="340" x2="420" y2="340" stroke="#e8f5e9" stroke-width="6"/>
+  <!-- Transparent: black frame, green paper flush, gray checklist. -->
+  <rect width="512" height="512" fill="none"/>
+  <rect x="128" y="96" width="256" height="340" rx="28" fill="#8BC34A" stroke="#1A1A1A" stroke-width="22"/>
+  <rect x="188" y="64" width="136" height="52" rx="18" fill="#1A1A1A"/>
+  <rect x="208" y="78" width="96" height="24" rx="10" fill="#8BC34A"/>
+  <!-- Checklist writing (gray) -->
+  <path d="M168 188 L200 220 L256 152" fill="none" stroke="#EEEEEE" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="280" y1="188" x2="348" y2="188" stroke="#EEEEEE" stroke-width="16" stroke-linecap="round"/>
+  <path d="M168 268 L200 300 L256 232" fill="none" stroke="#EEEEEE" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="280" y1="268" x2="360" y2="268" stroke="#EEEEEE" stroke-width="16" stroke-linecap="round"/>
+  <circle cx="192" cy="360" r="18" fill="none" stroke="#EEEEEE" stroke-width="16"/>
+  <line x1="280" y1="360" x2="340" y2="360" stroke="#EEEEEE" stroke-width="16" stroke-linecap="round"/>
 </svg>
 """
 
@@ -207,7 +198,7 @@ def convert_all() -> int:
             print("error: ImageMagick required for DDS export", file=sys.stderr)
             return 1
 
-        if not png_to_dds(icon_png, ROOT / "icon.dds", use_alpha=False):
+        if not png_to_dds(icon_png, ROOT / "icon.dds", use_alpha=True):
             print("error: failed to write icon.dds", file=sys.stderr)
             return 1
 

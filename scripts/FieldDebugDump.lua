@@ -711,6 +711,20 @@ function FieldDebugDump.dumpField(fieldId)
     out(string.format("getFieldFruitDisplayLabel -> '%s'", stringify(displayLabel)))
 
     local context = FieldAdvisor.buildFieldContext(field, fieldState, worldX, worldZ, aggregation)
+    local fertAdvice = FieldAdvisor.deriveFieldFertilizerAdvice(
+        context ~= nil and context.fieldState or fieldState,
+        context ~= nil and context.pfSample or nil,
+        FieldAdvisor.classifyProbe(fieldState, field) == FieldAdvisor.PROBE_SITUATION.GRASS
+    )
+    out(string.format(
+        "fertAdvice: source=%s level=%s max=%s needs=%s done=%s sprayMaxResolved=%s",
+        stringify(fertAdvice.source),
+        stringify(fertAdvice.level),
+        stringify(fertAdvice.max),
+        stringify(fertAdvice.needsFertilizer),
+        stringify(fertAdvice.done),
+        stringify(FieldAdvisor.resolveSprayLevelMax())
+    ))
     local weedSummary = context ~= nil and context.weedSummary or nil
     local probeState = aggregation.centerState or fieldState
     out(string.format(
