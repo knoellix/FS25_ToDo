@@ -21,7 +21,7 @@ Datum  Thema: Regel (kurz, technisch).
 2026-09-22  **Generic meadow index** — `getDefaultGrassFruitTypeIndex` bevorzugt `GRASS`/`MEADOW`/… (nicht erstes `isGrassCrop` = oft ALFALFA). Post-mow-Override + Meadow-Phase nutzen das für alle Mähbaren.
             Entscheidende Funktion: `FieldAdvisor.getDefaultGrassFruitTypeIndex` / `getGrassMeadowPhase`.
 
-2026-09-22  **grass_mow: ALFALFA harvestReady blockiert Cut nicht** — `isGrassPostMowState`: wenn spezifische Grasfrucht (Luzerne) `harvestReady` meldet, aber generisches GRASS `isCut` ist → post-mow (gemäht). Verhindert hängende Mäh-ToDos nach Feldmähen.
+2026-09-22  **Luzerne im Erntefenster ≠ post-mow** — Generic-GRASS-`isCut` Override nur, wenn Growth **außerhalb** min/maxHarvest der spezifischen Frucht liegt. Luzerne growth=5 (Fenster 3–5) bleibt `harvestable` / „mähen“, auch wenn GRASS bei growth=5 als cut gilt.
             Entscheidende Funktion: `FieldAdvisor.isGrassPostMowState`.
 
 2026-09-22  **HUD hud.xml Schema** — `FieldToDoHudOverlay` registriert `panelX`/`panelY` am `XMLSchema` vor load/create (kein „Unable to get schema“ mehr).

@@ -197,7 +197,7 @@ if type(FieldAdvisor) == "table" and type(FieldAdvisor.classifyBaleKind) == "fun
   end
 end
 
--- isGrassPostMowState: alfalfa harvestReady on cut meadow must not block (use generic GRASS isCut).
+-- isGrassPostMowState: alfalfa harvestReady BELOW minHarvest + generic GRASS isCut → post-mow.
 if type(FieldAdvisor) == "table" and type(FieldAdvisor.isGrassPostMowState) == "function" then
   io.write("\n")
   local oldGround = FieldAdvisor.getGroundTypeName
@@ -213,11 +213,13 @@ if type(FieldAdvisor) == "table" and type(FieldAdvisor.isGrassPostMowState) == "
   FieldAdvisor.getGroundTypeName = function() return "GRASS" end
   FieldAdvisor.resolveFruitTypeIndex = function() return 2 end
   FieldAdvisor.isGrassCrop = function() return true end
-  FieldAdvisor.getEffectiveGrowthState = function() return 4 end
+  FieldAdvisor.getEffectiveGrowthState = function() return 2 end
   FieldAdvisor.getLastGrowthState = function() return 0 end
   FieldAdvisor.getStateNumber = function() return 0 end
   FieldAdvisor.getDefaultGrassFruitTypeIndex = function() return 1 end
-  FieldAdvisor.getFruitTypeDesc = function() return { maxHarvestingGrowthState = 5 } end
+  FieldAdvisor.getFruitTypeDesc = function()
+    return { minHarvestingGrowthState = 3, maxHarvestingGrowthState = 5 }
+  end
   FieldAdvisor.evaluateFruitGrowth = function(idx)
     if idx == 2 then
       return { isCut = false, isHarvestReady = true, isHarvestable = true, isGrowing = false, isWithered = false }
@@ -228,10 +230,21 @@ if type(FieldAdvisor) == "table" and type(FieldAdvisor.isGrassPostMowState) == "
   local got = FieldAdvisor.isGrassPostMowState({}, {})
   if got == true then
     pass = pass + 1
-    io.write(GREEN .. "PASS" .. RESET .. " post_mow_alfalfa_false_standing_uses_generic_cut\n")
+    io.write(GREEN .. "PASS" .. RESET .. " post_mow_alfalfa_below_min_uses_generic_cut\n")
   else
     fail = fail + 1
-    io.write(RED .. "FAIL" .. RESET .. " post_mow_alfalfa_false_standing_uses_generic_cut got false\n")
+    io.write(RED .. "FAIL" .. RESET .. " post_mow_alfalfa_below_min_uses_generic_cut got false\n")
+  end
+
+  -- Standing Luzerne in harvest window must NOT become post-mow just because GRASS isCut at same growth.
+  FieldAdvisor.getEffectiveGrowthState = function() return 5 end
+  got = FieldAdvisor.isGrassPostMowState({}, {})
+  if got == false then
+    pass = pass + 1
+    io.write(GREEN .. "PASS" .. RESET .. " standing_alfalfa_in_window_not_post_mow\n")
+  else
+    fail = fail + 1
+    io.write(RED .. "FAIL" .. RESET .. " standing_alfalfa_in_window_not_post_mow got true\n")
   end
 
   FieldAdvisor.getGroundTypeName = oldGround

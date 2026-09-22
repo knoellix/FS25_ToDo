@@ -835,10 +835,16 @@ function FieldTaskCompletion.isTaskComplete(task, scanner, fieldCache)
     end
 
     local threshold = FieldTaskCompletion.getThreshold()
-    local ratio = fieldCache ~= nil and fieldCache.ratios[task.actionType] or nil
+    local ratio = nil
+    if fieldCache ~= nil and type(fieldCache.ratios) == "table" then
+        ratio = fieldCache.ratios[task.actionType]
+    end
     if ratio == nil or not FieldTaskCompletion.shouldUseCachedRatio(entry, fieldCache) then
         ratio = FieldTaskCompletion.getCompletionRatio(field, task, posX, posZ)
-        if fieldCache ~= nil and fieldCache.ratios ~= nil then
+        if fieldCache ~= nil then
+            if fieldCache.ratios == nil then
+                fieldCache.ratios = {}
+            end
             fieldCache.ratios[task.actionType] = ratio
         end
     end

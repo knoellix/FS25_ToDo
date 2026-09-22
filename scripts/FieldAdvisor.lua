@@ -585,8 +585,20 @@ function FieldAdvisor.isGrassPostMowState(fieldState, field, fruitTypeIndex)
         -- Regrown to mowable height: a standing, harvestable stand is NOT post-mow,
         -- even if stubble shred from the previous cut still lingers (e.g. clover/alfalfa).
         if not growth.isCut and (growth.isHarvestReady or growth.isHarvestable) then
-            -- Density often reports ALFALFA/CLOVER for meadows while growth is cut grass;
-            -- specific crop descs can claim harvestReady on a cut state. Prefer generic GRASS.
+            -- Density often reports ALFALFA/CLOVER on cut meadows where grass growth is
+            -- outside that crop's harvest window. Inside the specific crop's window, trust
+            -- standing harvestReady (e.g. Luzerne growth=5) — do not treat GRASS isCut at
+            -- the same growth number as post-mow.
+            local fruitDesc = FieldAdvisor.getFruitTypeDesc(fruitTypeIndex)
+            local minHarvest = tonumber(fruitDesc ~= nil and fruitDesc.minHarvestingGrowthState) or 0
+            local maxHarvest = tonumber(fruitDesc ~= nil and fruitDesc.maxHarvestingGrowthState) or 0
+            local inSpecificHarvestWindow = maxHarvest > 0
+                and growthState >= minHarvest
+                and growthState <= maxHarvest
+            if inSpecificHarvestWindow then
+                return false
+            end
+
             local genericIndex = FieldAdvisor.getDefaultGrassFruitTypeIndex()
             if genericIndex ~= nil and genericIndex ~= fruitTypeIndex then
                 local genericGrowth = FieldAdvisor.evaluateFruitGrowth(genericIndex, growthState)

@@ -11,7 +11,9 @@ All notable changes to **FS25_FieldToDoList** are documented here.
 
 ### Fixed
 
-- **grass_mow stuck after full mow:** `isGrassPostMowState` no longer treats ALFALFA/CLOVER `harvestReady` as standing when generic GRASS reports `isCut`.
+- **Standing Luzerne as post-mow:** generic GRASS `isCut` at growth 5 no longer overrides ALFALFA inside its harvest window (field 76 → mähen again).
+- **Auto-complete crash:** `fieldCache.ratios` nil after typo `votes` → safe ratio access + restore cache copy.
+- **grass_mow stuck after full mow:** `isGrassPostMowState` no longer treats ALFALFA/CLOVER `harvestReady` as standing when generic GRASS reports `isCut` *outside* that crop’s harvest window.
 - **HUD hud.xml schema error:** register `panelX`/`panelY` on an `XMLSchema` before load/save.
 
 ## [0.1.0.13] — 2026-09-20

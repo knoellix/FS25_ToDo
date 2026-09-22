@@ -1728,7 +1728,7 @@ function ToDoManager:updateAutoCompletion()
                     fieldCache.fingerprintMatch = previousCheck ~= nil
                         and previousCheck.fingerprint == fieldCache.fingerprint
                     if fieldCache.fingerprintMatch and previousCheck.ratios ~= nil then
-                        fieldCache.ratios = previousCheck.votes
+                        fieldCache.ratios = previousCheck.ratios
                     end
                 end
             end
