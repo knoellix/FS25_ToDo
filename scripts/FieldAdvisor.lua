@@ -5794,9 +5794,9 @@ function FieldAdvisor.getExpectedHarvestLabel(field, fieldState, aggregation, gr
         local probeState = aggregation ~= nil and aggregation.centerState or harvestState
         local meadowPhase = FieldAdvisor.getGrassMeadowPhase(probeState, field, aggregation)
 
-        -- Standing ready-to-mow wins over residue false positives (windrow liters noise).
+        -- Standing ready-to-mow: no Ernte-prefix / no residue-driven „Nachwuchs“.
         if meadowPhase == "harvestable" then
-            return FieldAdvisor.text("ftdl_action_grass_mow_short", "Mähen")
+            return "-"
         end
 
         local residueState = grassResidueSummary ~= nil and grassResidueSummary.residueState
@@ -7012,8 +7012,13 @@ function FieldAdvisor.prefixHarvestInfoSuggestion(baseLabel, actions, expectedHa
     local harvestInfo = FieldAdvisor.getHarvestInfoSuggestionLabel(actions)
     if harvestInfo == nil then
         local growingLabel = FieldAdvisor.text("ftdl_action_growing", "Wächst")
+        local mowShort = FieldAdvisor.text("ftdl_action_grass_mow_short", "Mähen")
+        local regrowthLabel = FieldAdvisor.text("ftdl_action_regrowth", "Nachwuchs")
+        -- Skip non-month labels (Mähen/Nachwuchs/Wächst) — only real harvest windows get Ernte %.
         if expectedHarvest ~= nil and expectedHarvest ~= "" and expectedHarvest ~= "-"
-            and expectedHarvest ~= growingLabel then
+            and expectedHarvest ~= growingLabel
+            and expectedHarvest ~= mowShort
+            and expectedHarvest ~= regrowthLabel then
             harvestInfo = FieldAdvisor.formatHarvestWindowLabel(expectedHarvest)
             if harvestInfo == "-" then
                 harvestInfo = nil
