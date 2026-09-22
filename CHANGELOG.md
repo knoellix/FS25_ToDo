@@ -4,6 +4,8 @@ All notable changes to **FS25_FieldToDoList** are documented here.
 
 ## [Unreleased]
 
+## [0.1.0.14] — 2026-09-22
+
 ### Changed
 
 - **MP edit gate:** To-Do edit follows vanilla Hofverwaltung **`manageContracts`** (SP always allowed). ESC worker grants and custom `ftdlEditTodos` removed; sync schema **v5**.
@@ -11,9 +13,10 @@ All notable changes to **FS25_FieldToDoList** are documented here.
 
 ### Fixed
 
-- **Standing Luzerne as post-mow:** generic GRASS `isCut` at growth 5 no longer overrides ALFALFA inside its harvest window (field 76 → mähen again).
+- **Standing Luzerne shown as post-mow / Nachwuchs:** generic GRASS `isCut` no longer overrides ALFALFA inside its harvest window; meadow phase does not re-apply that override.
+- **Standing grass „Ernte Nachwuchs → Mähen“:** harvestable meadow wins over residue false positives; suggestion shows **Mähen** only.
 - **Auto-complete crash:** `fieldCache.ratios` nil after typo `votes` → safe ratio access + restore cache copy.
-- **grass_mow stuck after full mow:** `isGrassPostMowState` no longer treats ALFALFA/CLOVER `harvestReady` as standing when generic GRASS reports `isCut` *outside* that crop’s harvest window.
+- **grass_mow stuck after full mow:** post-mow when generic GRASS reports `isCut` *outside* that crop’s harvest window.
 - **HUD hud.xml schema error:** register `panelX`/`panelY` on an `XMLSchema` before load/save.
 
 ## [0.1.0.13] — 2026-09-20

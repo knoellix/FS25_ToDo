@@ -4,7 +4,7 @@
 
 **Author:** Christian Möllmann ([knoellix](https://github.com/knoellix))  
 **License:** [GNU GPL v3](LICENSE)  
-**Version:** `0.1.0.13`
+**Version:** `0.1.0.14`
 **Repository:** [github.com/knoellix/FS25_ToDo](https://github.com/knoellix/FS25_ToDo)
 
 ## Features
@@ -122,6 +122,7 @@ Use issue templates for bug reports, feature requests, and translations:
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
+**0.1.0.14** — MP edit via `manageContracts` (sync v5); grass/lucerne standing vs post-mow recognition; HUD schema + auto-complete crash fixes.
 **0.1.0.13** — grass≠lucerne / mow ≥98% coverage; fertilize via sprayLevel without PF; logo/menu icon refresh.
 **0.1.0.12** — dedicated MP: adopt/field-todo farmId on notify (schema v4); list Hof/Windrad parcels; restore ESC worker grants.
 **0.1.0.11** — grass scan reentrancy fix; visible sync deny + list refresh; `ftdlSync`/`ftdlOwned`; Farm.PERMISSION registration attempt.
