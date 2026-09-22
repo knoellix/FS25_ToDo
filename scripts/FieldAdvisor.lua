@@ -5167,15 +5167,8 @@ function FieldAdvisor.getGrassMeadowPhase(fieldState, field, aggregation)
                 return "withered"
             end
             if growth.isHarvestReady or growth.isHarvestable then
-                -- Specific forage (ALFALFA/CLOVER) can claim harvestReady on a cut growth;
-                -- trust generic meadow cut before advertising „mähen“.
-                local genericIdx = FieldAdvisor.getDefaultGrassFruitTypeIndex()
-                if genericIdx ~= nil and genericIdx ~= fruitTypeIndex then
-                    local genericGrowth = FieldAdvisor.evaluateFruitGrowth(genericIdx, growthState)
-                    if genericGrowth.isCut then
-                        return "cut"
-                    end
-                end
+                -- isGrassPostMowState already decided standing vs cut; do not re-apply
+                -- generic GRASS isCut here (Luzerne growth=5 is harvestable while GRASS@5 is cut).
                 return "harvestable"
             end
             if growth.isGrowing then
@@ -5798,21 +5791,22 @@ function FieldAdvisor.getExpectedHarvestLabel(field, fieldState, aggregation, gr
     end
 
     if FieldAdvisor.isGrassPhaseContext(harvestState, field, aggregation) then
+        local probeState = aggregation ~= nil and aggregation.centerState or harvestState
+        local meadowPhase = FieldAdvisor.getGrassMeadowPhase(probeState, field, aggregation)
+
+        -- Standing ready-to-mow wins over residue false positives (windrow liters noise).
+        if meadowPhase == "harvestable" then
+            return FieldAdvisor.text("ftdl_action_grass_mow_short", "Mähen")
+        end
+
         local residueState = grassResidueSummary ~= nil and grassResidueSummary.residueState
             or FieldAdvisor.GRASS_RESIDUE_NONE
         if residueState ~= FieldAdvisor.GRASS_RESIDUE_NONE then
             return FieldAdvisor.text("ftdl_action_regrowth", "Nachwuchs")
         end
 
-        local probeState = aggregation ~= nil and aggregation.centerState or harvestState
         if FieldAdvisor.isGrassPostMowState(probeState, field, nil) then
             return FieldAdvisor.text("ftdl_action_regrowth", "Nachwuchs")
-        end
-
-        local meadowPhase = FieldAdvisor.getGrassMeadowPhase(probeState, field, aggregation)
-
-        if meadowPhase == "harvestable" then
-            return FieldAdvisor.text("ftdl_action_grass_mow_short", "Mähen")
         end
 
         if meadowPhase == "withered" then
