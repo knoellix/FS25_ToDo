@@ -310,9 +310,8 @@ end
 
 ---@return boolean
 function FieldToDoMenuFrame:shouldShowWorkersEditUi()
-    -- Farm.PERMISSION checkbox is not reliably visible in FS25 Hofverwaltung yet;
-    -- keep manager ESC grants as the working toggle until that lands.
-    return self:isMultiplayerSession() and self:canChangeWorkersEditSetting()
+    -- ESC grants retired; edit gate is vanilla manageContracts (Hofverwaltung).
+    return false
 end
 
 ---@param reason string|nil

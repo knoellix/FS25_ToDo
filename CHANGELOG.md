@@ -2,6 +2,18 @@
 
 All notable changes to **FS25_FieldToDoList** are documented here.
 
+## [Unreleased]
+
+### Changed
+
+- **MP edit gate:** To-Do edit follows vanilla Hofverwaltung **`manageContracts`** (SP always allowed). ESC worker grants and custom `ftdlEditTodos` removed; sync schema **v5**.
+- **Generic meadow fruit:** `getDefaultGrassFruitTypeIndex` prefers GRASS/MEADOW over first alfalfa-like `isGrassCrop` so post-mow recognition works for all mowables.
+
+### Fixed
+
+- **grass_mow stuck after full mow:** `isGrassPostMowState` no longer treats ALFALFA/CLOVER `harvestReady` as standing when generic GRASS reports `isCut`.
+- **HUD hud.xml schema error:** register `panelX`/`panelY` on an `XMLSchema` before load/save.
+
 ## [0.1.0.13] — 2026-09-20
 
 ### Fixed

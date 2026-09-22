@@ -62,15 +62,13 @@ alwaysApply: true
 
 ## Multiplayer / edit grants
 
-- Server-authoritative sync (`FieldToDoSync` + request/notify/state events). Schema version bumps must stay client/server matched (**current: v4**).
+- Server-authoritative sync (`FieldToDoSync` + request/notify/state events). Schema version bumps must stay client/server matched (**current: v5**).
 - **World read vs mutate:** overview/crop/grass = **client-local** `FieldState`; task/settings mutations = **server** + sidecar. Dedicated does not run overview scan.
-- **FarmId on wire:** every mutation notify/request payload (except DENY) carries trailing `farmId` Int32 — required so pure clients can apply grants/settings and multi-farm guards work.
-- **Edit gate:** managers always; workers via vanilla **Farm.PERMISSION** `ftdlEditTodos` when registered, else fallback `defaultAllow` / `todoEditByFarmId`. Auto-complete stays allowed for same-farm members.
-- **ESC grants:** kept for managers until Hofverwaltung shows custom permissions reliably; registration of `ftdlEditTodos` remains best-effort.
+- **FarmId on wire:** every mutation notify/request payload (except DENY) carries trailing `farmId` Int32 — required so pure clients can apply settings and multi-farm guards work.
+- **Edit gate:** SP always; MP = vanilla **`manageContracts`** only (no ESC grants, no `ftdlEditTodos`, no `defaultAllow` fallback). Auto-complete stays allowed for same-farm members.
 - **FarmId:** `FieldToDoPermissions.resolveLocalFarmId()` for scan + local edit UI. Notify upserts must resolve farmId (nil farmId tasks are hidden once a local farm is known).
 - **Sync UX:** DENY → InfoDialog + reason; successful notify → refresh ESC list (`refreshAfterNotify`). Debug: `ftdlSync`, `ftdlOwned`.
 - **Owned non-crop parcels:** field-less owned farmlands (Hof/Windrad/…) appear as Hof-style overview rows.
-- **Dedicated:** missing `uniqueUserId` must **honor `defaultAllow`** / farm permission, not fail-closed.
 - **Farm user lists:** `getUsers` / `getActiveUsers` may return **User objects** — always use `FieldToDoPermissions.extractUserIdFromFarmUserEntry`.
 - **Membership:** remote ops resolve farm via `resolveFarmIdForUser` / `userBelongsToFarm`; unknown membership → deny (no host `getLocalFarmId()` fallback).
 - **Sidecar write:** only server (`canPersistSidecar`); clients never write `fieldToDoList.xml`.
@@ -86,7 +84,9 @@ alwaysApply: true
 - Bare worked soil (`PLOWED`/`CULTIVATED`/`SEEDBED`, growth 0): crop display `-`, no grass fallback.
 - Plow done: `PLOWED` + `needsPlowing == false` (ignore stale `plowLevel` alone).
 - Grass cut: no re-mow; specific grass names (Luzerne etc.) only with density/residue/field hint — never via equal growth-score tie / `+20` bonus.
-- **grass_mow complete:** `getGrassMowCutRatio` ≥ 0.98 — not first post-mow probe / meadowPhase shortcut.
+- **Generic meadow index:** `getDefaultGrassFruitTypeIndex` prefers `GRASS`/`MEADOW`/… (not first `isGrassCrop`).
+- **grass_mow complete:** `getGrassMowCutRatio` ≥ 0.98; post-mow must not be blocked by wrong specific-grass `harvestReady` (generic GRASS `isCut` wins).
+- **HUD position:** `hud.xml` requires registered XMLSchema (`FieldToDoHudOverlay.initXMLSchema`).
 - Weed: `WeedAdvice.deriveWeedAdvice`; coverage wins when `weedSummary.total > 0`; dead min state 6; spray only at state ≥3 or live ≥10%.
 - **Fertilize:** `FertilizerAdvice.deriveFertilizerAdvice` — PF nitrogen when ready, else `sprayLevel` vs `resolveSprayLevelMax()` (fallback 2; 1× mods lower max).
 - Bale counts field-local only.

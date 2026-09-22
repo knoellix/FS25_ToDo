@@ -331,6 +331,4 @@ function FieldAdvisorSettings.saveToXMLFile(xmlFile, key)
     xmlFile:setValue(key .. "#workOrderPreset", FieldAdvisorSettings.getWorkOrderPreset())
     xmlFile:setValue(key .. "#organicMultiPassEnabled", FieldAdvisorSettings.isOrganicMultiPassEnabled())
     xmlFile:setValue(key .. "#mulchingEnabled", FieldAdvisorSettings.isMulchingEnabled())
-    xmlFile:setValue(key .. "#workersMayEditTodos", FieldAdvisorSettings.todoEditDefaultAllow == true)
-    xmlFile:setValue(key .. "#todoEditDefaultAllow", FieldAdvisorSettings.todoEditDefaultAllow == true)
 end

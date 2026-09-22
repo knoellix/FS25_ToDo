@@ -1,7 +1,7 @@
 FieldToDoPermissions = {}
 FieldToDoPermissions._testOverride = nil
-FieldToDoPermissions.PERMISSION_KEY = "ftdlEditTodos"
-FieldToDoPermissions._farmPermissionRegistered = false
+--- Vanilla Hofverwaltung key used for farm To-Do edit (MP).
+FieldToDoPermissions.PERMISSION_KEY = "manageContracts"
 
 local function resolveUserId(userId)
     if userId ~= nil then
@@ -63,77 +63,52 @@ function FieldToDoPermissions.resolveLocalFarmId()
     return nil
 end
 
---- Register custom farm permission for vanilla Hofverwaltung checkbox (pcall-safe, idempotent).
----@return boolean registered
-function FieldToDoPermissions.registerFarmPermission()
-    local key = FieldToDoPermissions.PERMISSION_KEY
-    local registered = false
-
-    local ok, err = pcall(function()
-        if Farm == nil or type(Farm) ~= "table" then
-            return
-        end
-
-        if type(Farm.PERMISSION) ~= "table" then
-            Farm.PERMISSION = {}
-        end
-        Farm.PERMISSION.FTDL_EDIT_TODOS = key
-
-        if type(Farm.PERMISSIONS) ~= "table" then
-            Farm.PERMISSIONS = {}
-        end
-
-        local found = false
-        for i = 1, #Farm.PERMISSIONS do
-            if Farm.PERMISSIONS[i] == key then
-                found = true
-                break
-            end
-        end
-        if not found then
-            Farm.PERMISSIONS[#Farm.PERMISSIONS + 1] = key
-        end
-
-        if type(Farm.DEFAULT_PERMISSIONS) ~= "table" then
-            Farm.DEFAULT_PERMISSIONS = {}
-        end
-        if Farm.DEFAULT_PERMISSIONS[key] == nil then
-            Farm.DEFAULT_PERMISSIONS[key] = true
-        end
-
-        if g_i18n ~= nil and g_i18n.setText ~= nil then
-            local label = "Edit field to-dos"
-            if FieldToDoL10n ~= nil and FieldToDoL10n.getText ~= nil then
-                label = FieldToDoL10n.getText("ui_permission_ftdlEditTodos", label)
-            end
-            pcall(g_i18n.setText, g_i18n, "ui_permission_" .. key, label)
-            pcall(g_i18n.setText, g_i18n, "farm_permission_" .. key, label)
-            pcall(g_i18n.setText, g_i18n, key, label)
-        end
-
-        registered = true
-    end)
-
-    if not ok and FieldToDoLog ~= nil then
-        FieldToDoLog.warning("registerFarmPermission failed: %s", tostring(err))
+--- True when the current session is multiplayer (listen/dedicated). SP → false.
+---@return boolean
+function FieldToDoPermissions.isMultiplayerSession()
+    local override = FieldToDoPermissions._testOverride
+    if override ~= nil and override.isMultiplayer ~= nil then
+        return override.isMultiplayer == true
     end
 
-    FieldToDoPermissions._farmPermissionRegistered = registered == true
-    return registered == true
+    if g_currentMission == nil then
+        return false
+    end
+
+    local info = g_currentMission.missionDynamicInfo
+    if info ~= nil and info.isMultiplayer == true then
+        return true
+    end
+
+    return false
 end
 
---- Read vanilla farm user permission for To-Do edit. nil = API unavailable.
+--- Resolve manageContracts key (engine constant when available).
+---@return string
+function FieldToDoPermissions.getEditPermissionKey()
+    if Farm ~= nil and type(Farm.PERMISSION) == "table" and Farm.PERMISSION.MANAGE_CONTRACTS ~= nil then
+        return tostring(Farm.PERMISSION.MANAGE_CONTRACTS)
+    end
+    return FieldToDoPermissions.PERMISSION_KEY
+end
+
+--- Read vanilla manageContracts for To-Do edit. nil = API unavailable.
 ---@param farmId number|nil
 ---@param userId number|nil
 ---@return boolean|nil
 function FieldToDoPermissions.hasFarmTodoEditPermission(farmId, userId)
+    local override = FieldToDoPermissions._testOverride
+    if override ~= nil and override.manageContracts ~= nil then
+        return override.manageContracts == true
+    end
+
     farmId = tonumber(farmId)
     userId = resolveUserId(userId)
     if farmId == nil or userId == nil or g_farmManager == nil then
         return nil
     end
 
-    local key = FieldToDoPermissions.PERMISSION_KEY
+    local key = FieldToDoPermissions.getEditPermissionKey()
     local farm = g_farmManager.getFarmById ~= nil and g_farmManager:getFarmById(farmId) or nil
     if farm == nil then
         return nil
@@ -174,7 +149,6 @@ function FieldToDoPermissions.isFarmManager(farmId, userId)
     farmId = tonumber(farmId)
     userId = resolveUserId(userId)
     if farmId == nil or userId == nil or g_farmManager == nil then
-        -- SP / missing API: treat as manager so local play keeps working
         return true
     end
     local farm = g_farmManager:getFarmById(farmId)
@@ -211,7 +185,6 @@ function FieldToDoPermissions.userBelongsToFarm(farmId, userId)
         end
     end
 
-    -- Fallback: farm user lists may contain ids or User objects (same as getActiveUsers).
     if farm ~= nil then
         local list = nil
         if farm.getUsers ~= nil then
@@ -288,7 +261,6 @@ function FieldToDoPermissions.canAutoCompleteFarmTodos(farmId, userId)
         return true
     end
 
-    -- Keep whether the caller passed an explicit user (server request) before local resolve.
     local explicitUserId = userId ~= nil
     local resolved = resolveUserId(userId)
 
@@ -297,7 +269,6 @@ function FieldToDoPermissions.canAutoCompleteFarmTodos(farmId, userId)
         if membership ~= nil then
             return membership
         end
-        -- Remote request with broken membership APIs: deny (do NOT use host getLocalFarmId).
         if explicitUserId then
             return false
         end
@@ -305,7 +276,6 @@ function FieldToDoPermissions.canAutoCompleteFarmTodos(farmId, userId)
         return false
     end
 
-    -- Local UI / SP fallback only (no explicit remote userId).
     local localFarm = nil
     if ToDoManager ~= nil and g_currentMission ~= nil and g_currentMission.fieldToDoList ~= nil then
         localFarm = g_currentMission.fieldToDoList:getLocalFarmId()
@@ -345,80 +315,23 @@ function FieldToDoPermissions.resolveUniqueUserId(userId)
     return nil
 end
 
---- Farm-scoped grant lookup. Prefers ToDoManager.todoEditByFarmId (server authority).
+--- Farm To-Do edit: SP always (same farm); MP only with vanilla manageContracts. No grant fallback.
 ---@param farmId number|nil
----@param uniqueUserId string|nil
----@param explicitUserId boolean|nil true when caller passed a remote userId (unused; kept for call sites)
+---@param userId number|nil
 ---@return boolean
-function FieldToDoPermissions.getTodoEditAllowed(farmId, uniqueUserId, explicitUserId)
-    farmId = tonumber(farmId)
-
-    -- Headless fixtures inject grants via FieldAdvisorSettings + _testOverride.
-    if FieldToDoPermissions._testOverride ~= nil then
-        if FieldAdvisorSettings ~= nil and FieldAdvisorSettings.getTodoEditAllowedForUniqueUser ~= nil then
-            return FieldAdvisorSettings.getTodoEditAllowedForUniqueUser(uniqueUserId)
-        end
-        return true
-    end
-
-    local manager = nil
-    if FieldToDoSync ~= nil and FieldToDoSync.getManager ~= nil then
-        manager = FieldToDoSync.getManager()
-    elseif g_currentMission ~= nil then
-        manager = g_currentMission.fieldToDoList
-    end
-
-    if manager ~= nil and farmId ~= nil and manager.getTodoEditStateForFarm ~= nil then
-        local state = manager:getTodoEditStateForFarm(farmId)
-        if state ~= nil then
-            -- Missing uniqueUserId: cannot apply per-user overrides → honor farm defaultAllow.
-            -- (Do not fail-closed here; dedicated servers often lack uniqueUserId APIs.)
-            if uniqueUserId == nil or uniqueUserId == "" then
-                return state.defaultAllow ~= false
-            end
-            local mapped = state.byUniqueUserId[tostring(uniqueUserId)]
-            if mapped == nil then
-                return state.defaultAllow ~= false
-            end
-            return mapped == true
-        end
-    end
-
-    -- UI / SP cache fallback when farm map not loaded yet.
-    if FieldAdvisorSettings ~= nil and FieldAdvisorSettings.getTodoEditAllowedForUniqueUser ~= nil then
-        return FieldAdvisorSettings.getTodoEditAllowedForUniqueUser(uniqueUserId)
-    end
-
-    -- No grant source at all: server fail-closed, client/SP allow.
-    if g_server ~= nil then
-        return false
-    end
-    return true
-end
-
 function FieldToDoPermissions.canEditFarmTodos(farmId, userId)
     if not FieldToDoPermissions.canAutoCompleteFarmTodos(farmId, userId) then
         return false
     end
-    if FieldToDoPermissions.isFarmManager(farmId, userId) then
+    if not FieldToDoPermissions.isMultiplayerSession() then
         return true
     end
-
-    local farmPerm = FieldToDoPermissions.hasFarmTodoEditPermission(farmId, userId)
-    if farmPerm ~= nil then
-        return farmPerm
-    end
-
-    local explicitUserId = userId ~= nil
-    local uniqueId = FieldToDoPermissions.resolveUniqueUserId(userId)
-    return FieldToDoPermissions.getTodoEditAllowed(farmId, uniqueId, explicitUserId)
+    return FieldToDoPermissions.hasFarmTodoEditPermission(farmId, userId) == true
 end
 
+--- ESC grant UI retired — always false.
 function FieldToDoPermissions.canManageTodoEditGrants(farmId, userId)
-    if not FieldToDoPermissions.canAutoCompleteFarmTodos(farmId, userId) then
-        return false
-    end
-    return FieldToDoPermissions.isFarmManager(farmId, userId)
+    return false
 end
 
 function FieldToDoPermissions.canChangeWorkersEditSetting(farmId, userId)
@@ -432,5 +345,3 @@ function FieldToDoPermissions.canEditLocal()
     end
     return FieldToDoPermissions.canEditFarmTodos(farmId, nil)
 end
-
-FieldToDoPermissions.registerFarmPermission()

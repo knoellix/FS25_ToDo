@@ -197,6 +197,96 @@ if type(FieldAdvisor) == "table" and type(FieldAdvisor.classifyBaleKind) == "fun
   end
 end
 
+-- isGrassPostMowState: alfalfa harvestReady on cut meadow must not block (use generic GRASS isCut).
+if type(FieldAdvisor) == "table" and type(FieldAdvisor.isGrassPostMowState) == "function" then
+  io.write("\n")
+  local oldGround = FieldAdvisor.getGroundTypeName
+  local oldResolve = FieldAdvisor.resolveFruitTypeIndex
+  local oldIsGrass = FieldAdvisor.isGrassCrop
+  local oldEff = FieldAdvisor.getEffectiveGrowthState
+  local oldLast = FieldAdvisor.getLastGrowthState
+  local oldNum = FieldAdvisor.getStateNumber
+  local oldDefault = FieldAdvisor.getDefaultGrassFruitTypeIndex
+  local oldEval = FieldAdvisor.evaluateFruitGrowth
+  local oldDesc = FieldAdvisor.getFruitTypeDesc
+
+  FieldAdvisor.getGroundTypeName = function() return "GRASS" end
+  FieldAdvisor.resolveFruitTypeIndex = function() return 2 end
+  FieldAdvisor.isGrassCrop = function() return true end
+  FieldAdvisor.getEffectiveGrowthState = function() return 4 end
+  FieldAdvisor.getLastGrowthState = function() return 0 end
+  FieldAdvisor.getStateNumber = function() return 0 end
+  FieldAdvisor.getDefaultGrassFruitTypeIndex = function() return 1 end
+  FieldAdvisor.getFruitTypeDesc = function() return { maxHarvestingGrowthState = 5 } end
+  FieldAdvisor.evaluateFruitGrowth = function(idx)
+    if idx == 2 then
+      return { isCut = false, isHarvestReady = true, isHarvestable = true, isGrowing = false, isWithered = false }
+    end
+    return { isCut = true, isHarvestReady = false, isHarvestable = false, isGrowing = false, isWithered = false }
+  end
+
+  local got = FieldAdvisor.isGrassPostMowState({}, {})
+  if got == true then
+    pass = pass + 1
+    io.write(GREEN .. "PASS" .. RESET .. " post_mow_alfalfa_false_standing_uses_generic_cut\n")
+  else
+    fail = fail + 1
+    io.write(RED .. "FAIL" .. RESET .. " post_mow_alfalfa_false_standing_uses_generic_cut got false\n")
+  end
+
+  FieldAdvisor.getGroundTypeName = oldGround
+  FieldAdvisor.resolveFruitTypeIndex = oldResolve
+  FieldAdvisor.isGrassCrop = oldIsGrass
+  FieldAdvisor.getEffectiveGrowthState = oldEff
+  FieldAdvisor.getLastGrowthState = oldLast
+  FieldAdvisor.getStateNumber = oldNum
+  FieldAdvisor.getDefaultGrassFruitTypeIndex = oldDefault
+  FieldAdvisor.evaluateFruitGrowth = oldEval
+  FieldAdvisor.getFruitTypeDesc = oldDesc
+end
+
+-- getDefaultGrassFruitTypeIndex must prefer GRASS over earlier ALFALFA in manager list.
+if type(FieldAdvisor) == "table" and type(FieldAdvisor.getDefaultGrassFruitTypeIndex) == "function" then
+  io.write("\n")
+  local oldByName = FieldAdvisor.getFruitTypeIndexByName
+  local oldIsGrass = FieldAdvisor.isGrassCrop
+  local oldIsGeneric = FieldAdvisor.isGenericGrassFruitIndex
+  local oldManager = rawget(_G, "g_fruitTypeManager")
+
+  FieldAdvisor.invalidateDefaultGrassFruitTypeIndex()
+  FieldAdvisor.getFruitTypeIndexByName = function(name)
+    if name == "GRASS" then return 10 end
+    if name == "ALFALFA" then return 2 end
+    return nil
+  end
+  FieldAdvisor.isGrassCrop = function(idx) return idx == 2 or idx == 10 end
+  FieldAdvisor.isGenericGrassFruitIndex = function(idx) return idx == 10 end
+  rawset(_G, "g_fruitTypeManager", {
+    getFruitTypes = function()
+      return {
+        { index = 2, name = "ALFALFA" },
+        { index = 10, name = "GRASS" },
+      }
+    end,
+  })
+
+  local got = FieldAdvisor.getDefaultGrassFruitTypeIndex()
+  if got == 10 then
+    pass = pass + 1
+    io.write(string.format(GREEN .. "PASS" .. RESET .. " %-44s\n", "default_grass_prefers_generic_GRASS"))
+  else
+    fail = fail + 1
+    io.write(string.format(RED .. "FAIL" .. RESET .. " %-44s expected 10 got %s\n",
+      "default_grass_prefers_generic_GRASS", tostring(got)))
+  end
+
+  FieldAdvisor.invalidateDefaultGrassFruitTypeIndex()
+  FieldAdvisor.getFruitTypeIndexByName = oldByName
+  FieldAdvisor.isGrassCrop = oldIsGrass
+  FieldAdvisor.isGenericGrassFruitIndex = oldIsGeneric
+  rawset(_G, "g_fruitTypeManager", oldManager)
+end
+
 -- Grass crop scoring must not prefer ALFALFA over GRASS on equal growth flags.
 if type(FieldAdvisor) == "table" and type(FieldAdvisor.scoreGrassFruitGrowthMatch) == "function" then
   io.write("\n")
@@ -246,7 +336,9 @@ if type(FieldTaskCompletion) == "table" and type(FieldTaskCompletion.getGrassMow
   local oldPostMow = FieldAdvisor.isGrassPostMowState
   local oldCutGround = FieldAdvisor.isGrassCutGroundType
   local oldGround = FieldAdvisor.getGroundTypeName
+  local oldDefaultGrass = FieldAdvisor.getDefaultGrassFruitTypeIndex
 
+  FieldAdvisor.getDefaultGrassFruitTypeIndex = function() return nil end
   FieldTaskCompletion.collectSamplePoints = function()
     return {
       { x = 1, z = 1 }, { x = 2, z = 2 }, { x = 3, z = 3 }, { x = 4, z = 4 },
@@ -298,6 +390,7 @@ if type(FieldTaskCompletion) == "table" and type(FieldTaskCompletion.getGrassMow
   FieldAdvisor.isGrassPostMowState = oldPostMow
   FieldAdvisor.isGrassCutGroundType = oldCutGround
   FieldAdvisor.getGroundTypeName = oldGround
+  FieldAdvisor.getDefaultGrassFruitTypeIndex = oldDefaultGrass
 end
 
 -- P4: harvest ETA uses FruitTypeDesc only (nil when neither API nor minHarvest).
@@ -369,14 +462,9 @@ do
     end
 end
 
--- FieldToDoPermissions contract (MP farm edit gates).
+-- FieldToDoPermissions contract (MP farm edit = manageContracts; SP always).
 local permFixtures = dofile(here .. "/permissions_fixtures.lua")
 dofile(repoRoot .. "/scripts/FieldAdvisorSettings.lua")
-assert(type(FieldAdvisorSettings.isWorkersMayEditTodos) == "function")
-assert(FieldAdvisorSettings.isWorkersMayEditTodos() == true)
-FieldAdvisorSettings.setWorkersMayEditTodos(false)
-assert(FieldAdvisorSettings.isWorkersMayEditTodos() == false)
-FieldAdvisorSettings.setWorkersMayEditTodos(true)
 dofile(repoRoot .. "/scripts/FieldToDoPermissions.lua")
 
 if type(FieldToDoPermissions) ~= "table"
@@ -388,18 +476,14 @@ if type(FieldToDoPermissions) ~= "table"
 else
   io.write("\n")
   for _, c in ipairs(permFixtures) do
-    FieldAdvisorSettings.todoEditDefaultAllow = c.defaultAllow
-    FieldAdvisorSettings.todoEditByUniqueUserId = {}
     FieldToDoPermissions._testOverride = {
       farmId = 1,
       userId = 1,
       uniqueUserId = "u1",
-      isManager = c.isManager,
       resolveFarmId = c.sameFarm and 1 or 2,
+      isMultiplayer = c.isMultiplayer == true,
+      manageContracts = c.manageContracts == true,
     }
-    if c.userGrant ~= nil then
-      FieldAdvisorSettings.todoEditByUniqueUserId["u1"] = c.userGrant
-    end
     local gotEdit = FieldToDoPermissions.canEditFarmTodos(1, 1)
     local gotManage = FieldToDoPermissions.canManageTodoEditGrants(1, 1)
     local gotAuto = FieldToDoPermissions.canAutoCompleteFarmTodos(1, 1)

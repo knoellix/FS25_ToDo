@@ -460,6 +460,13 @@ function FieldTaskCompletion.getGrassMowCutRatio(field, fieldId, worldX, worldZ,
         local ground = FieldAdvisor.getGroundTypeName(sampleState)
         local postMow = FieldAdvisor.isGrassPostMowState(sampleState, field, nil)
             or FieldAdvisor.isGrassCutGroundType(ground)
+        -- Also accept generic-grass cut flags (meadow fruit index often wrong after mow).
+        if not postMow and sampleState ~= nil then
+            local grassIdx = FieldAdvisor.getDefaultGrassFruitTypeIndex()
+            if grassIdx ~= nil then
+                postMow = FieldAdvisor.isGrassPostMowState(sampleState, field, grassIdx)
+            end
+        end
         local standingGrass = situation == FieldAdvisor.PROBE_SITUATION.GRASS and not postMow
 
         if postMow or standingGrass then

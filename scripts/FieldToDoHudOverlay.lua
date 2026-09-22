@@ -27,6 +27,19 @@ FieldToDoHudOverlay.COLOR_DONE = { 0.89627, 0.92158, 0.81485, 0.45 }
 FieldToDoHudOverlay.COLOR_DIM = { 0.89627, 0.92158, 0.81485, 0.55 }
 FieldToDoHudOverlay.COLOR_ACCENT = { 0.22323, 0.40724, 0.00368, 0.95 }   -- fs25_colorMainHighlight
 FieldToDoHudOverlay.instance = nil
+FieldToDoHudOverlay.xmlSchema = nil
+
+function FieldToDoHudOverlay.initXMLSchema()
+    if FieldToDoHudOverlay.xmlSchema ~= nil or XMLSchema == nil then
+        return FieldToDoHudOverlay.xmlSchema
+    end
+
+    local schema = XMLSchema.new("fieldToDoHud")
+    schema:register(XMLValueType.FLOAT, "fieldToDoHud#panelX", "HUD panel X (0–1)")
+    schema:register(XMLValueType.FLOAT, "fieldToDoHud#panelY", "HUD panel Y (0–1)")
+    FieldToDoHudOverlay.xmlSchema = schema
+    return schema
+end
 
 function FieldToDoHudOverlay.clampPanelPosition(panelX, panelY, panelW, panelH, margin)
     margin = margin or FieldToDoHudOverlay.PANEL_MARGIN
@@ -106,7 +119,9 @@ function FieldToDoHudOverlay:loadPositionFromDisk()
     if XMLFile == nil or XMLFile.load == nil then
         return
     end
-    local ok, xmlFile = pcall(XMLFile.load, "fieldToDoHudLoad", filePath)
+    FieldToDoHudOverlay.initXMLSchema()
+    local schema = FieldToDoHudOverlay.xmlSchema
+    local ok, xmlFile = pcall(XMLFile.load, "fieldToDoHudLoad", filePath, schema)
     if not ok or xmlFile == nil then
         return
     end
@@ -136,7 +151,9 @@ function FieldToDoHudOverlay:savePositionToDisk()
     if XMLFile == nil or XMLFile.create == nil then
         return
     end
-    local ok, xmlFile = pcall(XMLFile.create, "fieldToDoHudSave", filePath, "fieldToDoHud")
+    FieldToDoHudOverlay.initXMLSchema()
+    local schema = FieldToDoHudOverlay.xmlSchema
+    local ok, xmlFile = pcall(XMLFile.create, "fieldToDoHudSave", filePath, "fieldToDoHud", schema)
     if not ok or xmlFile == nil then
         return
     end

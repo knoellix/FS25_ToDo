@@ -1429,19 +1429,7 @@ end
 ---@param userId number|nil
 ---@return table|nil
 function ToDoManager:applySetWorkersMayEdit(payload, farmId, userId)
-    payload = payload or {}
-
-    farmId = tonumber(farmId) or self:getLocalFarmId()
-    local enabled = payload.enabled ~= false
-    if farmId ~= nil then
-        local state = self:getTodoEditStateForFarm(farmId)
-        state.defaultAllow = enabled
-    end
-    self:syncTodoEditSettingsCache(farmId)
-    self:markManualTasksDirty()
-    self:requestDebouncedSave()
-
-    return { enabled = enabled, farmId = farmId }
+    return nil
 end
 
 ---@param payload table
@@ -1449,20 +1437,7 @@ end
 ---@param userId number|nil
 ---@return table|nil
 function ToDoManager:applySetUserTodoEdit(payload, farmId, userId)
-    payload = payload or {}
-    farmId = tonumber(farmId) or tonumber(payload.farmId) or self:getLocalFarmId()
-    local uniqueUserId = payload.uniqueUserId ~= nil and tostring(payload.uniqueUserId) or ""
-    if farmId == nil or uniqueUserId == "" then
-        return nil
-    end
-
-    local state = self:getTodoEditStateForFarm(farmId)
-    state.byUniqueUserId[uniqueUserId] = payload.enabled == true
-    self:syncTodoEditSettingsCache(farmId)
-    self:markManualTasksDirty()
-    self:requestDebouncedSave()
-
-    return { farmId = farmId, uniqueUserId = uniqueUserId, enabled = payload.enabled == true }
+    return nil
 end
 
 ---@param payload table
@@ -1470,27 +1445,7 @@ end
 ---@param userId number|nil
 ---@return table|nil
 function ToDoManager:applySetAllWorkersTodoEdit(payload, farmId, userId)
-    payload = payload or {}
-    farmId = tonumber(farmId) or tonumber(payload.farmId) or self:getLocalFarmId()
-    if farmId == nil then
-        return nil
-    end
-
-    local enabled = payload.enabled == true
-    local ids = payload.uniqueUserIds or {}
-    local state = self:getTodoEditStateForFarm(farmId)
-    state.defaultAllow = enabled
-    for i = 1, #ids do
-        local uid = tostring(ids[i])
-        if uid ~= "" then
-            state.byUniqueUserId[uid] = enabled
-        end
-    end
-    self:syncTodoEditSettingsCache(farmId)
-    self:markManualTasksDirty()
-    self:requestDebouncedSave()
-
-    return { farmId = farmId, enabled = enabled, uniqueUserIds = ids }
+    return nil
 end
 
 ---@param payload table
@@ -2004,90 +1959,14 @@ end
 ---@param xmlFile XMLFile
 ---@param key string
 function ToDoManager:loadTodoEditFromXMLFile(xmlFile, key)
+    -- Retired: ignore orphan farmTodoEdit XML; edit gate is manageContracts.
     self.todoEditByFarmId = {}
-
-    local index = 0
-    while true do
-        local farmKey = string.format("%s.farmTodoEdit(%d)", key, index)
-        local farmId = tonumber(xmlFile:getValue(farmKey .. "#farmId"))
-        if farmId == nil then
-            break
-        end
-
-        local defaultAllow = xmlFile:getValue(farmKey .. "#defaultAllow")
-        local state = {
-            defaultAllow = defaultAllow ~= false,
-            byUniqueUserId = {},
-        }
-
-        local userIndex = 0
-        while true do
-            local userKey = string.format("%s.user(%d)", farmKey, userIndex)
-            local uniqueUserId = xmlFile:getValue(userKey .. "#uniqueUserId")
-            if uniqueUserId == nil or uniqueUserId == "" then
-                break
-            end
-
-            state.byUniqueUserId[tostring(uniqueUserId)] = xmlFile:getValue(userKey .. "#mayEdit") == true
-            userIndex = userIndex + 1
-        end
-
-        self.todoEditByFarmId[farmId] = state
-        index = index + 1
-    end
-
-    local localFarm = self:getLocalFarmId()
-    if localFarm ~= nil and self.todoEditByFarmId[localFarm] == nil and FieldAdvisorSettings ~= nil then
-        self.todoEditByFarmId[localFarm] = {
-            defaultAllow = FieldAdvisorSettings.todoEditDefaultAllow ~= false,
-            byUniqueUserId = {},
-        }
-    end
-
-    if localFarm ~= nil then
-        self:syncTodoEditSettingsCache(localFarm)
-    end
 end
 
 ---@param xmlFile XMLFile
 ---@param key string
 function ToDoManager:saveTodoEditToXMLFile(xmlFile, key)
-    local localFarm = self:getLocalFarmId()
-    if localFarm ~= nil then
-        local state = self.todoEditByFarmId[localFarm]
-        local defaultAllow = true
-        if state ~= nil then
-            defaultAllow = state.defaultAllow ~= false
-        elseif FieldAdvisorSettings ~= nil then
-            defaultAllow = FieldAdvisorSettings.todoEditDefaultAllow ~= false
-        end
-        xmlFile:setValue(key .. "#workersMayEditTodos", defaultAllow == true)
-    end
-
-    local farmIds = {}
-    for farmId in pairs(self.todoEditByFarmId) do
-        farmIds[#farmIds + 1] = farmId
-    end
-    table.sort(farmIds)
-
-    for index, farmId in ipairs(farmIds) do
-        local state = self.todoEditByFarmId[farmId]
-        local farmKey = string.format("%s.farmTodoEdit(%d)", key, index - 1)
-        xmlFile:setValue(farmKey .. "#farmId", farmId)
-        xmlFile:setValue(farmKey .. "#defaultAllow", state.defaultAllow ~= false)
-
-        local userIds = {}
-        for uniqueUserId in pairs(state.byUniqueUserId) do
-            userIds[#userIds + 1] = uniqueUserId
-        end
-        table.sort(userIds)
-
-        for userIndex, uniqueUserId in ipairs(userIds) do
-            local userKey = string.format("%s.user(%d)", farmKey, userIndex - 1)
-            xmlFile:setValue(userKey .. "#uniqueUserId", uniqueUserId)
-            xmlFile:setValue(userKey .. "#mayEdit", state.byUniqueUserId[uniqueUserId] == true)
-        end
-    end
+    -- Retired: edit gate is vanilla manageContracts; do not persist ESC grant maps.
 end
 
 ---@param xmlFile XMLFile

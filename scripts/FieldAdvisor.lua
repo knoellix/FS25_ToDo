@@ -585,7 +585,21 @@ function FieldAdvisor.isGrassPostMowState(fieldState, field, fruitTypeIndex)
         -- Regrown to mowable height: a standing, harvestable stand is NOT post-mow,
         -- even if stubble shred from the previous cut still lingers (e.g. clover/alfalfa).
         if not growth.isCut and (growth.isHarvestReady or growth.isHarvestable) then
-            return false
+            -- Density often reports ALFALFA/CLOVER for meadows while growth is cut grass;
+            -- specific crop descs can claim harvestReady on a cut state. Prefer generic GRASS.
+            local genericIndex = FieldAdvisor.getDefaultGrassFruitTypeIndex()
+            if genericIndex ~= nil and genericIndex ~= fruitTypeIndex then
+                local genericGrowth = FieldAdvisor.evaluateFruitGrowth(genericIndex, growthState)
+                if genericGrowth.isCut then
+                    return true
+                end
+                if not genericGrowth.isCut
+                    and (genericGrowth.isHarvestReady or genericGrowth.isHarvestable) then
+                    return false
+                end
+            else
+                return false
+            end
         end
     end
 
@@ -626,39 +640,44 @@ function FieldAdvisor.getDefaultGrassFruitTypeIndex()
     FieldAdvisor._defaultGrassFruitTypeResolved = true
     FieldAdvisor._defaultGrassFruitTypeIndex = nil
 
+    -- Prefer true meadow generics (never first arbitrary isGrassCrop like ALFALFA).
+    local genericOrder = { "GRASS", "MEADOW", "FIELDGRASS", "PASTURE" }
+    for _, name in ipairs(genericOrder) do
+        local fruitTypeIndex = FieldAdvisor.getFruitTypeIndexByName(name)
+        if fruitTypeIndex ~= nil and fruitTypeIndex > 0 then
+            FieldAdvisor._defaultGrassFruitTypeIndex = fruitTypeIndex
+            return FieldAdvisor._defaultGrassFruitTypeIndex
+        end
+    end
+
+    local firstAnyGrass = nil
     if g_fruitTypeManager ~= nil and g_fruitTypeManager.getFruitTypes ~= nil then
         local ok, fruitTypes = pcall(g_fruitTypeManager.getFruitTypes, g_fruitTypeManager)
         if ok and fruitTypes ~= nil then
             for _, fruitDesc in ipairs(fruitTypes) do
                 if fruitDesc ~= nil and fruitDesc.index ~= nil and fruitDesc.index > 0 then
                     if FieldAdvisor.isGrassCrop(fruitDesc.index) then
-                        FieldAdvisor._defaultGrassFruitTypeIndex = fruitDesc.index
-                        return FieldAdvisor._defaultGrassFruitTypeIndex
+                        if FieldAdvisor.isGenericGrassFruitIndex(fruitDesc.index) then
+                            FieldAdvisor._defaultGrassFruitTypeIndex = fruitDesc.index
+                            return FieldAdvisor._defaultGrassFruitTypeIndex
+                        end
+                        if firstAnyGrass == nil then
+                            firstAnyGrass = fruitDesc.index
+                        end
                     end
                 end
             end
         end
     end
 
-    local candidates = {
-        "GRASS",
-        "MEADOW",
-        "FIELDGRASS",
-        "ALFALFA",
-        "CLOVER",
-        "LUCERNE",
-        "MEDICK",
-    }
-
-    for _, name in ipairs(candidates) do
-        local fruitTypeIndex = FieldAdvisor.getFruitTypeIndexByName(name)
-        if fruitTypeIndex ~= nil then
-            FieldAdvisor._defaultGrassFruitTypeIndex = fruitTypeIndex
-            break
-        end
-    end
-
+    FieldAdvisor._defaultGrassFruitTypeIndex = firstAnyGrass
     return FieldAdvisor._defaultGrassFruitTypeIndex
+end
+
+--- Clear cached default grass index (tests / fruit-manager reload).
+function FieldAdvisor.invalidateDefaultGrassFruitTypeIndex()
+    FieldAdvisor._defaultGrassFruitTypeResolved = false
+    FieldAdvisor._defaultGrassFruitTypeIndex = nil
 end
 
 ---@param field table|nil
@@ -5136,6 +5155,15 @@ function FieldAdvisor.getGrassMeadowPhase(fieldState, field, aggregation)
                 return "withered"
             end
             if growth.isHarvestReady or growth.isHarvestable then
+                -- Specific forage (ALFALFA/CLOVER) can claim harvestReady on a cut growth;
+                -- trust generic meadow cut before advertising „mähen“.
+                local genericIdx = FieldAdvisor.getDefaultGrassFruitTypeIndex()
+                if genericIdx ~= nil and genericIdx ~= fruitTypeIndex then
+                    local genericGrowth = FieldAdvisor.evaluateFruitGrowth(genericIdx, growthState)
+                    if genericGrowth.isCut then
+                        return "cut"
+                    end
+                end
                 return "harvestable"
             end
             if growth.isGrowing then

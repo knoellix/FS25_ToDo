@@ -15,6 +15,18 @@ Datum  Thema: Regel (kurz, technisch).
 
 ## Einträge
 
+2026-09-22  **MP Edit = manageContracts** — SP immer edit; MP nur Vanilla `manageContracts` (Hofverwaltung). Kein ESC-Grant, kein `ftdlEditTodos`, kein `defaultAllow`-Fallback. Auto-complete weiter alle Farm-Mitglieder. Sync-Schema **v5** (Grant-Payload entfernt).
+            Entscheidende Funktion: `FieldToDoPermissions.canEditFarmTodos`.
+
+2026-09-22  **Generic meadow index** — `getDefaultGrassFruitTypeIndex` bevorzugt `GRASS`/`MEADOW`/… (nicht erstes `isGrassCrop` = oft ALFALFA). Post-mow-Override + Meadow-Phase nutzen das für alle Mähbaren.
+            Entscheidende Funktion: `FieldAdvisor.getDefaultGrassFruitTypeIndex` / `getGrassMeadowPhase`.
+
+2026-09-22  **grass_mow: ALFALFA harvestReady blockiert Cut nicht** — `isGrassPostMowState`: wenn spezifische Grasfrucht (Luzerne) `harvestReady` meldet, aber generisches GRASS `isCut` ist → post-mow (gemäht). Verhindert hängende Mäh-ToDos nach Feldmähen.
+            Entscheidende Funktion: `FieldAdvisor.isGrassPostMowState`.
+
+2026-09-22  **HUD hud.xml Schema** — `FieldToDoHudOverlay` registriert `panelX`/`panelY` am `XMLSchema` vor load/create (kein „Unable to get schema“ mehr).
+            Entscheidende Funktion: `FieldToDoHudOverlay.initXMLSchema`.
+
 2026-09-20  **Düngen ohne PF: sprayLevel vs Max** — Ohne Precision Farming (kein N-Sample): Vorschlag/Auto-Complete über `FieldState.sprayLevel < resolveSprayLevelMax()` (`fieldGroundSystem:getMaxValue(SPRAY_LEVEL)`, Fallback 2). Mit PF weiterhin N&lt;80. Eine Entscheidung: `FertilizerAdvice.deriveFertilizerAdvice`. 1×-Düng-Mods senken das Map-Max → eine Gabe reicht.
             Entscheidende Funktion: `FertilizerAdvice.deriveFertilizerAdvice` / `FieldAdvisor.resolveSprayLevelMax`.
 
