@@ -225,23 +225,8 @@ end
 ---@return number|nil
 function ToDoManager:getLocalFarmId()
     if FieldToDoPermissions ~= nil and FieldToDoPermissions.resolveLocalFarmId ~= nil then
-        local farmId = FieldToDoPermissions.resolveLocalFarmId()
-        if farmId ~= nil then
-            return farmId
-        end
+        return FieldToDoPermissions.resolveLocalFarmId()
     end
-
-    local mission = self.mission or g_currentMission
-    if mission == nil or mission.getFarmId == nil then
-        return nil
-    end
-
-    local ok, farmId = pcall(mission.getFarmId, mission)
-    farmId = tonumber(farmId)
-    if ok and farmId ~= nil and farmId > 0 then
-        return farmId
-    end
-
     return nil
 end
 
@@ -609,6 +594,18 @@ end
 --- Mark overview data stale (growth day, farmland bought/sold). Refreshes immediately when menu tab is open.
 function ToDoManager:markOwnedFieldsOverviewStale()
     self.ownedFieldsOverviewStale = true
+
+    -- Drop finished cache immediately so sold parcels cannot linger for CACHE_MS
+    -- while the menu is closed (reopen must not serve the old ownership snapshot).
+    if self.ownedFieldsScanInProgress ~= true then
+        self.ownedFieldsCache = nil
+        self.ownedFieldsCacheAt = -1
+        self.ownedFieldsCacheById = nil
+        self.ownedFieldsScanQueue = nil
+        self.ownedFieldsScanIndex = 1
+        self.ownedFieldsScanDirty = false
+    end
+
     if self.ownedFieldsScanActive ~= true then
         return
     end
@@ -618,7 +615,7 @@ function ToDoManager:markOwnedFieldsOverviewStale()
         return
     end
 
-    self:invalidateOwnedFieldsCache()
+    self:startOwnedFieldsScan()
 end
 
 ---@return boolean
@@ -2290,6 +2287,24 @@ local function onStartMission(mission)
     if FieldToDoSync ~= nil and FieldToDoSync.onMissionStarted ~= nil then
         FieldToDoSync.onMissionStarted()
     end
+
+    -- FarmlandManager exists after mission start; init-time subscribe may have missed it.
+    if g_farmlandManager ~= nil
+        and g_farmlandManager.addStateChangeListener ~= nil
+        and todoManager ~= nil
+        and todoManager._farmlandStateListener == nil then
+        local listener = {
+            onFarmlandStateChanged = function(_, _farmlandId, _farmId)
+                if todoManager.markOwnedFieldsOverviewStale ~= nil then
+                    todoManager:markOwnedFieldsOverviewStale()
+                end
+            end,
+        }
+        local ok = pcall(g_farmlandManager.addStateChangeListener, g_farmlandManager, listener)
+        if ok then
+            todoManager._farmlandStateListener = listener
+        end
+    end
 end
 
 local function onSaveMission(missionInfo)
@@ -2330,16 +2345,19 @@ local function subscribeOverviewStaleEvents()
         end
     end
 
-    local eventNames = {
-        "FINISHED_GROWTH_PERIOD",
-        "FARMLAND_OWNER_CHANGED",
-    }
+    -- FINISHED_GROWTH_PERIOD via message center; farmland ownership uses FarmlandManager
+    -- listeners (MessageType.FARMLAND_OWNER_CHANGED is not present in FS25).
+    if MessageType.FINISHED_GROWTH_PERIOD ~= nil then
+        g_messageCenter:subscribe(MessageType.FINISHED_GROWTH_PERIOD, markOverviewStale)
+    end
 
-    for _, eventName in ipairs(eventNames) do
-        local messageType = MessageType[eventName]
-        if messageType ~= nil then
-            g_messageCenter:subscribe(messageType, markOverviewStale)
-        end
+    if g_farmlandManager ~= nil and g_farmlandManager.addStateChangeListener ~= nil then
+        local farmlandListener = {
+            onFarmlandStateChanged = function(_, _farmlandId, _farmId)
+                markOverviewStale()
+            end,
+        }
+        pcall(g_farmlandManager.addStateChangeListener, g_farmlandManager, farmlandListener)
     end
 end
 

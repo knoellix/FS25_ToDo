@@ -962,6 +962,21 @@ function FieldToDoSync.dumpDebugSummary()
     local isClient = g_client ~= nil
     local dedicated = g_dedicatedServer ~= nil
 
+    local permKey = nil
+    local manageContracts = nil
+    local mp = nil
+    if FieldToDoPermissions ~= nil then
+        if FieldToDoPermissions.getEditPermissionKey ~= nil then
+            permKey = FieldToDoPermissions.getEditPermissionKey()
+        end
+        if FieldToDoPermissions.hasFarmTodoEditPermission ~= nil then
+            manageContracts = FieldToDoPermissions.hasFarmTodoEditPermission(farmId, nil)
+        end
+        if FieldToDoPermissions.isMultiplayerSession ~= nil then
+            mp = FieldToDoPermissions.isMultiplayerSession()
+        end
+    end
+
     if FieldToDoLog ~= nil then
         FieldToDoLog.info("SYNC schema=%s isServer=%s isClient=%s dedicated=%s farmId=%s manager=%s canEdit=%s",
             tostring(FieldToDoSync.SCHEMA_VERSION),
@@ -971,6 +986,12 @@ function FieldToDoSync.dumpDebugSummary()
             tostring(farmId),
             tostring(manager ~= nil),
             tostring(canEdit)
+        )
+        FieldToDoLog.info(
+            "SYNC editGate mp=%s key=%s manageContracts=%s (edit requires manageContracts==true)",
+            tostring(mp),
+            tostring(permKey),
+            tostring(manageContracts)
         )
         FieldToDoLog.info("SYNC lastRequest %s", fmtEntry(FieldToDoSync.lastRequest))
         FieldToDoLog.info("SYNC lastDeny %s", fmtEntry(FieldToDoSync.lastDeny))

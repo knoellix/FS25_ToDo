@@ -554,20 +554,23 @@ end
 function FieldToDoMenuFrame:updateEditPermissionUi()
     local canEdit = self:canEditLocal()
     local showWorkersEdit = self:shouldShowWorkersEditUi()
+    -- Keep editControlsEnabled for optional cues, but do not soft-disable
+    -- buttons: disabled GuiElements swallow clicks (no InfoDialog). Handlers
+    -- call requireEditPermission() so deny matches the C-key dialog.
     self.editControlsEnabled = canEdit
 
-    self:setButtonDisabled(self.btnAdd, not canEdit)
-    self:setButtonDisabled(self.btnEdit, not canEdit)
-    self:setButtonDisabled(self.btnDone, not canEdit)
-    self:setButtonDisabled(self.btnDelete, not canEdit)
-    self:setButtonDisabled(self.btnMoveUp, not canEdit)
-    self:setButtonDisabled(self.btnMoveDown, not canEdit)
-    self:setButtonDisabled(self.btnAdopt, not canEdit)
-    self:setButtonDisabled(self.btnPlannedCrop, not canEdit)
-    self:setButtonDisabled(self.btnWorkOrder, not canEdit)
-    self:setButtonDisabled(self.btnOrganicMultiPass, not canEdit)
-    self:setButtonDisabled(self.btnMulch, not canEdit)
-    self:setButtonDisabled(self.btnAddFieldTask, not canEdit)
+    self:setButtonDisabled(self.btnAdd, false)
+    self:setButtonDisabled(self.btnEdit, false)
+    self:setButtonDisabled(self.btnDone, false)
+    self:setButtonDisabled(self.btnDelete, false)
+    self:setButtonDisabled(self.btnMoveUp, false)
+    self:setButtonDisabled(self.btnMoveDown, false)
+    self:setButtonDisabled(self.btnAdopt, false)
+    self:setButtonDisabled(self.btnPlannedCrop, false)
+    self:setButtonDisabled(self.btnWorkOrder, false)
+    self:setButtonDisabled(self.btnOrganicMultiPass, false)
+    self:setButtonDisabled(self.btnMulch, false)
+    self:setButtonDisabled(self.btnAddFieldTask, false)
     self:setButtonDisabled(self.btnWorkersEdit, not showWorkersEdit)
 
     self:setElementVisible(self.editMembersHeader, showWorkersEdit)
@@ -1067,7 +1070,7 @@ function FieldToDoMenuFrame:populateCellForItemInSection(list, section, index, c
                 ))
             end
             if plannedHit.setDisabled ~= nil then
-                plannedHit:setDisabled(self.editControlsEnabled ~= true)
+                plannedHit:setDisabled(false)
             end
         end
         cell:getAttribute("growth"):setText(field.growthState)
@@ -1165,7 +1168,7 @@ function FieldToDoMenuFrame:populateCellForItemInSection(list, section, index, c
                 cycleElement:setVisible(hasMultipleSuggestions)
                 cycleElement.ftdlFieldId = field.id
                 if cycleElement.setDisabled ~= nil then
-                    cycleElement:setDisabled(not hasMultipleSuggestions or self.editControlsEnabled ~= true)
+                    cycleElement:setDisabled(not hasMultipleSuggestions)
                 end
             end
         end

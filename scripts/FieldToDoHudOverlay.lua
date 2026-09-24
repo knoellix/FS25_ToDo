@@ -338,11 +338,15 @@ function FieldToDoHudOverlay:tryCompleteRow(rowIndex)
         return
     end
     if FieldToDoPermissions == nil or not FieldToDoPermissions.canEditLocal() then
+        local message = FieldToDoL10n.getText(
+            "ftdl_edit_denied",
+            "No permission to change to-dos"
+        )
         if FieldToDoLog ~= nil then
-            FieldToDoLog.info(FieldToDoL10n.getText(
-                "ftdl_edit_denied",
-                "No permission to change to-dos"
-            ))
+            FieldToDoLog.info(message)
+        end
+        if InfoDialog ~= nil and InfoDialog.show ~= nil then
+            pcall(InfoDialog.show, message)
         end
         return
     end

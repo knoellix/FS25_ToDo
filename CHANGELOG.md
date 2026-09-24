@@ -4,6 +4,18 @@ All notable changes to **FS25_FieldToDoList** are documented here.
 
 ## [Unreleased]
 
+## [0.1.0.15] — 2026-09-24
+
+### Fixed
+
+- **MP edit:** single Vanilla path `getHasPlayerPermission("manageContracts", connection, farmId)` (MissionStartEvent). No Farm-API / manager / grant cascades.
+- **Deny on click:** edit buttons stay clickable; InfoDialog like C key (no soft-disable swallow).
+- **Sold farmland stuck in overview:** FarmlandManager state listener + immediate owned-fields cache drop (FS25 has no `FARMLAND_OWNER_CHANGED`).
+
+### Docs
+
+- `docs/FALLBACK_AUDIT.md`: tried/rejected multi-source APIs for MP permissions and ownership.
+
 ## [0.1.0.14] — 2026-09-22
 
 ### Changed

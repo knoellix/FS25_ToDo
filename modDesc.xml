@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
 <modDesc descVersion="98">
     <author>knoellix</author>
-    <version>0.1.0.14</version>
+    <version>0.1.0.15</version>
 
     <title>
         <en>Field To-Do List</en>
@@ -22,7 +22,7 @@ Field work list and To-Dos for Farming Simulator 25.
 
 Optional: Precision Farming (pH / nitrogen columns). Seasonal Crop Stress: not fully supported yet.
 
-Version 0.1.0.13 — grass≠lucerne / mow coverage; fertilize via sprayLevel without PF; logo refresh.
+Version 0.1.0.15 — MP manageContracts single path; deny on click; farmland ownership refresh.
         ]]></en>
         <de><![CDATA[
 Feld-Arbeitsliste und To-Dos für Farming Simulator 25.
@@ -37,7 +37,7 @@ Feld-Arbeitsliste und To-Dos für Farming Simulator 25.
 
 Optional: Precision Farming (pH / Stickstoff). Seasonal Crop Stress: noch nicht voll unterstützt.
 
-Version 0.1.0.13 — Gras≠Luzerne / Mäh-Abdeckung; Düngen via sprayLevel ohne PF; Logo-Refresh.
+Version 0.1.0.15 — MP manageContracts ein Pfad; Deny beim Klick; Ownership-Refresh.
         ]]></de>
     </description>
 

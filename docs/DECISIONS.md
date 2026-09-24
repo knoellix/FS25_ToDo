@@ -15,8 +15,12 @@ Datum  Thema: Regel (kurz, technisch).
 
 ## Einträge
 
-2026-09-22  **MP Edit = manageContracts** — SP immer edit; MP nur Vanilla `manageContracts` (Hofverwaltung). Kein ESC-Grant, kein `ftdlEditTodos`, kein `defaultAllow`-Fallback. Auto-complete weiter alle Farm-Mitglieder. Sync-Schema **v5** (Grant-Payload entfernt).
-            Entscheidende Funktion: `FieldToDoPermissions.canEditFarmTodos`.
+2026-09-24  **Keine API-Kaskaden** — Mehrfach-Quellen = Raten. Bei Bug: Ursache + einen Vanilla-Pfad; Probiertes in `docs/FALLBACK_AUDIT.md` festhalten (nicht neuen Fallback stapeln). MP-Edit/FarmId/Membership/Ownership dort dokumentiert.
+            Entscheidende Funktion: je Thema der Kanon in FALLBACK_AUDIT.
+
+2026-09-22  **MP Edit = manageContracts** — SP immer edit; MP nur Vanilla `manageContracts` (Hofverwaltung). Ein Pfad: `getHasPlayerPermission("manageContracts", connection, farmId)` wie MissionStartEvent. Kein ESC-Grant, kein `ftdlEditTodos`, kein `defaultAllow`, kein Manager-Bypass, kein Farm-API-Fallback. Soft-disable Edit-Buttons verboten (Click muss Deny-Dialog zeigen). Auto-complete: Membership via `getFarmByUserId` only. Sync-Schema **v5**.
+            Entscheidende Funktion: `FieldToDoPermissions.canEditFarmTodos` / `hasFarmTodoEditPermission`.
+            Siehe: `docs/FALLBACK_AUDIT.md` § MP / Permissions.
 
 2026-09-22  **Generic meadow index** — `getDefaultGrassFruitTypeIndex` bevorzugt `GRASS`/`MEADOW`/… (nicht erstes `isGrassCrop` = oft ALFALFA). Post-mow-Override + Meadow-Phase nutzen das für alle Mähbaren.
             Entscheidende Funktion: `FieldAdvisor.getDefaultGrassFruitTypeIndex` / `getGrassMeadowPhase`.

@@ -49,7 +49,7 @@ alwaysApply: true
 - On auto-complete done: `refreshFieldRecordSync(fieldId)` — not full rescan wait.
 - Grid: overview **3** steps, completion **5**. Pacing: batch 5 / 40 ms; up to 2 batches/frame while tab open. `reloadData()` on batch progress (not `reloadVisibleItems()`).
 - `deferredListReload` → `refreshLists(false)` — never invalidate owned-fields cache on 500 ms poll.
-- Hooks: `FINISHED_GROWTH_PERIOD`, `FARMLAND_OWNER_CHANGED` → `markOwnedFieldsOverviewStale()`.
+- Hooks: `FINISHED_GROWTH_PERIOD` + `g_farmlandManager:addStateChangeListener` → `markOwnedFieldsOverviewStale()` (FS25 has no `FARMLAND_OWNER_CHANGED` message).
 - First paint: all rows + `...` placeholders; yellow ● while scanning, green when done.
 
 ## UI / To-Do / HUD
@@ -65,7 +65,7 @@ alwaysApply: true
 - Server-authoritative sync (`FieldToDoSync` + request/notify/state events). Schema version bumps must stay client/server matched (**current: v5**).
 - **World read vs mutate:** overview/crop/grass = **client-local** `FieldState`; task/settings mutations = **server** + sidecar. Dedicated does not run overview scan.
 - **FarmId on wire:** every mutation notify/request payload (except DENY) carries trailing `farmId` Int32 — required so pure clients can apply settings and multi-farm guards work.
-- **Edit gate:** SP always; MP = vanilla **`manageContracts`** only (no ESC grants, no `ftdlEditTodos`, no `defaultAllow` fallback). Auto-complete stays allowed for same-farm members.
+- **Edit gate:** SP always; MP = vanilla **`manageContracts`** only via `getHasPlayerPermission` (MissionStartEvent path; no ESC grants, no `ftdlEditTodos`, no `defaultAllow`, no Farm-API cascade). Soft-disable edit buttons forbidden (deny dialog on click). Auto-complete: same-farm via `getFarmByUserId` only. API history: `docs/FALLBACK_AUDIT.md`.
 - **FarmId:** `FieldToDoPermissions.resolveLocalFarmId()` for scan + local edit UI. Notify upserts must resolve farmId (nil farmId tasks are hidden once a local farm is known).
 - **Sync UX:** DENY → InfoDialog + reason; successful notify → refresh ESC list (`refreshAfterNotify`). Debug: `ftdlSync`, `ftdlOwned`.
 - **Owned non-crop parcels:** field-less owned farmlands (Hof/Windrad/…) appear as Hof-style overview rows.
