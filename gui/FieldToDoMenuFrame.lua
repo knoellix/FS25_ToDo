@@ -329,10 +329,13 @@ function FieldToDoMenuFrame:notifyEditDenied(reason)
     end
 
     if InfoDialog ~= nil and InfoDialog.show ~= nil then
-        pcall(InfoDialog.show, message)
+        local dialogType = DialogElement ~= nil and DialogElement.TYPE_INFO or nil
+        if dialogType ~= nil then
+            pcall(InfoDialog.show, message, nil, nil, dialogType)
+        else
+            pcall(InfoDialog.show, message)
+        end
     end
-
-    self:updateEditPermissionUi()
 end
 
 ---@return boolean
@@ -554,23 +557,36 @@ end
 function FieldToDoMenuFrame:updateEditPermissionUi()
     local canEdit = self:canEditLocal()
     local showWorkersEdit = self:shouldShowWorkersEditUi()
-    -- Keep editControlsEnabled for optional cues, but do not soft-disable
-    -- buttons: disabled GuiElements swallow clicks (no InfoDialog). Handlers
-    -- call requireEditPermission() so deny matches the C-key dialog.
+    -- Never soft-disable edit controls: disabled GuiElements swallow clicks
+    -- (no InfoDialog). Handlers call requireEditPermission() for deny.
     self.editControlsEnabled = canEdit
 
-    self:setButtonDisabled(self.btnAdd, false)
-    self:setButtonDisabled(self.btnEdit, false)
-    self:setButtonDisabled(self.btnDone, false)
-    self:setButtonDisabled(self.btnDelete, false)
-    self:setButtonDisabled(self.btnMoveUp, false)
-    self:setButtonDisabled(self.btnMoveDown, false)
-    self:setButtonDisabled(self.btnAdopt, false)
-    self:setButtonDisabled(self.btnPlannedCrop, false)
-    self:setButtonDisabled(self.btnWorkOrder, false)
-    self:setButtonDisabled(self.btnOrganicMultiPass, false)
-    self:setButtonDisabled(self.btnMulch, false)
-    self:setButtonDisabled(self.btnAddFieldTask, false)
+    local editButtons = {
+        self.btnAdd,
+        self.btnEdit,
+        self.btnDone,
+        self.btnDelete,
+        self.btnMoveUp,
+        self.btnMoveDown,
+        self.btnAdopt,
+        self.btnPlannedCrop,
+        self.btnWorkOrder,
+        self.btnOrganicMultiPass,
+        self.btnMulch,
+        self.btnAddFieldTask,
+    }
+    for _, button in ipairs(editButtons) do
+        if button ~= nil then
+            if button.setDisabled ~= nil then
+                button:setDisabled(false)
+            end
+            button.disabled = false
+            if button.setTouchDisabled ~= nil then
+                button:setTouchDisabled(false)
+            end
+        end
+    end
+
     self:setButtonDisabled(self.btnWorkersEdit, not showWorkersEdit)
 
     self:setElementVisible(self.editMembersHeader, showWorkersEdit)

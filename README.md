@@ -4,7 +4,7 @@
 
 **Author:** Christian Möllmann ([knoellix](https://github.com/knoellix))  
 **License:** [GNU GPL v3](LICENSE)  
-**Version:** `0.1.0.15`
+**Version:** `0.1.0.16`
 **Repository:** [github.com/knoellix/FS25_ToDo](https://github.com/knoellix/FS25_ToDo)
 
 ## Features
@@ -122,6 +122,7 @@ Use issue templates for bug reports, feature requests, and translations:
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
+**0.1.0.16** — Deny dialog on mouse click; F9 opens mod debug dialog (mod listener).
 **0.1.0.15** — MP edit: single `manageContracts` path; deny dialog on click; farmland ownership overview refresh.
 **0.1.0.14** — MP edit via `manageContracts` (sync v5); grass/lucerne standing vs post-mow recognition; HUD schema + auto-complete crash fixes.
 **0.1.0.13** — grass≠lucerne / mow ≥98% coverage; fertilize via sprayLevel without PF; logo/menu icon refresh.

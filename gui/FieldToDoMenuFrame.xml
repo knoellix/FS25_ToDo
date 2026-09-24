@@ -276,7 +276,8 @@
         <Profile name="ftdlMiniBtnHit" extends="baseReference" with="anchorTopLeft">
             <size value="118px 34px"/>
             <isFocusable value="true"/>
-            <imageColor value="0 0 0 0"/>
+            <!-- Non-zero alpha: fully transparent buttons often get no mouse hits in FS25. -->
+            <imageColor value="0 0 0 0.01"/>
             <imageFocusedColor value="$preset_fs25_colorMainHighlight_40"/>
             <imageHighlightedColor value="$preset_fs25_colorGreen_40"/>
         </Profile>
@@ -289,6 +290,8 @@
             <textAlignment value="center"/>
             <textVerticalAlignment value="middle"/>
             <textColor value="$preset_fs25_colorMainLight"/>
+            <!-- Label sits under the hit Button; never steal clicks. -->
+            <disabled value="true"/>
         </Profile>
 
         <Profile name="ftdlMiniBtnIconText" extends="ftdlMiniBtnHit">

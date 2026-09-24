@@ -68,6 +68,26 @@ Wenn etwas nicht geht: **hier** nachsehen, was schon probiert wurde, Ursache fin
 
 ---
 
+### Deny-Dialog nur bei Hotkey, nicht bei Mausklick (2026-09-24)
+
+| | |
+|--|--|
+| **Symptom** | Footer-Hotkey (z. B. MENU_ACTIVATE) zeigt InfoDialog; Maus auf Mini-Buttons → nichts. |
+| **Ursachen** | (1) Soft-`setDisabled(true)` schluckt Clicks. (2) Feld-Buttons: Label-`Text` + voll transparente Hit-`Button` (`imageColor 0 0 0 0`) — FS25 trifft oft den Text (kein onClick) oder ignoriert voll transparente Buttons. |
+| **Kanon** | Edit-Buttons nie soft-disablen; `requireEditPermission` → InfoDialog. Hit-Button `imageColor` mit min. Alpha (`0.01`). Deko-Text `disabled=true` damit er keine Clicks stiehlt. |
+
+---
+
+### F9 Debug-Konsole tot (2026-09-24)
+
+| | |
+|--|--|
+| **Symptom** | Strg+F9 / F9 öffnet nichts (Shift+F9 war nie gebunden). |
+| **Probiert / verworfen** | Nur `PlayerInputComponent` / `Vehicle` Registrierung → tot im ESC-Menü und nach Context-Wechsel (`lastEventId` Early-Return). Native-Console-Kaskade (`g_gui.toggleConsole` / `g_console` / …) konnte „Erfolg“ melden ohne UI → Dialog nie geöffnet. |
+| **Kanon** | `addModEventListener` + `registerActionEvents` / `onRegisterActionEvents` (Engine rebindet). Immer `FieldDebugConsole.openCommandDialog()` (TextInputDialog). Bindings: **F9** und **LCtrl+F9** (`modDesc`). |
+
+---
+
 ### Feldverkauf / Overview-Sync (Ownership)
 
 | | |

@@ -215,9 +215,9 @@ function FieldDebugConsole.openCommandDialog()
 end
 
 function FieldDebugConsole.toggle()
-    if FieldDebugConsole.tryOpenNativeConsole() then
-        return
-    end
+    -- Always the mod dialog. Native console probes were a cascade that could
+    -- report success without opening anything (F9 appeared dead). Commands live
+    -- in TextInputDialog; see docs/FALLBACK_AUDIT.md.
     FieldDebugConsole.openCommandDialog()
 end
 

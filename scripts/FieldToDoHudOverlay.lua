@@ -346,7 +346,12 @@ function FieldToDoHudOverlay:tryCompleteRow(rowIndex)
             FieldToDoLog.info(message)
         end
         if InfoDialog ~= nil and InfoDialog.show ~= nil then
-            pcall(InfoDialog.show, message)
+            local dialogType = DialogElement ~= nil and DialogElement.TYPE_INFO or nil
+            if dialogType ~= nil then
+                pcall(InfoDialog.show, message, nil, nil, dialogType)
+            else
+                pcall(InfoDialog.show, message)
+            end
         end
         return
     end

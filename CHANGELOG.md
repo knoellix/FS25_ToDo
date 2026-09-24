@@ -4,6 +4,13 @@ All notable changes to **FS25_FieldToDoList** are documented here.
 
 ## [Unreleased]
 
+## [0.1.0.16] — 2026-09-24
+
+### Fixed
+
+- **Deny on mouse click:** edit hit-buttons keep a tiny alpha and never soft-disable; decorative labels `disabled` so they do not steal clicks (footer hotkey already showed the dialog).
+- **F9 debug console:** register via `addModEventListener` (works across input contexts); always open TextInputDialog (no native-console cascade). Bindings remain **F9** and **Left Ctrl+F9** (not Shift+F9).
+
 ## [0.1.0.15] — 2026-09-24
 
 ### Fixed
