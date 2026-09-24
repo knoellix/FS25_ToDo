@@ -340,7 +340,11 @@ end
 
 ---@return boolean
 function FieldToDoMenuFrame:requireEditPermission()
-    if self:canEditLocal() then
+    if FieldToDoPermissions ~= nil and FieldToDoPermissions.canEditLocal ~= nil then
+        if FieldToDoPermissions.canEditLocal("editAttempt") then
+            return true
+        end
+    elseif self:canEditLocal() then
         return true
     end
 

@@ -80,11 +80,58 @@ local function resolveUserConnection(userId)
     return nil
 end
 
+--- Log one manageContracts probe (search log.txt for "PERM manageContracts").
+---@param fields table
+---@param force boolean|nil
+local function logManageContractsProbe(fields, force)
+    if FieldToDoLog == nil then
+        return
+    end
+
+    local reason = fields.reason or "-"
+    local now = g_time or 0
+    local signature = string.format(
+        "%s|%s|%s|%s|%s",
+        tostring(fields.farmId),
+        tostring(fields.userId),
+        tostring(fields.allowed),
+        tostring(fields.raw),
+        tostring(reason)
+    )
+
+    if force ~= true then
+        if FieldToDoPermissions._lastPermLogSignature == signature
+            and FieldToDoPermissions._lastPermLogAt ~= nil
+            and now - FieldToDoPermissions._lastPermLogAt < 10000 then
+            return
+        end
+    end
+
+    FieldToDoPermissions._lastPermLogSignature = signature
+    FieldToDoPermissions._lastPermLogAt = now
+
+    FieldToDoLog.info(
+        "PERM manageContracts reason=%s mp=%s key=%s farmId=%s userId=%s connection=%s api=%s pcallOk=%s raw=%s(%s) allowed=%s",
+        tostring(reason),
+        tostring(fields.mp),
+        tostring(fields.key),
+        tostring(fields.farmId),
+        tostring(fields.userId),
+        fields.connection == true and "yes" or "nil",
+        fields.api == true and "yes" or "nil",
+        tostring(fields.pcallOk),
+        tostring(fields.raw),
+        type(fields.raw),
+        tostring(fields.allowed)
+    )
+end
+
 --- Vanilla manageContracts — same call as MissionStartEvent. nil = unavailable (fail-closed).
 ---@param farmId number|nil
 ---@param userId number|nil
+---@param logReason string|nil if set, always log this probe (e.g. editAttempt, ftdlSync, serverDeny)
 ---@return boolean|nil
-function FieldToDoPermissions.hasFarmTodoEditPermission(farmId, userId)
+function FieldToDoPermissions.hasFarmTodoEditPermission(farmId, userId, logReason)
     local override = FieldToDoPermissions._testOverride
     if override ~= nil and override.manageContracts ~= nil then
         return override.manageContracts == true
@@ -92,21 +139,64 @@ function FieldToDoPermissions.hasFarmTodoEditPermission(farmId, userId)
 
     farmId = tonumber(farmId)
     userId = resolveUserId(userId)
+
+    local key = FieldToDoPermissions.getEditPermissionKey()
+    local mp = FieldToDoPermissions.isMultiplayerSession()
+    local forceLog = logReason ~= nil and logReason ~= ""
+
     if farmId == nil or userId == nil then
+        logManageContractsProbe({
+            reason = logReason or "missingIds",
+            mp = mp,
+            key = key,
+            farmId = farmId,
+            userId = userId,
+            connection = false,
+            api = g_currentMission ~= nil and g_currentMission.getHasPlayerPermission ~= nil,
+            pcallOk = false,
+            raw = nil,
+            allowed = nil,
+        }, forceLog)
         return nil
     end
 
     if g_currentMission == nil or g_currentMission.getHasPlayerPermission == nil then
+        logManageContractsProbe({
+            reason = logReason or "noApi",
+            mp = mp,
+            key = key,
+            farmId = farmId,
+            userId = userId,
+            connection = false,
+            api = false,
+            pcallOk = false,
+            raw = nil,
+            allowed = nil,
+        }, forceLog)
         return nil
     end
 
-    local key = FieldToDoPermissions.getEditPermissionKey()
     local connection = resolveUserConnection(userId)
     local ok, result = pcall(g_currentMission.getHasPlayerPermission, g_currentMission, key, connection, farmId)
-    if not ok or result == nil then
-        return nil
+    local allowed = nil
+    if ok and result ~= nil then
+        allowed = result == true
     end
-    return result == true
+
+    logManageContractsProbe({
+        reason = logReason or "probe",
+        mp = mp,
+        key = key,
+        farmId = farmId,
+        userId = userId,
+        connection = connection ~= nil,
+        api = true,
+        pcallOk = ok,
+        raw = result,
+        allowed = allowed,
+    }, forceLog)
+
+    return allowed
 end
 
 function FieldToDoPermissions.isFarmManager(farmId, userId)
@@ -223,15 +313,24 @@ end
 --- Farm To-Do edit: SP always (same farm); MP only vanilla manageContracts.
 ---@param farmId number|nil
 ---@param userId number|nil
+---@param logReason string|nil
 ---@return boolean
-function FieldToDoPermissions.canEditFarmTodos(farmId, userId)
+function FieldToDoPermissions.canEditFarmTodos(farmId, userId, logReason)
     if not FieldToDoPermissions.canAutoCompleteFarmTodos(farmId, userId) then
+        if logReason ~= nil and FieldToDoLog ~= nil then
+            FieldToDoLog.info(
+                "PERM edit denied reason=%s cause=notSameFarmOrMembership farmId=%s userId=%s",
+                tostring(logReason),
+                tostring(farmId),
+                tostring(userId)
+            )
+        end
         return false
     end
     if not FieldToDoPermissions.isMultiplayerSession() then
         return true
     end
-    return FieldToDoPermissions.hasFarmTodoEditPermission(farmId, userId) == true
+    return FieldToDoPermissions.hasFarmTodoEditPermission(farmId, userId, logReason) == true
 end
 
 --- ESC grant UI retired — always false.
@@ -243,7 +342,9 @@ function FieldToDoPermissions.canChangeWorkersEditSetting(farmId, userId)
     return FieldToDoPermissions.canManageTodoEditGrants(farmId, userId)
 end
 
-function FieldToDoPermissions.canEditLocal()
+---@param logReason string|nil
+---@return boolean
+function FieldToDoPermissions.canEditLocal(logReason)
     local farmId = FieldToDoPermissions.resolveLocalFarmId()
-    return FieldToDoPermissions.canEditFarmTodos(farmId, nil)
+    return FieldToDoPermissions.canEditFarmTodos(farmId, nil, logReason)
 end

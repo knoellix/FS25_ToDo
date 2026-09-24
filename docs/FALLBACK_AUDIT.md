@@ -39,7 +39,7 @@ Wenn etwas nicht geht: **hier** nachsehen, was schon probiert wurde, Ursache fin
 | **Ursache (teilweise)** | Soft-disabled Buttons schluckten Clicks (kein `requireEditPermission`/InfoDialog). Parallel: Permission-Reader stapelte mehrere Farm-APIs → undurchsichtig, teils `nil` → fail-closed. |
 | **Vanilla-Referenz** | `MissionStartEvent`: `g_currentMission:getHasPlayerPermission("manageContracts", connection, farmId)` |
 | **Kanon jetzt** | Nur dieser eine Call in `FieldToDoPermissions.hasFarmTodoEditPermission`. MP-Edit = `== true`. API fehlt/`nil` → **deny** (kein Raten). SP: immer edit bei Membership. |
-| **Debug** | F9 `ftdlSync` → Zeile `manageContracts=` / `canEdit=` |
+| **Debug** | Log-Zeile `PERM manageContracts` (editAttempt / ftdlSync / serverOp immer; sonst max. alle 10 s). Felder: `raw`, `allowed`, `connection`, `farmId`, `userId`, `api`. |
 
 #### Probiert / verworfen (nicht wieder anlegen)
 
@@ -78,13 +78,13 @@ Wenn etwas nicht geht: **hier** nachsehen, was schon probiert wurde, Ursache fin
 
 ---
 
-### F9 Debug-Konsole tot (2026-09-24)
+### F9 Debug-Konsole
 
 | | |
 |--|--|
-| **Symptom** | Strg+F9 / F9 öffnet nichts (Shift+F9 war nie gebunden). |
-| **Probiert / verworfen** | Nur `PlayerInputComponent` / `Vehicle` Registrierung → tot im ESC-Menü und nach Context-Wechsel (`lastEventId` Early-Return). Native-Console-Kaskade (`g_gui.toggleConsole` / `g_console` / …) konnte „Erfolg“ melden ohne UI → Dialog nie geöffnet. |
-| **Kanon** | `addModEventListener` + `registerActionEvents` / `onRegisterActionEvents` (Engine rebindet). Immer `FieldDebugConsole.openCommandDialog()` (TextInputDialog). Bindings: **F9** und **LCtrl+F9** (`modDesc`). |
+| **Bindings** | **F9** / **LCtrl+F9**. Nicht permission-gated. |
+| **0.1.0.16** | Falsch umgebaut (`addModEventListener` + immer TextInputDialog) — Regression (Maus ohne Feld). |
+| **Jetzt** | Exakt wieder **0.1.0.15**: Player+Vehicle-Registrierung; `toggle` = `tryOpenNativeConsole` sonst `openCommandDialog`. Zum Nachtesten, nicht als „Beweis dass es geht“. |
 
 ---
 

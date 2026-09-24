@@ -337,7 +337,7 @@ function FieldToDoHudOverlay:tryCompleteRow(rowIndex)
     if row == nil or row.taskId == nil then
         return
     end
-    if FieldToDoPermissions == nil or not FieldToDoPermissions.canEditLocal() then
+    if FieldToDoPermissions == nil or not FieldToDoPermissions.canEditLocal("hudComplete") then
         local message = FieldToDoL10n.getText(
             "ftdl_edit_denied",
             "No permission to change to-dos"

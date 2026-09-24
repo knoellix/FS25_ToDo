@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
 <modDesc descVersion="98">
     <author>knoellix</author>
-    <version>0.1.0.16</version>
+    <version>0.1.0.17</version>
 
     <title>
         <en>Field To-Do List</en>
@@ -22,7 +22,7 @@ Field work list and To-Dos for Farming Simulator 25.
 
 Optional: Precision Farming (pH / nitrogen columns). Seasonal Crop Stress: not fully supported yet.
 
-Version 0.1.0.16 — deny on mouse click; F9 debug dialog via mod listener.
+Version 0.1.0.17 — F9 restore to 0.1.0.15; PERM manageContracts log for MP debug.
         ]]></en>
         <de><![CDATA[
 Feld-Arbeitsliste und To-Dos für Farming Simulator 25.
@@ -37,7 +37,7 @@ Feld-Arbeitsliste und To-Dos für Farming Simulator 25.
 
 Optional: Precision Farming (pH / Stickstoff). Seasonal Crop Stress: noch nicht voll unterstützt.
 
-Version 0.1.0.16 — Deny beim Mausklick; F9 Debug-Dialog via Mod-Listener.
+Version 0.1.0.17 — F9 wie 0.1.0.15; PERM-manageContracts-Log für MP-Debug.
         ]]></de>
     </description>
 

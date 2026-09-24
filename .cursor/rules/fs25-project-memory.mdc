@@ -98,7 +98,7 @@ alwaysApply: true
 
 ## Debug (manual only)
 
-- **F9** / LCtrl+F9: `ftdlHelp`, `ftdlDump <id>`, `ftdlStrawScan <id> [x z]`, `ftdlAll`, `ftdlFruits`, `ftdlSync`, `ftdlOwned` (TextInputDialog via `addModEventListener`; not Shift+F9).
+- **F9** / LCtrl+F9: as in 0.1.0.15 (Player/Vehicle + native-then-dialog). Not permission-gated.
 - Log: `[FS25_FieldToDoList] DUMP` / `STRAW_SCAN`. No auto-dump on menu open or load.
 - Straw UI check: `strawResidue: hasWindrow fillApiReady centerFill crossFillMax` in dump; API matrix in `STRAW_SCAN`.
 

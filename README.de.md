@@ -4,7 +4,7 @@
 
 **Autor:** Christian Möllmann ([knoellix](https://github.com/knoellix))  
 **Lizenz:** [GNU GPL v3](LICENSE)  
-**Version:** `0.1.0.16`
+**Version:** `0.1.0.17`
 **Repository:** [github.com/knoellix/FS25_ToDo](https://github.com/knoellix/FS25_ToDo)
 
 ## Funktionen
@@ -111,6 +111,7 @@ Beiträge sind willkommen (Bugfixes, Features, Übersetzungen).
 
 Siehe [CHANGELOG.md](CHANGELOG.md).
 
+**0.1.0.17:** F9 wie 0.1.0.15; Log `PERM manageContracts` bei Edit / ftdlSync.
 **0.1.0.16:** Deny-Dialog auch per Mausklick; F9 öffnet Debug-Dialog (Mod-Listener).
 **0.1.0.15:** MP-Edit nur `manageContracts`; Deny-Dialog beim Klick; Ownership-Refresh in der Feldübersicht.
 **0.1.0.14:** MP-Edit über `manageContracts` (Sync v5); Gras/Luzerne stehend vs. post-mow; HUD-Schema + Auto-Complete-Crash.

@@ -590,7 +590,7 @@ end
 ---@return boolean
 function FieldToDoSync.canExecuteOp(op, farmId, userId)
     if FieldToDoPermissions == nil then
-        return true
+        return false
     end
 
     if op == OP.AUTO_COMPLETE then
@@ -605,7 +605,7 @@ function FieldToDoSync.canExecuteOp(op, farmId, userId)
         return false
     end
 
-    return FieldToDoPermissions.canEditFarmTodos(farmId, userId)
+    return FieldToDoPermissions.canEditFarmTodos(farmId, userId, "serverOp")
 end
 
 ---@param manager ToDoManager|nil
@@ -970,7 +970,7 @@ function FieldToDoSync.dumpDebugSummary()
             permKey = FieldToDoPermissions.getEditPermissionKey()
         end
         if FieldToDoPermissions.hasFarmTodoEditPermission ~= nil then
-            manageContracts = FieldToDoPermissions.hasFarmTodoEditPermission(farmId, nil)
+            manageContracts = FieldToDoPermissions.hasFarmTodoEditPermission(farmId, nil, "ftdlSync")
         end
         if FieldToDoPermissions.isMultiplayerSession ~= nil then
             mp = FieldToDoPermissions.isMultiplayerSession()

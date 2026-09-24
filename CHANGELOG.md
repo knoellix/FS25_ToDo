@@ -4,6 +4,16 @@ All notable changes to **FS25_FieldToDoList** are documented here.
 
 ## [Unreleased]
 
+## [0.1.0.17] — 2026-09-24
+
+### Fixed
+
+- **F9:** restore exact 0.1.0.15 registration/`toggle` (undo 0.1.0.16 rewrite) for clean retest.
+
+### Added
+
+- **PERM debug log:** `getHasPlayerPermission(manageContracts, …)` writes `PERM manageContracts` (forced on editAttempt / ftdlSync / serverOp; else throttled 10s). Search that prefix in log.txt.
+
 ## [0.1.0.16] — 2026-09-24
 
 ### Fixed
